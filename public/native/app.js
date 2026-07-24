@@ -111,7 +111,27 @@ let commandCatalog = buildCommandCatalog({
 let streamingElement = null;
 let sidebar = null;
 let activeSearchQuery = "";
-let _superAgentLaunched = false;
+// Auto-launch guard. Stored in sessionStorage (not a module variable) so it
+// survives same-window `window.navigate()` reloads: when the user selects
+// another project's session the inbox window reloads at the new URL, and
+// without a durable guard auto-launch would immediately yank the window back
+// to the Agent Inbox. sessionStorage is per-window/tab, so a genuinely new
+// window still auto-launches once.
+const SUPER_AGENT_LAUNCHED_KEY = "pi-studio-super-agent-launched";
+function wasSuperAgentLaunched() {
+  try {
+    return sessionStorage.getItem(SUPER_AGENT_LAUNCHED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+function markSuperAgentLaunched() {
+  try {
+    sessionStorage.setItem(SUPER_AGENT_LAUNCHED_KEY, "1");
+  } catch {
+    // sessionStorage may be unavailable; auto-launch simply repeats.
+  }
+}
 let pendingBoundSessionFirstMessage = null;
 const remoteAuth = await resolveRemoteAuth();
 
@@ -527,13 +547,13 @@ function autoLaunchSuperAgentOnce(sessions) {
   const invoke = globalThis.__TAURI__?.core?.invoke;
   if (!invoke) return;
   const latest = selectSuperAgentSessionToLaunch({
-    alreadyLaunched: _superAgentLaunched,
+    alreadyLaunched: wasSuperAgentLaunched(),
     enabled: isSuperAgentEnabled(),
     sessions,
     currentSessionId: target.sessionId,
   });
   if (!latest) return;
-  _superAgentLaunched = true;
+  markSuperAgentLaunched();
   invoke("open_session_in_project", {
     projectPath: latest.projectPath,
     sessionId: latest.id,

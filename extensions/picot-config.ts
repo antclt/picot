@@ -121,6 +121,8 @@ const MODELS_CONFIG_PATH = path.join(PI_AGENT_ROOT, "models.json");
 const CHAT_CONFIG_PATH = path.join(PI_AGENT_ROOT, "chat", "config.json");
 const AUTH_CONFIG_PATH = path.join(PI_AGENT_ROOT, "auth.json");
 const CHAT_WORKER_STATUS_DIR = path.join(PI_AGENT_ROOT, "chat", "worker-status");
+const SUPER_AGENT_TASKS_PATH = path.join(PI_AGENT_ROOT, "super-agent", "tasks.json");
+const PISTUDIO_INSTANCES_DIR = path.join(os.homedir(), ".pi", "pistudio-instances");
 
 function modelPreferenceKey(provider: string, modelId: string): string {
   return `${provider}/${modelId}`;
@@ -351,6 +353,33 @@ function getChatWorkerStatuses(): TelegramWorkerStatusLike[] {
     .filter((value): value is TelegramWorkerStatusLike =>
       Boolean(value && typeof value === "object"),
     );
+}
+
+type SuperAgentProject = { name: string; cwd: string; status: string };
+
+// The Runtime panel's project picker lists dispatch targets. In the native
+// architecture the old `/api/super-agent/projects` HTTP endpoint no longer
+// exists, so we reconstruct the list from the per-process instance records
+// Picot writes to ~/.pi/pistudio-instances/*.json (each has a `cwd`). The
+// super-agent workspace itself is never a dispatch target.
+function listSuperAgentProjects(): SuperAgentProject[] {
+  let entries: string[];
+  try {
+    entries = fs.readdirSync(PISTUDIO_INSTANCES_DIR);
+  } catch {
+    return [];
+  }
+  const byCwd = new Map<string, SuperAgentProject>();
+  for (const entry of entries) {
+    if (!entry.endsWith(".json")) continue;
+    const record = readJsonFile(path.join(PISTUDIO_INSTANCES_DIR, entry)) as
+      | { cwd?: unknown }
+      | undefined;
+    const cwd = typeof record?.cwd === "string" ? record.cwd.replace(/\/+$/, "") : "";
+    if (!cwd || cwd.endsWith("/.pi/agent/super-agent")) continue;
+    byCwd.set(cwd, { name: cwd.split("/").pop() || cwd, cwd, status: "running" });
+  }
+  return [...byCwd.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
 function telegramBotPayload(identity: TelegramBotIdentity) {
@@ -620,6 +649,31 @@ export async function handlePicotConfig(
             }),
           },
         };
+      }
+
+      case "read_super_agent_tasks": {
+        const content = fs.existsSync(SUPER_AGENT_TASKS_PATH)
+          ? fs.readFileSync(SUPER_AGENT_TASKS_PATH, "utf8")
+          : '{"tasks":[]}';
+        let tasks: unknown[] = [];
+        try {
+          const parsed = JSON.parse(content) as { tasks?: unknown[] };
+          tasks = Array.isArray(parsed?.tasks) ? parsed.tasks : [];
+        } catch {
+          tasks = [];
+        }
+        return { ok: true, data: { tasks } };
+      }
+
+      case "write_super_agent_tasks": {
+        const tasks = Array.isArray(params.tasks) ? params.tasks : [];
+        fs.mkdirSync(path.dirname(SUPER_AGENT_TASKS_PATH), { recursive: true });
+        fs.writeFileSync(SUPER_AGENT_TASKS_PATH, JSON.stringify({ tasks }, null, 2), "utf8");
+        return { ok: true, data: { count: tasks.length } };
+      }
+
+      case "list_super_agent_projects": {
+        return { ok: true, data: { projects: listSuperAgentProjects() } };
       }
 
       case "open_external": {

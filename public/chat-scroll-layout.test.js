@@ -2,7 +2,12 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, test } from "vitest";
 
-const styleCss = ["public/style.css", "public/ui/message-renderer.css"]
+const styleCss = [
+  "public/style.css",
+  "public/native/header.css",
+  "public/native/messages.css",
+  "public/ui/message-renderer.css",
+]
   .map((path) => readFileSync(resolve(path), "utf8"))
   .join("\n");
 
