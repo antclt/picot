@@ -1,8 +1,10 @@
 import { reconcileSnapshotTarget } from "../session/bootstrap-target.js";
 import { selectSuperAgentSessionToLaunch } from "../super-agent/autolaunch.js";
+import { dispatchSuperAgentTaskNative } from "../super-agent/native-dispatch.js";
 import { isSuperAgentProjectPath } from "../super-agent/session.js";
 import { isSuperAgentEnabled } from "../super-agent/settings.js";
-import { buildTaskComposerPrompt } from "../super-agent/task-state.js";
+import { buildTaskComposerPrompt, markTaskChildSessionBound } from "../super-agent/task-state.js";
+import { updateSuperAgentTask } from "../super-agent/task-store.js";
 import { applyTheme, getCurrentTheme } from "../themes.js";
 import { ConvNav } from "../ui/conv-nav.js";
 import { setupMessagesInsets } from "../ui/layout-insets.js";
@@ -43,8 +45,11 @@ import { setupSettingsPanel } from "./settings-panel.js";
 import { buildCommandCatalog, resolveComposerInput } from "./slash-commands.js";
 import {
   createSessionViaHost,
+  openSessionInProjectViaHost,
+  resolveWorkspaceViaHost,
   setupNewSessionButton,
   setupOpenFolderButton,
+  spawnSessionViaHost,
 } from "./workspace-actions.js";
 
 const route = parseAppRoute(window.location.pathname);
@@ -499,7 +504,13 @@ async function switchSession(sessionId) {
 
 async function openSessionInProject(session) {
   const invoke = globalThis.__TAURI__?.core?.invoke;
-  if (!invoke) return;
+  if (!invoke) {
+    // LAN/mobile: no Tauri window mechanism — resolve the target project's
+    // workspace id over HTTP and navigate the current tab to its session
+    // route so the page re-bootstraps against that workspace.
+    await openSessionInProjectViaHost(session);
+    return;
+  }
   await invoke("open_session_in_project", {
     projectPath: session.projectPath,
     sessionId: session.id,
@@ -539,8 +550,44 @@ function insertTaskPrompt(task) {
 
 document.addEventListener("sa-prompt-task", (event) => insertTaskPrompt(event.detail));
 document.addEventListener("sa-view-session", (event) => {
-  const childSessionId = event.detail?.dispatch?.childSessionId;
-  if (childSessionId) switchSession(childSessionId).catch(showError);
+  const task = event.detail;
+  const childSessionId = task?.dispatch?.childSessionId;
+  if (!childSessionId) return;
+  // Dispatched tasks run inside their target project's own window/port, so a
+  // plain in-window switchSession() can't reach them. Route to the owning
+  // project's session (opens/focuses that project window) when we know the
+  // target project; fall back to an in-window switch for same-project tasks.
+  const projectPath = task?.dispatch?.targetProject || task?.targetProject;
+  if (projectPath) {
+    openSessionInProject({ id: childSessionId, projectPath }).catch(showError);
+  } else {
+    switchSession(childSessionId).catch(showError);
+  }
+});
+
+// Maps a dispatched child runtime instanceId -> Agent Inbox task id, so
+// `session_bound` events from the background child can upgrade the task's
+// temporary child session id to the persisted one.
+const dispatchedInstances = new Map();
+
+document.addEventListener("sa-dispatch", (event) => {
+  const task = event.detail;
+  if (!task) return;
+  dispatchSuperAgentTaskNative({
+    task,
+    resolveWorkspace: (projectPath) => resolveWorkspaceViaHost(projectPath),
+    spawnSession: (workspaceId) => spawnSessionViaHost(workspaceId),
+    sendPrompt: (dispatchTarget, message) =>
+      runtime.request({ type: "prompt", message }, dispatchTarget, {
+        idempotencyKey: randomId(),
+      }),
+    updateTask: (taskId, updater) =>
+      updateSuperAgentTask(window.__picotConfigCall, taskId, updater),
+    registerDispatchTarget: (dispatchTarget, taskId) => {
+      dispatchedInstances.set(dispatchTarget.instanceId, taskId);
+      adapter.subscribeTarget?.(dispatchTarget);
+    },
+  }).catch(showError);
 });
 
 function autoLaunchSuperAgentOnce(sessions) {
@@ -577,7 +624,22 @@ async function handleBackgroundRuntimeEvent(frame) {
     case "message_end":
       if (frame.event.message?.role === "assistant") sidebar?.markUnread(sessionId);
       break;
+    case "session_bound":
+      await bindDispatchedChildSession(frame.target?.instanceId, frame.event?.sessionId);
+      break;
   }
+}
+
+// When a dispatched child runtime binds its persisted session id, upgrade the
+// owning Agent Inbox task so "View Session ->" navigates to the real session.
+async function bindDispatchedChildSession(instanceId, boundSessionId) {
+  if (!instanceId || !boundSessionId) return;
+  const taskId = dispatchedInstances.get(instanceId);
+  if (!taskId) return;
+  dispatchedInstances.delete(instanceId);
+  await updateSuperAgentTask(window.__picotConfigCall, taskId, (task) =>
+    markTaskChildSessionBound(task, { childSessionId: boundSessionId }),
+  ).catch((error) => console.warn("[SuperAgent] failed to bind child session:", error));
 }
 
 function setupSidebarToggle() {

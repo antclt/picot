@@ -410,6 +410,15 @@ export class SessionSidebar {
       if (seq < this._loadCommitted) return;
       this._loadCommitted = seq;
       const nextSessions = response.sessions ?? [];
+      // Preserve a just-created active session that the server hasn't persisted
+      // yet. Without this, a quiet reload fired right after upsertSession (e.g.
+      // on session_bound) overwrites the list with the on-disk snapshot and the
+      // new session vanishes until a manual refresh.
+      const activeId = this.activeSessionId;
+      if (activeId && !nextSessions.some((session) => session?.id === activeId)) {
+        const local = this.sessions.find((session) => session?.id === activeId);
+        if (local) nextSessions.unshift(local);
+      }
       const changed = sessionListSignature(nextSessions) !== previousSignature;
       this.sessions = nextSessions;
       this.#hydrateStatuses(this.sessions);

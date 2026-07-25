@@ -18,6 +18,9 @@ const DEFAULT_DISPATCH = {
   targetProject: null,
   superAgentPort: null,
   childPort: null,
+  childWorkspaceId: null,
+  childInstanceId: null,
+  childSessionId: null,
   startedAt: null,
   finishedAt: null,
 };
@@ -75,6 +78,64 @@ export function markTaskForDispatch(task, { superAgentPort = null, childPort = n
         message: childPort
           ? `Dispatched to project agent on port ${childPort}.`
           : "Marked ready for project-agent dispatch.",
+      },
+    ],
+  };
+}
+
+// Record the concrete native runtime target a dispatched task was routed to.
+// The child session id starts as a temporary id from `POST /v2/new-session`
+// and is upgraded to the persisted id once the runtime emits `session_bound`
+// (see `markTaskChildSessionBound`). This is what powers the "View Session →"
+// button in the Runtime panel.
+export function markTaskDispatchTarget(
+  task,
+  { childWorkspaceId = null, childInstanceId = null, childSessionId = null, now } = {},
+) {
+  const timestamp = now || new Date().toISOString();
+  const normalized = normalizeSuperAgentTask(task);
+  return {
+    ...normalized,
+    status: normalized.status === "pending" ? "running" : normalized.status,
+    dispatch: {
+      ...normalized.dispatch,
+      childWorkspaceId,
+      childInstanceId,
+      childSessionId,
+      startedAt: normalized.dispatch.startedAt || timestamp,
+    },
+    events: [
+      ...normalized.events,
+      {
+        at: timestamp,
+        type: "dispatched",
+        status: "running",
+        message: `Dispatched to project agent (session ${childSessionId || "pending"}).`,
+      },
+    ],
+  };
+}
+
+// Upgrade a dispatched task's temporary child session id to the persisted id
+// once the child runtime reports `session_bound`.
+export function markTaskChildSessionBound(task, { childSessionId, now } = {}) {
+  if (!childSessionId) return normalizeSuperAgentTask(task);
+  const timestamp = now || new Date().toISOString();
+  const normalized = normalizeSuperAgentTask(task);
+  if (normalized.dispatch.childSessionId === childSessionId) return normalized;
+  return {
+    ...normalized,
+    dispatch: {
+      ...normalized.dispatch,
+      childSessionId,
+    },
+    events: [
+      ...normalized.events,
+      {
+        at: timestamp,
+        type: "session_bound",
+        status: normalized.status,
+        message: `Child session bound: ${childSessionId}.`,
       },
     ],
   };

@@ -68,9 +68,29 @@ impl HostServer {
         if let Some(home) = dirs::home_dir() {
             data = data.with_session_root(home.join(".pi/agent/sessions"));
         }
-        let listener = tokio::net::TcpListener::bind((std::net::Ipv4Addr::UNSPECIFIED, 0))
-            .await
-            .map_err(|error| format!("Cannot bind Picot Host: {error}"))?;
+        // Prefer a stable, high, rarely-used port so LAN clients get a stable
+        // URL/QR across restarts. Scan a small contiguous range so multiple
+        // project windows each get a deterministic port (57620, 57621, ...),
+        // and fall back to an OS-assigned ephemeral port (0) only if the whole
+        // preferred range is taken.
+        const PREFERRED_PORT_BASE: u16 = 57620;
+        const PREFERRED_PORT_COUNT: u16 = 32;
+        let mut listener = None;
+        for offset in 0..PREFERRED_PORT_COUNT {
+            let candidate = PREFERRED_PORT_BASE + offset;
+            if let Ok(bound) =
+                tokio::net::TcpListener::bind((std::net::Ipv4Addr::UNSPECIFIED, candidate)).await
+            {
+                listener = Some(bound);
+                break;
+            }
+        }
+        let listener = match listener {
+            Some(listener) => listener,
+            None => tokio::net::TcpListener::bind((std::net::Ipv4Addr::UNSPECIFIED, 0))
+                .await
+                .map_err(|error| format!("Cannot bind Picot Host: {error}"))?,
+        };
         let address = listener
             .local_addr()
             .map_err(|error| format!("Cannot read Picot Host address: {error}"))?;
@@ -108,6 +128,7 @@ impl HostServer {
             .route("/v2/auth/exchange", post(exchange_pairing))
             .route("/v2/lan-qr", get(lan_qr))
             .route("/v2/new-session", post(new_session))
+            .route("/v2/resolve-workspace", post(resolve_workspace))
             .fallback_service(static_service)
             .layer(DefaultBodyLimit::max(MAX_HTTP_BODY_BYTES))
             .with_state(state.clone());
@@ -359,6 +380,47 @@ async fn new_session(
         .spawn(target.clone(), launch)
         .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "runtime_spawn_failed"))?;
     Ok(Json(target))
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ResolveWorkspaceRequest {
+    project_path: String,
+}
+
+/// POST /v2/resolve-workspace — map a project path to its stable workspace id
+/// and register the workspace root so subsequent `/v2/bootstrap` calls can
+/// lazily resume its sessions. Used by LAN/mobile clients switching to a
+/// session that belongs to a different project (no Tauri window mechanism).
+async fn resolve_workspace(
+    State(state): State<Arc<HostState>>,
+    Json(body): Json<ResolveWorkspaceRequest>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let path = PathBuf::from(&body.project_path);
+    if !path.is_dir() {
+        return Err(api_error(StatusCode::NOT_FOUND, "project_not_found"));
+    }
+    let workspace_id = state
+        .auth
+        .lock()
+        .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "auth_unavailable"))?
+        .resolve_workspace(&path)
+        .map_err(|_| {
+            api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "workspace_resolve_failed",
+            )
+        })?;
+    state
+        .data
+        .register_workspace(&workspace_id, path)
+        .map_err(|_| {
+            api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "workspace_register_failed",
+            )
+        })?;
+    Ok(Json(json!({ "workspaceId": workspace_id })))
 }
 
 async fn websocket_upgrade(

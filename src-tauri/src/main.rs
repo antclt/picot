@@ -343,35 +343,46 @@ fn open_native_workspace_window(
 }
 
 fn open_fresh_session_for_focused_workspace(app: &AppHandle) -> Result<(), String> {
-    let workspace_id = app
-        .try_state::<FocusedWorkspaceState>()
-        .and_then(|state| state.0.lock().ok().and_then(|guard| guard.clone()))
+    // Resolve the *actual* workspace window that currently has OS focus. Passing
+    // this real window (instead of None) to `open_fresh_session_at_path`
+    // guarantees the new session opens inside the focused window, rather than
+    // falling back to a fragile label lookup that can spawn a brand-new window
+    // when the global focus state is stale.
+    let focused_window = app
+        .webview_windows()
+        .into_values()
+        .find(|window| {
+            window.label().starts_with("native-workspace-") && window.is_focused().unwrap_or(false)
+        })
         .or_else(|| {
-            app.webview_windows()
-                .values()
-                .find(|window| {
-                    window.label().starts_with("native-workspace-")
-                        && window.is_focused().unwrap_or(false)
-                })
-                .and_then(|window| {
-                    let label = window.label();
-                    app.try_state::<WindowWorkspaceState>()
-                        .and_then(|state| {
-                            state
-                                .0
-                                .lock()
-                                .ok()
-                                .and_then(|windows| windows.get(label).cloned())
-                        })
-                        .or_else(|| label.strip_prefix("native-workspace-").map(str::to_string))
-                })
+            // No window reports OS focus (e.g. focus was on the menu bar at
+            // trigger time): fall back to the last-focused workspace id and look
+            // up its existing window.
+            let workspace_id = app
+                .try_state::<FocusedWorkspaceState>()
+                .and_then(|state| state.0.lock().ok().and_then(|guard| guard.clone()))?;
+            app.get_webview_window(&format!("native-workspace-{workspace_id}"))
         })
         .ok_or_else(|| "No focused Picot workspace window".to_string())?;
+
+    let label = focused_window.label().to_string();
+    let workspace_id = app
+        .try_state::<WindowWorkspaceState>()
+        .and_then(|state| {
+            state
+                .0
+                .lock()
+                .ok()
+                .and_then(|windows| windows.get(&label).cloned())
+        })
+        .or_else(|| label.strip_prefix("native-workspace-").map(str::to_string))
+        .ok_or_else(|| "Unable to resolve workspace for focused window".to_string())?;
+
     let host = app
         .try_state::<HostServer>()
         .ok_or_else(|| "Host server is not ready".to_string())?;
     let cwd = host.workspace_root_path(&workspace_id)?;
-    open_fresh_session_at_path(app, None, &cwd)
+    open_fresh_session_at_path(app, Some(&focused_window), &cwd)
 }
 
 fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {

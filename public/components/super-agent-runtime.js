@@ -380,9 +380,10 @@ class SuperAgentRuntime extends HTMLElement {
         if (hasTargetProject) {
           body += `<div class="runtime-task-target">Target: <strong>${esc(projectName)}</strong></div>`;
         }
-        if (task.dispatch?.childPort) {
+        if (task.dispatch?.childSessionId || task.dispatch?.childPort) {
+          const canOpen = Boolean(task.dispatch?.childSessionId);
           body += `<div class="runtime-approve-row">
-            <button class="sa-btn" data-action="view-session" data-task-id="${escAttr(task.id)}">View Session →</button>
+            <button class="sa-btn" data-action="view-session" data-task-id="${escAttr(task.id)}" ${canOpen ? "" : 'disabled title="Waiting for the agent session to start…"'}>View Session →</button>
             ${task.status === "running" ? `<button class="sa-btn sa-btn-dismiss" data-action="force-cancel" data-task-id="${escAttr(task.id)}">Force Cancel</button>` : ""}
           </div>`;
         } else if (task.status === "running") {

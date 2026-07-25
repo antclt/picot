@@ -3,37 +3,58 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import "./super-agent-runtime.js";
 
+// The component loads/saves Agent Inbox data through window.__picotConfigCall
+// (picot-bridge RPC), not fetch. This helper installs a spy that answers the
+// three RPC methods the component uses:
+//   read_super_agent_tasks   → { ok, data: { tasks } }
+//   list_super_agent_projects → { ok, data: { projects } }
+//   write_super_agent_tasks  → { ok }
+function mockConfig({ tasks = [], projects = [], onWrite } = {}) {
+  const call = vi.fn(async (method, params) => {
+    if (method === "read_super_agent_tasks") {
+      return { ok: true, data: { tasks } };
+    }
+    if (method === "list_super_agent_projects") {
+      return { ok: true, data: { projects } };
+    }
+    if (method === "write_super_agent_tasks") {
+      onWrite?.(params);
+      return { ok: true };
+    }
+    return { ok: true, data: {} };
+  });
+  window.__picotConfigCall = call;
+  return call;
+}
+
+// Returns the tasks array from the most recent write_super_agent_tasks call.
+function lastWrittenTasks(call) {
+  const writes = call.mock.calls.filter(([method]) => method === "write_super_agent_tasks");
+  return writes.length ? writes[writes.length - 1][1].tasks : null;
+}
+
 describe("super-agent-runtime", () => {
   beforeEach(() => {
     document.body.innerHTML = "";
     localStorage.clear();
     vi.restoreAllMocks();
-    vi.spyOn(globalThis, "fetch").mockImplementation((url, options) => {
-      if (url === "/api/super-agent/tasks" && options?.method === "PUT") {
-        return Promise.resolve({ ok: true });
-      }
-      return Promise.resolve({
-        ok: true,
-        text: async () =>
-          JSON.stringify({
-            tasks: [
-              {
-                id: "task-1",
-                status: "pending",
-                title: "Feature: Agent Status Indicator",
-                description:
-                  "Add a real-time agent status indicator with many implementation notes.",
-                targetProject: "/Users/me/project",
-              },
-            ],
-          }),
-      });
+    mockConfig({
+      tasks: [
+        {
+          id: "task-1",
+          status: "pending",
+          title: "Feature: Agent Status Indicator",
+          description: "Add a real-time agent status indicator with many implementation notes.",
+          targetProject: "/Users/me/project",
+        },
+      ],
     });
   });
 
   afterEach(() => {
     document.body.innerHTML = "";
     vi.restoreAllMocks();
+    window.__picotConfigCall = undefined;
   });
 
   it("keeps task details collapsed until the card is opened", async () => {
@@ -85,7 +106,7 @@ describe("super-agent-runtime", () => {
   });
 
   it("shows the task panel body immediately while the first task fetch is pending", () => {
-    fetch.mockImplementation(() => new Promise(() => {}));
+    window.__picotConfigCall = vi.fn(() => new Promise(() => {}));
 
     const Runtime = customElements.get("super-agent-runtime");
     const runtime = new Runtime();
@@ -128,26 +149,17 @@ describe("super-agent-runtime", () => {
   });
 
   it("formats markdown-like task descriptions into readable sections", async () => {
-    fetch.mockImplementation((url, options) => {
-      if (url === "/api/super-agent/tasks" && options?.method === "PUT") {
-        return Promise.resolve({ ok: true });
-      }
-      return Promise.resolve({
-        ok: true,
-        text: async () =>
-          JSON.stringify({
-            tasks: [
-              {
-                id: "task-1",
-                status: "pending",
-                title: "Feature: Agent Status Indicator",
-                description:
-                  "Add a real-time agent status indicator. ## Status States - 🟢 **Idle** — Pi is waiting for input - 🟡 **Working** — Pi is actively processing ## Goal Users should not switch panes. ## Implementation Hints 1. Detect state changes 2. Show the status dot",
-                targetProject: "/Users/me/project",
-              },
-            ],
-          }),
-      });
+    mockConfig({
+      tasks: [
+        {
+          id: "task-1",
+          status: "pending",
+          title: "Feature: Agent Status Indicator",
+          description:
+            "Add a real-time agent status indicator. ## Status States - 🟢 **Idle** — Pi is waiting for input - 🟡 **Working** — Pi is actively processing ## Goal Users should not switch panes. ## Implementation Hints 1. Detect state changes 2. Show the status dot",
+          targetProject: "/Users/me/project",
+        },
+      ],
     });
 
     const Runtime = customElements.get("super-agent-runtime");
@@ -173,6 +185,17 @@ describe("super-agent-runtime", () => {
   });
 
   it("approves with the project chosen at task creation", async () => {
+    const call = mockConfig({
+      tasks: [
+        {
+          id: "task-1",
+          status: "pending",
+          title: "Feature: Agent Status Indicator",
+          description: "Add a real-time agent status indicator with many implementation notes.",
+          targetProject: "/Users/me/project",
+        },
+      ],
+    });
     const Runtime = customElements.get("super-agent-runtime");
     const runtime = new Runtime();
     document.body.appendChild(runtime);
@@ -189,49 +212,25 @@ describe("super-agent-runtime", () => {
 
     await Promise.resolve();
 
-    expect(fetch).toHaveBeenCalledWith(
-      "/api/super-agent/tasks",
-      expect.objectContaining({
-        method: "PUT",
-        body: expect.stringContaining('"targetProject":"/Users/me/project"'),
-      }),
+    const written = lastWrittenTasks(call);
+    expect(written).toContainEqual(
+      expect.objectContaining({ targetProject: "/Users/me/project", status: "running" }),
     );
   });
 
   it("does not allow approval when a task was created without a project", async () => {
-    fetch.mockImplementation((url, options) => {
-      if (url === "/api/super-agent/tasks" && options?.method === "PUT") {
-        return Promise.resolve({ ok: true });
-      }
-      if (url === "/api/super-agent/projects") {
-        return Promise.resolve({
-          ok: true,
-          json: async () => ({
-            projects: [
-              {
-                name: "project-a",
-                cwd: "/Users/me/project-a",
-                status: "running",
-                activePort: 47821,
-              },
-            ],
-          }),
-        });
-      }
-      return Promise.resolve({
-        ok: true,
-        text: async () =>
-          JSON.stringify({
-            tasks: [
-              {
-                id: "task-1",
-                status: "pending",
-                title: "Missing target",
-                description: "Needs a project.",
-              },
-            ],
-          }),
-      });
+    const call = mockConfig({
+      tasks: [
+        {
+          id: "task-1",
+          status: "pending",
+          title: "Missing target",
+          description: "Needs a project.",
+        },
+      ],
+      projects: [
+        { name: "project-a", cwd: "/Users/me/project-a", status: "running", activePort: 47821 },
+      ],
     });
 
     const Runtime = customElements.get("super-agent-runtime");
@@ -247,48 +246,22 @@ describe("super-agent-runtime", () => {
     expect(runtime.querySelector(".runtime-project-select")).not.toBeNull();
     expect(runtime.textContent).toContain("Choose a project before approval");
 
-    expect(fetch).not.toHaveBeenCalledWith(
-      "/api/super-agent/tasks",
-      expect.objectContaining({
-        method: "PUT",
-      }),
-    );
+    expect(call).not.toHaveBeenCalledWith("write_super_agent_tasks", expect.anything());
   });
 
   it("approves a task after choosing a project from the project registry", async () => {
-    fetch.mockImplementation((url, options) => {
-      if (url === "/api/super-agent/tasks" && options?.method === "PUT") {
-        return Promise.resolve({ ok: true });
-      }
-      if (url === "/api/super-agent/projects") {
-        return Promise.resolve({
-          ok: true,
-          json: async () => ({
-            projects: [
-              {
-                name: "project-a",
-                cwd: "/Users/me/project-a",
-                status: "running",
-                activePort: 47821,
-              },
-            ],
-          }),
-        });
-      }
-      return Promise.resolve({
-        ok: true,
-        text: async () =>
-          JSON.stringify({
-            tasks: [
-              {
-                id: "task-1",
-                status: "pending",
-                title: "Missing target",
-                description: "Needs a project.",
-              },
-            ],
-          }),
-      });
+    const call = mockConfig({
+      tasks: [
+        {
+          id: "task-1",
+          status: "pending",
+          title: "Missing target",
+          description: "Needs a project.",
+        },
+      ],
+      projects: [
+        { name: "project-a", cwd: "/Users/me/project-a", status: "running", activePort: 47821 },
+      ],
     });
 
     const Runtime = customElements.get("super-agent-runtime");
@@ -307,51 +280,35 @@ describe("super-agent-runtime", () => {
 
     await Promise.resolve();
 
-    expect(fetch).toHaveBeenCalledWith(
-      "/api/super-agent/tasks",
+    const written = lastWrittenTasks(call);
+    expect(written).toContainEqual(
       expect.objectContaining({
-        method: "PUT",
-        body: expect.stringContaining('"targetProject":"/Users/me/project-a"'),
-      }),
-    );
-    expect(fetch).toHaveBeenCalledWith(
-      "/api/super-agent/tasks",
-      expect.objectContaining({
-        method: "PUT",
-        body: expect.stringContaining('"routingConfidence":"user_selected"'),
+        targetProject: "/Users/me/project-a",
+        routingConfidence: "user_selected",
       }),
     );
   });
 
   it("offers bulk actions for ready pending tasks and completed tasks", async () => {
-    fetch.mockImplementation((url, options) => {
-      if (url === "/api/super-agent/tasks" && options?.method === "PUT") {
-        return Promise.resolve({ ok: true });
-      }
-      return Promise.resolve({
-        ok: true,
-        text: async () =>
-          JSON.stringify({
-            tasks: [
-              {
-                id: "ready-1",
-                status: "pending",
-                title: "Ready one",
-                targetProject: "/Users/me/project",
-              },
-              {
-                id: "missing-target",
-                status: "pending",
-                title: "Missing target",
-              },
-              {
-                id: "done-1",
-                status: "done",
-                title: "Done one",
-              },
-            ],
-          }),
-      });
+    const call = mockConfig({
+      tasks: [
+        {
+          id: "ready-1",
+          status: "pending",
+          title: "Ready one",
+          targetProject: "/Users/me/project",
+        },
+        {
+          id: "missing-target",
+          status: "pending",
+          title: "Missing target",
+        },
+        {
+          id: "done-1",
+          status: "done",
+          title: "Done one",
+        },
+      ],
     });
 
     const Runtime = customElements.get("super-agent-runtime");
@@ -369,24 +326,14 @@ describe("super-agent-runtime", () => {
     await Promise.resolve();
 
     expect(dispatches).toEqual(["ready-1"]);
-    expect(fetch).toHaveBeenCalledWith(
-      "/api/super-agent/tasks",
-      expect.objectContaining({
-        method: "PUT",
-        body: expect.stringContaining('"status":"running"'),
-      }),
-    );
+    let written = lastWrittenTasks(call);
+    expect(written).toContainEqual(expect.objectContaining({ id: "ready-1", status: "running" }));
 
     runtime.querySelector('[data-action="clear-done"]').click();
     await Promise.resolve();
 
-    expect(fetch).toHaveBeenCalledWith(
-      "/api/super-agent/tasks",
-      expect.objectContaining({
-        method: "PUT",
-        body: expect.not.stringContaining('"done-1"'),
-      }),
-    );
+    written = lastWrittenTasks(call);
+    expect(written.some((task) => task.id === "done-1")).toBe(false);
   });
 
   it("shows quick actions on collapsed cards", async () => {
@@ -408,39 +355,34 @@ describe("super-agent-runtime", () => {
   });
 
   it("shows child session and event history actions for dispatched tasks", async () => {
-    fetch.mockImplementation(() =>
-      Promise.resolve({
-        ok: true,
-        text: async () =>
-          JSON.stringify({
-            tasks: [
-              {
-                id: "task-1",
-                status: "done",
-                title: "Done task",
-                dispatch: {
-                  targetProject: "/Users/me/project",
-                  childPort: 47822,
-                },
-                events: [
-                  {
-                    at: "2026-07-10T12:00:00.000Z",
-                    type: "dispatched",
-                    status: "running",
-                    message: "Dispatched.",
-                  },
-                  {
-                    at: "2026-07-10T12:05:00.000Z",
-                    type: "completed",
-                    status: "done",
-                    message: "Finished.",
-                  },
-                ],
-              },
-            ],
-          }),
-      }),
-    );
+    mockConfig({
+      tasks: [
+        {
+          id: "task-1",
+          status: "done",
+          title: "Done task",
+          dispatch: {
+            targetProject: "/Users/me/project",
+            childPort: 47822,
+            childSessionId: "session-abc",
+          },
+          events: [
+            {
+              at: "2026-07-10T12:00:00.000Z",
+              type: "dispatched",
+              status: "running",
+              message: "Dispatched.",
+            },
+            {
+              at: "2026-07-10T12:05:00.000Z",
+              type: "completed",
+              status: "done",
+              message: "Finished.",
+            },
+          ],
+        },
+      ],
+    });
 
     const Runtime = customElements.get("super-agent-runtime");
     const runtime = new Runtime();
@@ -464,9 +406,39 @@ describe("super-agent-runtime", () => {
     expect(viewEvents).toEqual([
       expect.objectContaining({
         id: "task-1",
-        dispatch: expect.objectContaining({ childPort: 47822 }),
+        dispatch: expect.objectContaining({ childSessionId: "session-abc" }),
       }),
     ]);
+  });
+
+  it("disables View Session until the child session id is bound", async () => {
+    mockConfig({
+      tasks: [
+        {
+          id: "task-1",
+          status: "running",
+          title: "Running task",
+          dispatch: {
+            targetProject: "/Users/me/project",
+            childPort: 47822,
+            childSessionId: null,
+          },
+        },
+      ],
+    });
+
+    const Runtime = customElements.get("super-agent-runtime");
+    const runtime = new Runtime();
+    document.body.appendChild(runtime);
+
+    await Promise.resolve();
+    await Promise.resolve();
+
+    runtime.querySelector(".runtime-task-card").click();
+
+    const viewBtn = runtime.querySelector('[data-action="view-session"]');
+    expect(viewBtn).not.toBeNull();
+    expect(viewBtn.disabled).toBe(true);
   });
 
   it("opens the panel on pending tasks from keyboard and badge requests", async () => {
@@ -501,38 +473,29 @@ describe("super-agent-runtime", () => {
   });
 
   it("shows blocked and clarification tasks as active work with source context", async () => {
-    fetch.mockImplementation((url, options) => {
-      if (url === "/api/super-agent/tasks" && options?.method === "PUT") {
-        return Promise.resolve({ ok: true });
-      }
-      return Promise.resolve({
-        ok: true,
-        text: async () =>
-          JSON.stringify({
-            tasks: [
-              {
-                id: "task-1",
-                status: "needs_input",
-                title: "Clarify OAuth flow",
-                description: "Which tenant should the agent use?",
-                source: {
-                  channel: "telegram",
-                  conversationId: "chat-42",
-                  userId: "user-7",
-                  messageId: "msg-9",
-                },
-              },
-              {
-                id: "task-2",
-                status: "blocked",
-                title: "Blocked deploy",
-                result: {
-                  failReason: "Missing credentials.",
-                },
-              },
-            ],
-          }),
-      });
+    mockConfig({
+      tasks: [
+        {
+          id: "task-1",
+          status: "needs_input",
+          title: "Clarify OAuth flow",
+          description: "Which tenant should the agent use?",
+          source: {
+            channel: "telegram",
+            conversationId: "chat-42",
+            userId: "user-7",
+            messageId: "msg-9",
+          },
+        },
+        {
+          id: "task-2",
+          status: "blocked",
+          title: "Blocked deploy",
+          result: {
+            failReason: "Missing credentials.",
+          },
+        },
+      ],
     });
 
     const Runtime = customElements.get("super-agent-runtime");
