@@ -47,6 +47,7 @@ import {
   showSettingsSaveError,
   showSettingsSaveSuccess,
 } from "./settings/save-status.js";
+import { setupSkillsPage } from "./settings/skills-page.js";
 import {
   bindSuperAgentStartupToggle,
   renderThinkingEffort,
@@ -4298,6 +4299,9 @@ function selectSettingsTab(tabKey = "general") {
   if (targetTabKey === "extensions") {
     loadBrowsePackages();
   }
+  if (targetTabKey === "skills") {
+    void skillsPage.activate();
+  }
   if (targetTabKey === "chat") {
     toggleSuperAgent = document.getElementById("toggle-super-agent");
     bindSuperAgentStartupToggle(toggleSuperAgent, handleSuperAgentEnabledChanged);
@@ -5115,6 +5119,14 @@ setupSettingsToggles({
   showSettingsSaveError,
   showSettingsSaveSuccess,
 }));
+
+const skillsSaveMessageEl = document.getElementById("settings-skills-save-message");
+const skillsPage = setupSkillsPage({
+  container: document.getElementById("settings-skills"),
+  rpcCommand,
+  showSuccess: (msg) => showSettingsSaveSuccess(skillsSaveMessageEl, msg),
+  showError: (msg) => showSettingsSaveError(skillsSaveMessageEl, msg),
+});
 
 // Restore saved theme, then initialize i18n before any UI setup that calls t()
 const savedTheme = getCurrentTheme();

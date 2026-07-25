@@ -1101,6 +1101,13 @@
         </button>
         <button
           class="settings-nav-item"
+          data-settings-tab="skills"
+          data-i18n="settings.skills.title"
+        >
+          Skills
+        </button>
+        <button
+          class="settings-nav-item"
           data-settings-tab="usage"
           data-i18n="settings.usage"
         >
@@ -1440,6 +1447,26 @@
                 hidden
               ></div>
             </div>
+          </div>
+        </div>
+
+        <div class="settings-tab" data-settings-panel="skills">
+          <div class="settings-header">
+            <h3 data-i18n="settings.skills.title">Skills</h3>
+          </div>
+          <div class="settings-body">
+            <section
+              id="settings-skills"
+              class="settings-section skills-page"
+              role="tabpanel"
+              aria-labelledby="skills-scope-tab-global"
+              aria-live="polite"
+            ></section>
+            <div
+              id="settings-skills-save-message"
+              class="settings-save-message hidden"
+              hidden
+            ></div>
           </div>
         </div>
 

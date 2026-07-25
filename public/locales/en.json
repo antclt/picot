@@ -483,6 +483,30 @@
       "removeConfirm": "Remove stored API key for {provider}?",
       "fromEnvironment": "From environment ({label})",
       "fromEnvironmentFallback": "From environment (env var)"
+    },
+    "skills": {
+      "title": "Skills",
+      "description": "Manage skills Pi discovers for this workspace. Changes are written to the matching settings.json and apply only after a new session or Pi-process restart.",
+      "rescan": "Rescan",
+      "global": "Global",
+      "project": "Current project",
+      "loading": "Loading skills…",
+      "empty": "No skills discovered in this scope.",
+      "projectUntrusted": "This project is not trusted yet. Pi will not load project skills, and switches stay disabled until it is trusted.",
+      "allEnabled": "All enabled",
+      "allDisabled": "All disabled",
+      "enabledCount": "{enabled}/{total} enabled",
+      "source": "Source",
+      "enableGroup": "Toggle entire group",
+      "enableSkill": "Toggle skill",
+      "shadowedBy": "Shadowed by {name}",
+      "customRules": "Custom include/filter rules (read-only — edit settings.json manually)",
+      "savedRestartRequired": "Saved. Start a new session or restart Pi for the change to take effect.",
+      "loadFailed": "Failed to load skills.",
+      "saveFailed": "Failed to save skill settings.",
+      "rescanFailed": "Failed to rescan skills.",
+      "ambiguousRuleTarget": "This target maps to multiple roots; edit settings.json manually to change it.",
+      "scopeSummary": "{total} skills · {groups} groups"
     }
   },
   "lanQr": {

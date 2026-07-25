@@ -70,6 +70,14 @@ describe("classifyCoreCommand", () => {
   it("returns null for an unknown command", () => {
     expect(classifyCoreCommand("totally_unknown_command_xyz")).toBeNull();
   });
+
+  it.each([
+    "list_skill_inventory",
+    "set_skill_enabled",
+  ])("classifies %s as desktopOwnerOnly", (type) => {
+    expect(classifyCoreCommand(type)).toBe("desktopOwnerOnly");
+    expect(() => assertEphemeralCommandAllowed(type, false)).toThrow("Command is not available");
+  });
 });
 
 describe("assertEphemeralCommandAllowed", () => {

@@ -483,6 +483,30 @@
       "removeConfirm": "移除 {provider} 的已存储密钥？",
       "fromEnvironment": "来自环境变量（{label}）",
       "fromEnvironmentFallback": "来自环境变量（环境变量）"
+    },
+    "skills": {
+      "title": "技能",
+      "description": "管理 Pi 为当前工作区发现的技能。更改会写入对应的 settings.json，并且只有在新建会话或重启 Pi 后才会生效。",
+      "rescan": "重新扫描",
+      "global": "全局",
+      "project": "当前项目",
+      "loading": "正在加载技能…",
+      "empty": "此范围内未发现技能。",
+      "projectUntrusted": "当前项目尚未受信任。Pi 不会加载项目技能，在受信任前开关保持禁用。",
+      "allEnabled": "全部启用",
+      "allDisabled": "全部禁用",
+      "enabledCount": "{enabled}/{total} 已启用",
+      "source": "来源",
+      "enableGroup": "切换整个目录",
+      "enableSkill": "切换技能",
+      "shadowedBy": "被 {name} 遮蔽",
+      "customRules": "自定义包含/过滤规则（只读 — 请手动编辑 settings.json）",
+      "savedRestartRequired": "已保存。新建会话或重启 Pi 后生效。",
+      "loadFailed": "加载技能失败。",
+      "saveFailed": "保存技能设置失败。",
+      "rescanFailed": "重新扫描技能失败。",
+      "ambiguousRuleTarget": "该目标同时命中多个根；请手动编辑 settings.json 来修改。",
+      "scopeSummary": "{total} 个 skill · {groups} 个目录"
     }
   },
   "lanQr": {

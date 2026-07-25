@@ -27,6 +27,8 @@
     "get_auth": "allowed",
     "set_auth": "desktopOwnerOnly",
     "list_skills": "allowed",
+    "list_skill_inventory": "desktopOwnerOnly",
+    "set_skill_enabled": "desktopOwnerOnly",
     "get_fork_messages": "deniedSessionLifecycle",
     "list_model_catalog": "allowed",
     "set_model_visibility": "allowed",

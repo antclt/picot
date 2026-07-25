@@ -48,7 +48,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import QRCode from "qrcode";
 import { type WebSocket, WebSocketServer } from "ws";
-import { assertEphemeralCommandAllowed } from "./command-policy.ts";
+import { assertEphemeralCommandAllowed, classifyCoreCommand } from "./command-policy.ts";
 import {
   buildCostDashboardPayload,
   buildEmptyCostDashboardPayload,
@@ -79,6 +79,12 @@ import {
 } from "./pi-chat-setup";
 import { isLoopbackAddress, isLoopbackOnlyApiRequest } from "./request-access.ts";
 import { buildProjectSearchMatch } from "./session-search";
+import {
+  buildSkillInventory,
+  mutateSkillEnabled,
+  type SkillScope,
+  type SkillTarget,
+} from "./skill-inventory.ts";
 import {
   inspectWorkspaceGit,
   observeWorkspaceInfoAbort,
@@ -735,6 +741,40 @@ export function normalizeSkillCommands(commands: SlashCommandLike[]): SkillComma
             ? "temporary"
             : "personal",
     }));
+}
+
+export type SkillInventoryMutation = {
+  scope: SkillScope;
+  target: SkillTarget;
+  enabled: boolean;
+};
+
+export function parseSkillInventoryScope(scope: unknown): SkillScope {
+  if (scope === "global" || scope === "project") return scope;
+  throw new Error("Invalid skill inventory scope");
+}
+
+export function parseSkillInventoryMutation(command: unknown): SkillInventoryMutation {
+  if (typeof command !== "object" || command === null) {
+    throw new Error("Invalid skill inventory mutation");
+  }
+  const c = command as Record<string, unknown>;
+  const scope = parseSkillInventoryScope(c.scope);
+  const target = c.target;
+  if (typeof target !== "object" || target === null) {
+    throw new Error("Invalid skill inventory mutation");
+  }
+  const t = target as Record<string, unknown>;
+  if (t.kind !== "skill" && t.kind !== "group") {
+    throw new Error("Invalid skill inventory mutation");
+  }
+  if (typeof t.id !== "string" || t.id.length === 0) {
+    throw new Error("Invalid skill inventory mutation");
+  }
+  if (typeof c.enabled !== "boolean") {
+    throw new Error("Invalid skill inventory mutation");
+  }
+  return { scope, target: { kind: t.kind as "skill" | "group", id: t.id }, enabled: c.enabled };
 }
 
 type UnifiedWS = {
@@ -1555,6 +1595,56 @@ export default function (pi: ExtensionAPI) {
           const a = requireApi("list_skills");
           if (!a) break;
           sendTo(ws, success("list_skills", { skills: normalizeSkillCommands(a.getCommands()) }));
+          break;
+        }
+        case "list_skill_inventory": {
+          const a = requireApi("list_skill_inventory");
+          if (!a) break;
+          try {
+            const scope = parseSkillInventoryScope(command.scope);
+            sendTo(
+              ws,
+              success(
+                "list_skill_inventory",
+                buildSkillInventory({
+                  scope,
+                  cwd: ctx?.cwd ?? process.cwd(),
+                  agentDir: PI_AGENT_ROOT,
+                  projectTrusted: ctx?.isProjectTrusted() ?? false,
+                }),
+              ),
+            );
+          } catch (e) {
+            sendTo(
+              ws,
+              error(
+                "list_skill_inventory",
+                e instanceof Error ? e.message : "failed to list skills",
+              ),
+            );
+          }
+          break;
+        }
+        case "set_skill_enabled": {
+          const a = requireApi("set_skill_enabled");
+          if (!a) break;
+          try {
+            const mutation = parseSkillInventoryMutation(command);
+            const result = await mutateSkillEnabled({
+              scope: mutation.scope,
+              cwd: ctx?.cwd ?? process.cwd(),
+              agentDir: PI_AGENT_ROOT,
+              projectTrusted: ctx?.isProjectTrusted() ?? false,
+              target: mutation.target,
+              enabled: mutation.enabled,
+            });
+            sendTo(ws, success("set_skill_enabled", result));
+          } catch (e) {
+            sendTo(
+              ws,
+              error("set_skill_enabled", e instanceof Error ? e.message : "failed to update skill"),
+            );
+          }
           break;
         }
 
@@ -4262,13 +4352,26 @@ export default function (pi: ExtensionAPI) {
               ? Buffer.from(raw).toString("utf8")
               : raw.toString();
         const incoming = JSON.parse(text);
-        const command =
-          incoming?.type === "broker_command"
-            ? {
-                ...(incoming.payload || {}),
-                id: incoming.payload?.id ?? incoming.requestId,
-              }
-            : incoming;
+        const isBroker = incoming?.type === "broker_command";
+        const command = isBroker
+          ? {
+              ...(incoming.payload || {}),
+              id: incoming.payload?.id ?? incoming.requestId,
+            }
+          : incoming;
+        // `broker_command` forwards commands from LAN/mobile clients routed
+        // through the Rust broker. Desktop-owner-only commands must never be
+        // executable from that path, regardless of session state.
+        if (isBroker && classifyCoreCommand(command?.type) === "desktopOwnerOnly") {
+          sendTo(ws, {
+            type: "response",
+            command: command?.type || "unknown",
+            success: false,
+            error: "Command is not available from a remote client",
+            id: command?.id,
+          });
+          return;
+        }
         const dispatch = globalState.handleCommand;
         if (dispatch) {
           dispatch(ws, command);

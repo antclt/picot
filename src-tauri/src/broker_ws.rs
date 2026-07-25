@@ -708,6 +708,23 @@ impl BrokerWs {
             return;
         }
 
+        // Enforce command policy before generic forwarding. A remote peer can
+        // send either a broker envelope or a bare RPC frame, so policy must use
+        // the verified client class rather than trust the frame shape.
+        let command_type = value
+            .pointer("/payload/type")
+            .or_else(|| value.get("type"))
+            .and_then(Value::as_str);
+        if ctx.class == ClientClass::Remote
+            && matches!(
+                command_type.and_then(classify_core_command),
+                Some(EphemeralPermission::DesktopOwnerOnly)
+            )
+        {
+            self.notify_undeliverable(client_tx, &value, "desktop_owner_required");
+            return;
+        }
+
         let Some(port) = self.resolve_command_port(&value) else {
             log::warn!("[broker-ws] no route for UI command: {}", value);
             self.notify_undeliverable(client_tx, &value, "no_route");
