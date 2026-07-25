@@ -206,12 +206,18 @@ capability permissions.
 Security and cross-platform regression coverage includes:
 
 - `extensions/request-access.test.ts` — loopback-only HTTP/WS policy.
+- `extensions/embedded-server-file-mentions.test.ts` — loopback-only `/api/file-mentions` root binding and status mapping.
+- `extensions/file-mention-search.test.ts` — `@`-mention bounded traversal, ignore list, budgets, and symlink handling.
+- `extensions/ephemeral-env.test.ts` — ephemeral-process gating predicate that blocks the mention endpoint on Side/Quick Chat Pi.
 - `extensions/path-safety.test.ts` — filesystem containment and sibling-prefix escapes.
 - `extensions/open-path.test.ts` — platform-specific system opener selection.
+- `extensions/skill-inventory.test.ts` — Pi-compatible skill discovery, `!`/`+`/`-` rule resolution, proper-lockfile-compatible settings lock, and legacy `skills` object migration.
+- `extensions/embedded-server-skills.test.ts` — Skills inventory/mutation RPC and loopback owner-only gating.
 - `public/workspace/path-utils.test.js` — POSIX, Windows drive, and UNC paths.
 - `public/super-agent/navigation.test.js` — Super Agent navigation successor.
 - `public/i18n-keys-completeness.test.js` — locale parity and missing-file failures;
   it must not silently skip when a locale file is absent.
+- `public/settings/skills-page.test.js` — Skills page tree rendering, single-skill/group cards, and toggle wiring.
 
 After changing Rust, run `bun run check:rust`. After changing frontend or
 extension code, run `bun run check`; after changes to the embedded server, also
@@ -222,8 +228,8 @@ run `bun run build:extensions`.
 The embedded server keeps LAN access intentionally read-only. Static assets and
 approved read-only REST endpoints may be available to LAN/mobile clients, but
 `/ws`, `/api/rpc`, file writes, system/workspace/session controls, configuration,
-Telegram, Super Agent controls, and picker-scope directory enumeration are
-loopback-only. CORS is not authentication. The single source of truth is
+skill inventory and mutation, Telegram, Super Agent controls, and picker-scope
+directory enumeration are loopback-only. CORS is not authentication. The single source of truth is
 `extensions/request-access.ts`, which checks the socket peer address and fails
 closed when a controlled request has no peer address. Both Node and Bun adapter
 paths must use the same policy. Mobile control flows through the authenticated

@@ -203,7 +203,8 @@ HTTP+WS server。该 server 是**进程作用域**的 —— 它在 `new_session
   loopback）、`/api/files/raw`（图片 / PDF）、`/api/search`、
   `/api/cost-dashboard`、`/api/lan-qr`、`/api/instances`、
   `/api/workspace-info`、`/api/open`、`/api/agent-config`、
-  `/api/models-config`、`/api/git-branch`，加 `POST /api/rpc` 透传。
+  `/api/models-config`、`/api/git-branch`、`/api/file-mentions`（`@` 文件提及
+  自动补全，仅 loopback、且仅由窗口主会话 Pi 提供服务），加 `POST /api/rpc` 透传。
   `public/` 下的静态资源在 `/` 下分发。网络策略集中在
   `extensions/request-access.ts`，文件系统 containment 集中在
   `extensions/path-safety.ts`；系统默认打开器在 `extensions/open-path.ts`
@@ -298,7 +299,8 @@ HTTP+WS server 有两条运行时路径：`Bun.serve`（生产环境，pi 通过
 - **主题 / 视觉** —— `themes.js`、`style.css`、`style-theme.css`、
   `cost.css`、`ui/layout-insets.js`。
 - **辅助 / 导航** —— `session/scroll-anchor.js`、`app/voice-input.js`、
-  `ui/context-viz.js`、`session/onboarding.js`、`session/refresh.js`、
+  `ui/context-viz.js`、`ui/at-file-mention.js`（`@` 文件提及补全控制器，
+  主聊天 / Side Chat / Quick Chat 共享）、`session/onboarding.js`、`session/refresh.js`、
   `super-agent/navigation.js`、`bootstrap.html`（错误兜底窗口）。
 
 测试以 `*.test.js` / `*.test.ts` 形式贴在对应模块旁（jsdom + vitest）。
@@ -708,6 +710,16 @@ canonical regular file descriptor 读取或写入，拒绝符号链接与路径�
 `/api/files/raw` 只服务已分类的图片和 PDF，且带 `no-store`、`sandbox`
 CSP 与 `nosniff`。不要把 `scope=picker`、`/api/open` 的宽松路径语义
 复制到预览或写入端点。
+
+**`@` 文件提及补全的唯一例外：** `GET /api/file-mentions` 是 loopback-only
+端点，由 `extensions/file-mention-search.ts` 提供有界递归枚举（10 000 条目 /
+500 ms / 20 候选）与打分。与预览/写入路由不同，它**刻意允许 workspace 之外
+的路径**（`@~/…`、`@../…`、POSIX 绝对路径、Windows drive/UNC），因为这是
+Pi TUI 兼容的提及补全语义；但这一例外**仅属于该 loopback 端点**，不得
+被折叠进 `resolveScopedFilePath()` 以放宽预览/写入的 workspace containment。
+Side Chat / Quick Chat 的提及请求同样打到窗口主会话 Pi（同源），从不使用
+Quick Chat 的临时 cwd 作为根。设计契约见
+[`docs/superpowers/specs/2026-07-25-at-file-mention-design.md`](docs/superpowers/specs/2026-07-25-at-file-mention-design.md)。
 
 前端路径规范化由 `public/workspace/path-utils.js` 负责：使用与宿主 OS
 无关的纯函数处理 POSIX、Windows drive 和 UNC 路径。`workspace-projects.js`、

@@ -70,6 +70,7 @@ Picot gives you a full visual interface for Pi. Open any project folder, start c
 - Copy any message with one click
 - Scroll-to-bottom button with unread indicator
 - **Message queuing** — type while the agent is working; messages queue as pills and auto-send when ready
+- **`@` file mentions** — type `@` in any composer to search and insert a file-path reference (workspace, `../`, `~/`, or absolute); shared across Main, Side, and Quick Chat
 
 
 ### ⚡ Temporary chats
@@ -161,6 +162,7 @@ Picot gives you a full visual interface for Pi. Open any project folder, start c
 - Thinking level toggle (off / low / medium / high)
 - Auto and manual **context compaction** with status display
 - Push notification toggle
+- **Skills management** — Settings → Skills: browse every discovered skill per source root and toggle individual skills or whole groups using Pi's `!`/`+`/`-` rule semantics (takes effect on next session/restart)
 - **Auto-updater** — Settings → General → Updates for one-click in-app updates
 
 ---
