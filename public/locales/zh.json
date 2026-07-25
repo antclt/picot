@@ -600,5 +600,8 @@
     "statusStreaming": "生成中",
     "statusError": "错误",
     "statusDisconnected": "已断开"
+  },
+  "fileMention": {
+    "listLabel": "文件"
   }
 }

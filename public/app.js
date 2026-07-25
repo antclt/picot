@@ -84,6 +84,7 @@ import {
   TerminalTab,
 } from "./terminal-tab.js";
 import { applyTheme, getCurrentTheme, themes } from "./themes.js";
+import { setupAtFileMention } from "./ui/at-file-mention.js";
 import { DialogHandler } from "./ui/dialogs.js";
 import { setupMessagesInsets } from "./ui/layout-insets.js";
 import { MessageRenderer } from "./ui/message-renderer.js";
@@ -421,6 +422,7 @@ const abortBtn = document.getElementById("abort-btn");
 const statusIndicator = document.getElementById("status-indicator");
 const statusText = document.getElementById("status-text");
 const skillSlashMenu = document.getElementById("skill-slash-menu");
+const atFileMentionMenu = document.getElementById("at-file-mention-menu");
 
 setupSkillSlashCommand({
   input: messageInput,
@@ -431,6 +433,22 @@ setupSkillSlashCommand({
       throw new Error(response?.error || "Failed to load skills");
     }
     return response.data?.skills || [];
+  },
+});
+
+// @-file mention completion must be wired before the main Enter-to-send
+// listener (registered later) so its keydown can intercept Enter/Tab/Escape.
+setupAtFileMention({
+  input: messageInput,
+  container: atFileMentionMenu,
+  getWorkspaceRoot: () => getCurrentWorkspacePath(),
+  searchFiles: async (workspaceRoot, query, signal) => {
+    const response = await fetch(
+      `/api/file-mentions?workspaceRoot=${encodeURIComponent(workspaceRoot)}&query=${encodeURIComponent(query)}`,
+      { signal },
+    );
+    if (!response.ok) throw new Error(`File mention search failed: ${response.status}`);
+    return response.json();
   },
 });
 
@@ -723,6 +741,9 @@ const createEphemeralView = (runtime) =>
     runtime,
     kind: runtime.kind,
     toolsEnabled: runtime.kind === "side-chat",
+    // Ephemeral chats share the window's owner workspace (served by the
+    // main-session Pi), never the Quick Chat temporary cwd.
+    getWorkspaceRoot: () => getCurrentWorkspacePath(),
   });
 
 async function getActiveSessionStartupProfile() {

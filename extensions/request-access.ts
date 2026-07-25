@@ -21,6 +21,7 @@ const LOOPBACK_ONLY_ROUTES = new Set([
   "PUT /api/super-agent/tasks",
   "GET /api/super-agent/projects",
   "GET /api/home",
+  "GET /api/file-mentions",
 ]);
 
 function isLoopbackIpv4(value: string): boolean {

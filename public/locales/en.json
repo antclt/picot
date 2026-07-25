@@ -600,5 +600,8 @@
     "statusStreaming": "Generating",
     "statusError": "Error",
     "statusDisconnected": "Disconnected"
+  },
+  "fileMention": {
+    "listLabel": "Files"
   }
 }

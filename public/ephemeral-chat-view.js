@@ -6,9 +6,13 @@ import { setupComposerCommandMenu } from "./composer-command-menu.js";
 import { setupComposerImageAttachments } from "./composer-image-attachments.js";
 import { onLocaleChange, t } from "./i18n.js";
 import { processImageFile, processImagePayload } from "./image-attachments.js";
+import { setupAtFileMention } from "./ui/at-file-mention.js";
 import { DialogHandler } from "./ui/dialogs.js";
 import { MessageRenderer } from "./ui/message-renderer.js";
 import { ToolCardRenderer } from "./ui/tool-card.js";
+
+// Monotonic counter guarantees unique mention-popup ids across ephemeral views.
+let ephemeralPopupSeq = 0;
 
 const THINKING_LEVELS = ["off", "minimal", "low", "medium", "high"];
 const SVG_NS = "http://www.w3.org/2000/svg";
@@ -60,12 +64,25 @@ function appendSendIcon(doc, button) {
  * views can stay alive while only one is visible.
  */
 export class EphemeralChatView {
-  constructor({ runtime, kind, toolsEnabled }) {
+  constructor({ runtime, kind, toolsEnabled, getWorkspaceRoot, searchFiles }) {
     this.runtime = runtime;
     this.kind = kind || "side-chat";
     this.toolsEnabled = toolsEnabled !== false;
     this.destroyed = false;
     this._interactionLocked = false;
+    // Live owner-workspace lookup for @-file mentions. Never cached, never the
+    // Quick Chat temporary cwd — supplied by the manager via app.js.
+    this._getWorkspaceRoot = getWorkspaceRoot || (() => null);
+    this._searchFiles =
+      searchFiles ||
+      (async (workspaceRoot, query, signal) => {
+        const response = await fetch(
+          `/api/file-mentions?workspaceRoot=${encodeURIComponent(workspaceRoot)}&query=${encodeURIComponent(query)}`,
+          { signal },
+        );
+        if (!response.ok) throw new Error(`File mention search failed: ${response.status}`);
+        return response.json();
+      });
 
     const doc = globalThis.document;
     this._doc = doc;
@@ -96,6 +113,9 @@ export class EphemeralChatView {
     // classes avoid duplicate document IDs while deliberately reusing its style.
     this._composer = doc.createElement("div");
     this._composer.className = "composer-card ephemeral-composer";
+    this._mentionMenu = doc.createElement("div");
+    this._mentionMenu.className = "at-file-mention-menu hidden";
+    this._mentionMenu.id = `ephemeral-at-mention-${ephemeralPopupSeq++}`;
     this._textarea = doc.createElement("textarea");
     this._textarea.className = "ephemeral-input";
     this._textarea.placeholder = t("ephemeral.placeholder");
@@ -107,7 +127,7 @@ export class EphemeralChatView {
     this._imageInput.multiple = true;
     this._imageInput.accept = "image/*";
     this._imageInput.classList.add("hidden");
-    this._composer.append(this._imagePreviews, this._textarea, this._imageInput);
+    this._composer.append(this._imagePreviews, this._mentionMenu, this._textarea, this._imageInput);
 
     const toolbar = doc.createElement("div");
     toolbar.className = "composer-toolbar";
@@ -250,6 +270,15 @@ export class EphemeralChatView {
     this._onKeyDown = (event) => this._handleKeyDown(event);
     this.runtime.addEventListener("renderstate", this._onRenderState);
     this.runtime.addEventListener("extensionuirequest", this._onExtensionUi);
+    // Mention completion is wired before the submit keydown so its listener can
+    // intercept Enter/Tab/Escape first; teardown happens in destroy().
+    this._mentionController = setupAtFileMention({
+      input: this._textarea,
+      container: this._mentionMenu,
+      getWorkspaceRoot: () => this._getWorkspaceRoot(),
+      searchFiles: this._searchFiles,
+      document: this._doc,
+    });
     this._textarea.addEventListener("keydown", this._onKeyDown);
     this._onSendClick = () => {
       if (this.runtime.isStreaming) this.runtime.abort();
@@ -316,6 +345,7 @@ export class EphemeralChatView {
     this._modelBtn.removeEventListener("click", this._onModelClick);
     this._thinkingBtn.removeEventListener("click", this._onThinkingClick);
     this._commandMenuController?.destroy();
+    this._mentionController?.destroy();
     this._doc.removeEventListener("click", this._onDocumentClick);
     this._unsubscribeLocale?.();
     this.messageRenderer?.destroy();

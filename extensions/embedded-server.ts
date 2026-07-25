@@ -34,6 +34,7 @@
 
 import { execFile, execFileSync } from "node:child_process";
 import * as fs from "node:fs";
+import { realpath as realpathAsync } from "node:fs/promises";
 import * as http from "node:http";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -56,6 +57,7 @@ import {
 } from "./cost-dashboard-data.ts";
 import { parseEphemeralEnv } from "./ephemeral-env.ts";
 import { EphemeralRuntimeState } from "./ephemeral-runtime-state.ts";
+import { handleFileMentionRequest } from "./file-mention-search.ts";
 import {
   classifyFile,
   isEditableBySize,
@@ -2559,6 +2561,92 @@ export default function (pi: ExtensionAPI) {
       }
       const q = searchUrl.searchParams.get("q") || "";
       serveSearch(res, q);
+      return;
+    }
+
+    // @-file mention autocomplete: loopback-only, main-session workspace only.
+    if (urlPath === "/api/file-mentions" || urlPath.startsWith("/api/file-mentions?")) {
+      // Ephemeral (Side/Quick Chat) Pi processes must never serve this endpoint:
+      // their context is a temporary cwd, not the window's owner workspace.
+      if (EPHEMERAL_ENV) {
+        sendJsonError(
+          res,
+          403,
+          "File mentions are not available in temporary chat",
+          "ephemeralBlocked",
+        );
+        return;
+      }
+      if (req.method !== "GET") {
+        res.writeHead(405);
+        res.end();
+        return;
+      }
+      try {
+        const mentionUrl = tryParseUrl(`http://localhost${req.url || urlPath}`);
+        if (!mentionUrl) {
+          sendJsonError(res, 400, "Invalid request URL");
+          return;
+        }
+        const currentCtx = globalState.getLatestCtx?.() ?? latestCtx;
+        const authoritativeRoot = resolveWorkspaceRoot(currentCtx);
+        const requestedRoot = mentionUrl.searchParams.get("workspaceRoot") || "";
+        const query = mentionUrl.searchParams.get("query") || "";
+        // Canonicalize the browser root before comparison so symlinked or
+        // non-normalized spellings of the same workspace still match. A root
+        // that cannot be resolved is treated as a stale mismatch (409).
+        let canonicalRequested = requestedRoot;
+        if (requestedRoot) {
+          try {
+            canonicalRequested = await realpathAsync(requestedRoot);
+          } catch {
+            canonicalRequested = requestedRoot;
+          }
+        }
+        // Bridge client disconnect to the walker so an abandoned query exits
+        // promptly instead of consuming its full budget. Bun's adapter exposes
+        // the Request AbortSignal as `req.signal`; Node's IncomingMessage
+        // emits `close`/`aborted`.
+        const walkAbort = new AbortController();
+        const onWalkAbort = () => walkAbort.abort();
+        const reqSignal = (req as { signal?: AbortSignal }).signal;
+        if (reqSignal && typeof reqSignal.addEventListener === "function") {
+          reqSignal.addEventListener("abort", onWalkAbort, { once: true });
+        }
+        if (typeof req.on === "function") {
+          req.on("close", onWalkAbort);
+          req.on("aborted", onWalkAbort);
+        }
+        let outcome: Awaited<ReturnType<typeof handleFileMentionRequest>>;
+        try {
+          outcome = await handleFileMentionRequest({
+            authoritativeRoot,
+            requestedRoot: canonicalRequested,
+            query,
+            signal: walkAbort.signal,
+          });
+        } finally {
+          if (reqSignal && typeof reqSignal.removeEventListener === "function") {
+            reqSignal.removeEventListener("abort", onWalkAbort);
+          }
+          if (typeof req.off === "function") {
+            req.off("close", onWalkAbort);
+            req.off("aborted", onWalkAbort);
+          }
+        }
+        if (outcome.status === 200) {
+          sendJsonOk(res, outcome.body);
+        } else if (outcome.status === 400) {
+          sendJsonError(res, 400, "Invalid mention query", outcome.code);
+        } else if (outcome.status === 409) {
+          sendJsonError(res, 409, "Workspace changed", outcome.code);
+        } else {
+          sendJsonError(res, 503, "No active workspace", outcome.code);
+        }
+      } catch (err: unknown) {
+        console.error("[file-mentions] search failed:", err);
+        sendJsonError(res, 500, "File mention search failed", "mentionSearchFailed");
+      }
       return;
     }
 

@@ -47,6 +47,7 @@ describe("isLoopbackOnlyApiRequest", () => {
     ["GET", "/api/super-agent/projects"],
     ["GET", "/api/chat-telegram/doctor"],
     ["GET", "/api/home"],
+    ["GET", "/api/file-mentions?workspaceRoot=%2Frepo&query=%40src"],
     ["GET", "/api/files?scope=picker&path=%2F"],
   ])("requires loopback for %s %s", (method, urlPath) => {
     expect(isLoopbackOnlyApiRequest(urlPath, method)).toBe(true);

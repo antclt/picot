@@ -373,4 +373,103 @@ describe("EphemeralChatView", () => {
       }),
     ).not.toThrow();
   });
+
+  describe("@-file mention", () => {
+    function canned() {
+      return vi.fn(async () => ({
+        items: [{ value: "@a.ts", label: "a.ts", description: "a.ts", isDirectory: false }],
+        truncated: false,
+      }));
+    }
+
+    it("installs a unique popup per view and Enter selects without submitting", async () => {
+      const searchFiles = canned();
+      const side = new EphemeralChatView({
+        runtime: makeRuntime(),
+        kind: "side-chat",
+        toolsEnabled: true,
+        getWorkspaceRoot: () => "/repo",
+        searchFiles,
+      });
+      const quick = new EphemeralChatView({
+        runtime: makeRuntime(),
+        kind: "quick-chat",
+        toolsEnabled: false,
+        getWorkspaceRoot: () => "/repo",
+        searchFiles,
+      });
+
+      const sideTextarea = side.element.querySelector("textarea");
+      const quickTextarea = quick.element.querySelector("textarea");
+      sideTextarea.value = "@a";
+      sideTextarea.setSelectionRange(2, 2);
+      quickTextarea.value = "@a";
+      quickTextarea.setSelectionRange(2, 2);
+      await side._mentionController.update();
+      await quick._mentionController.update();
+
+      const sidePopup = side.element.querySelector(".at-file-mention-menu");
+      const quickPopup = quick.element.querySelector(".at-file-mention-menu");
+      expect(sidePopup.id).not.toBe(quickPopup.id);
+      expect(sidePopup.querySelector(".at-file-mention-option")).not.toBeNull();
+
+      const sendSpy = vi.spyOn(side.runtime, "sendPrompt");
+      sideTextarea.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+      expect(sendSpy).not.toHaveBeenCalled();
+      expect(sideTextarea.value).toBe("@a.ts ");
+      side.destroy();
+      quick.destroy();
+    });
+
+    it("looks up the owner workspace live on every request", async () => {
+      const getWorkspaceRoot = vi.fn(() => "/repo");
+      const view = new EphemeralChatView({
+        runtime: makeRuntime(),
+        kind: "side-chat",
+        toolsEnabled: true,
+        getWorkspaceRoot,
+        searchFiles: canned(),
+      });
+      const textarea = view.element.querySelector("textarea");
+      textarea.value = "@a";
+      textarea.setSelectionRange(2, 2);
+      await view._mentionController.update();
+      textarea.value = "@a";
+      textarea.setSelectionRange(2, 2);
+      await view._mentionController.update();
+      expect(getWorkspaceRoot).toHaveBeenCalledTimes(2);
+      view.destroy();
+    });
+
+    it("destroy ignores a pending completion response", async () => {
+      let resolveSearch;
+      const searchFiles = vi.fn(
+        () =>
+          new Promise((resolve) => {
+            resolveSearch = () =>
+              resolve({
+                items: [{ value: "@a.ts", label: "a.ts", description: "a.ts", isDirectory: false }],
+                truncated: false,
+              });
+          }),
+      );
+      const view = new EphemeralChatView({
+        runtime: makeRuntime(),
+        kind: "side-chat",
+        toolsEnabled: true,
+        getWorkspaceRoot: () => "/repo",
+        searchFiles,
+      });
+      const textarea = view.element.querySelector("textarea");
+      textarea.value = "@a";
+      textarea.setSelectionRange(2, 2);
+      const pending = view._mentionController.update();
+      view.destroy();
+      resolveSearch();
+      await pending;
+      expect(view.element.querySelector(".at-file-mention-menu").classList.contains("hidden")).toBe(
+        true,
+      );
+    });
+  });
 });

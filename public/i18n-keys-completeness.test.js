@@ -143,6 +143,7 @@ describe("JS t() literal key references", () => {
   const jsFiles = [
     "app.js",
     "ui/context-viz.js",
+    "ui/at-file-mention.js",
     "ui/message-renderer.js",
     "ui/markdown.js",
     "ui/tool-card.js",
