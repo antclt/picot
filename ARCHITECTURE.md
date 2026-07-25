@@ -238,6 +238,37 @@ HTTP+WS server 有两条运行时路径：`Bun.serve`（生产环境，pi 通过
   用于防止 traversal、兄弟目录前缀和 symlink escape。
 - `open-path.ts` 只负责跨平台系统打开器命令解析；调用端必须继续通过
   loopback 控制端点的访问检查。
+- `skill-inventory.ts` 是纯函数模块，复刻 pi 的 skill 发现、
+  `!`/`+`/`-` 规则解析、`resourcePrecedenceRank` 同名冲突排序与跨根歧义检测；
+  `embedded-server.ts` 的 `list_skill_inventory` / `set_skill_enabled` 两个
+  owner-only 命令调用它，原子地读写对应 scope 的 `settings.json`。
+
+#### Skills 设置页（`#/settings/skills`）
+
+**架构不变量：**
+
+- Skills 清单/变更命令是 loopback desktop-owner-only；LAN/移动端与临时
+  chat 既不能读取宿主 skill 路径，也不能写任一 settings 文件。
+- 每个 scope 的写入是原子的、保留无关 JSON 键；embedded server 持有的是
+  `ExtensionContext`，其公共 API 没有 `reload()`，因此变更只对**新会话或
+  重启后的 Pi 进程**生效——页面显式提示 `runtimeRestartRequired`，绝不
+  声称当前进程已生效。
+- 生成的规则相对各自的 Pi 资源基准（`skills/...`），绝不写裸目录名；
+  跨根歧义的同名目标只读展示并禁用开关。
+- 前端只渲染 server 解析后的 enabled/disabled/shadowed 状态，绝不从本地
+  开关推导生效状态。
+- **settings 写入锁与 Pi 互斥**：Picot 变更复刻 Pi `SettingsManager` 用的
+  proper-lockfile 协议——锁是 `${settingsPath}.lock` **空目录**（mkdir 原子
+  acquire、stale 以目录 mtime 对 10000ms 阈值判定、release rmdir），且始终
+  acquire（Picot 也会创建 settings.json）。扩展不能 import proper-lockfile
+  （其依赖 graceful-fs 会 patch pi 的 bun --compile fs），故直接用
+  `node:fs/promises` 复刻协议。已知边界：若某次变更耗时超过 10s（理论上限，
+  实际是 sub-second 的 read→parse→mutate→write），Pi 可能判定锁 stale 而
+  清除——按 proper-lockfile 语义接受。
+- **旧 `skills` 对象格式迁移**：读取 settings.json 时镜像 Pi 的迁移逻辑
+  （`settings-manager.ts`）——把对象形 `{enableSkillCommands, customDirectories}`
+  中的 `enableSkillCommands` 提升到顶层、`customDirectories` 转为 `skills`
+  数组，避免覆盖丢失 `enableSkillCommands`。
 
 ### `public/` —— vanilla-JS WebView 前端
 
@@ -261,7 +292,7 @@ HTTP+WS server 有两条运行时路径：`Bun.serve`（生产环境，pi 通过
   `file-language.js`、`sidebar/search-control.js`、`workspace/path-utils.js`。
 - **用量 / 设置 / 更新器** —— `cost/infobar.js`、`cost.html`、`cost.js`、
   `settings/editors.js`、`settings/toggles.js`、`settings/save-status.js`、
-  `app/updater.js`。
+  `settings/skills-page.js`、`app/updater.js`。
 - **工作区管理** —— `workspace/actions.js`、`ui/dialogs.js`、
   `packages/install-status.js`。
 - **主题 / 视觉** —— `themes.js`、`style.css`、`style-theme.css`、

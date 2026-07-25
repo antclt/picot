@@ -69,10 +69,13 @@
     "@xterm/addon-fit": "^0.11",
     "@xterm/addon-serialize": "^0.14",
     "@xterm/xterm": "^6",
+    "ignore": "^7.0.6",
+    "minimatch": "^10.2.5",
     "pdfjs-dist": "^4.10.38",
     "qrcode": "^1.5.0",
     "remend": "^1.3.0",
-    "ws": "^8.16.0"
+    "ws": "^8.16.0",
+    "yaml": "^2.9.0"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.2",
