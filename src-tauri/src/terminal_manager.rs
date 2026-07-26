@@ -59,7 +59,7 @@ struct LiveTerminal {
     writer: Box<dyn Write + Send>,
     child: Option<Box<dyn portable_pty::Child + Send + Sync>>,
     #[cfg(windows)]
-    job: Option<windows_sys::Win32::Foundation::HANDLE>,
+    job: Option<windows_job::JobHandle>,
 }
 
 impl TerminalManager {
@@ -946,7 +946,7 @@ struct Spawned {
     child: Box<dyn portable_pty::Child + Send + Sync>,
     reader: Box<dyn Read + Send>,
     #[cfg(windows)]
-    job: Option<windows_sys::Win32::Foundation::HANDLE>,
+    job: Option<windows_job::JobHandle>,
 }
 
 /// Reader loop: append PTY output to the journal (assigning the next sequence),
@@ -1048,9 +1048,28 @@ mod windows_job {
         OpenProcess, PROCESS_SET_QUOTA, PROCESS_TERMINATE,
     };
 
+    /// Owned handle to a Win32 Job Object. Wraps the raw `HANDLE` (a
+    /// `*mut c_void`, which is `!Send`) so a terminal's job handle can cross
+    /// the thread boundary imposed by `tauri::State` and
+    /// `tauri::async_runtime::spawn`.
+    ///
+    /// Soundness: a Job Object handle is an opaque, process-local identifier
+    /// for a kernel object whose operations the kernel itself serializes.
+    /// Sending or sharing the *handle value* between threads is therefore
+    /// safe; only `create_and_assign` mints a `JobHandle` and only
+    /// `terminate` consumes it (terminate-then-close, exactly once).
+    pub struct JobHandle(HANDLE);
+
+    // SAFETY: `HANDLE` is an integer identifying a kernel object. The kernel
+    // synchronizes all Job Object operations, so the handle value can be
+    // moved between threads and shared by reference. The wrapper never
+    // mutates the handle after construction.
+    unsafe impl Send for JobHandle {}
+    unsafe impl Sync for JobHandle {}
+
     /// Create a Job Object and assign the freshly spawned child to it so the
     /// whole process tree dies with the terminal. Returns the job handle.
-    pub fn create_and_assign(pid: u32) -> Option<HANDLE> {
+    pub fn create_and_assign(pid: u32) -> Option<JobHandle> {
         unsafe {
             let job = CreateJobObjectW(std::ptr::null(), std::ptr::null());
             if job.is_null() {
@@ -1063,15 +1082,15 @@ mod windows_job {
                     CloseHandle(proc);
                 }
             }
-            Some(job)
+            Some(JobHandle(job))
         }
     }
 
     /// Terminate every process in the job, then close the handle.
-    pub fn terminate(job: HANDLE) {
+    pub fn terminate(job: JobHandle) {
         unsafe {
-            TerminateJobObject(job, 1);
-            CloseHandle(job);
+            TerminateJobObject(job.0, 1);
+            CloseHandle(job.0);
         }
     }
 }
@@ -1097,7 +1116,7 @@ fn kill_process_tree(
 fn kill_process_tree(
     _master: &dyn MasterPty,
     mut child: Box<dyn portable_pty::Child + Send + Sync>,
-    job: Option<windows_sys::Win32::Foundation::HANDLE>,
+    job: Option<windows_job::JobHandle>,
 ) {
     // Terminate the Job Object first so descendants (dev servers, watchers)
     // die with the shell, then fall back to killing the direct child.
