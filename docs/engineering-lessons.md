@@ -106,3 +106,45 @@ broker events. The decisive evidence was a request such as:
 being sent after the active session had moved to another workspace. Removing the
 stale root from workspace-root requests fixed the 403 without introducing a new
 transport architecture or a full-page refresh.
+
+## Pre-commit re-staging collapses partial file stages
+
+The `.husky/pre-commit` hook re-stages every lintable staged file with a plain
+`git add` so that Biome/rustfmt fixes land in the commit. A whole-file `git add`
+is not a no-op when the file was only partially staged: it stages the entire
+working-tree copy, overwriting any partial stage built with `git apply --cached`
+or `git add -p`. Unstaged in-progress work in that file then silently lands in
+the commit.
+
+This bites whenever a single file mixes a hunk you want to commit with
+in-progress work you do not — for example, a bug-fix hunk in `app.js` while an
+unrelated feature is half-written in the same file.
+
+- A partial stage is not durable across this hook. If a file must commit only
+  some of its working-tree changes, make the working tree contain only those
+  changes at commit time: `git stash` the rest of that file, or temporarily
+  reset it to HEAD and re-apply just the target hunk, then commit, then restore
+  the held-back changes.
+- Never assume "No fixes applied" means the hook did not touch the index. The
+  hook re-stages unconditionally, regardless of whether Biome changed anything.
+- After committing a partially-staged file, verify with
+  `git show <commit> -- <file>` that the committed line count matches the
+  intended hunk. A much larger diff means in-progress work was swept in.
+- Prefer physical separation: keep a bug fix and an in-progress feature in
+  different files, or use a worktree, so partial staging is not needed.
+
+### Diagnostic sequence
+
+When a commit unexpectedly contains unrelated in-progress work:
+
+1. `git show <commit> --stat` — if a file's insertion count dwarfs the intended
+   hunk, the hook re-staged the whole file.
+2. `git show <commit>:<file> | grep <in-progress-marker>` — confirms the
+   in-progress code is in the commit, not only in the working tree.
+3. Recover with `git reset --mixed HEAD~1` (the working tree is preserved),
+   then re-commit with the working tree holding only the target hunk for that
+   file.
+
+The decisive evidence here was a 290-line `app.js` diff in a commit that was
+supposed to add an 8-line hunk, with `enterFocus` present in the committed blob
+but meant to stay unstaged as in-progress feature work.
