@@ -7342,6 +7342,12 @@ body.file-preview-resizing {
   line-height: 1.6;
 }
 
+.message.assistant .message-content img,
+.file-markdown-preview img {
+  max-width: 100%;
+  height: auto;
+}
+
 /* Image preview */
 .file-image-preview {
   display: flex;
