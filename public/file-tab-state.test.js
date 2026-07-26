@@ -229,4 +229,42 @@ describe("FileTabState", () => {
       unsub();
     });
   });
+
+  describe("hasTabsForRoot", () => {
+    test("peeks persisted tabs for a workspace without switching state", () => {
+      storage.setItem(
+        "picot-file-tabs",
+        JSON.stringify({
+          byRoot: {
+            "/workspace/a": {
+              tabs: [
+                {
+                  id: "file:/workspace/a/x.js",
+                  kind: "file",
+                  filePath: "/workspace/a/x.js",
+                  fileName: "x.js",
+                  mode: "edit",
+                },
+              ],
+              activeTabId: "file:/workspace/a/x.js",
+              touchedAt: 1,
+            },
+          },
+        }),
+      );
+      const state = new FileTabState({ storage });
+      state.load("/workspace/loaded");
+
+      expect(state.hasTabsForRoot("/workspace/a")).toBe(true);
+      expect(state.hasTabsForRoot("/workspace/empty")).toBe(false);
+      // Peeking must not switch the active workspace state.
+      expect(state.workspaceRoot).toBe("/workspace/loaded");
+      expect(state.getTabs()).toHaveLength(0);
+    });
+
+    test("returns false when storage is empty", () => {
+      const state = new FileTabState({ storage });
+      expect(state.hasTabsForRoot("/workspace/anything")).toBe(false);
+    });
+  });
 });

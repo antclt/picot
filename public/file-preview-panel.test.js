@@ -550,4 +550,200 @@ describe("FilePreviewPanel transient tabs", () => {
     expect(panel.classList.contains("collapsed")).toBe(true);
     p.destroy();
   });
+
+  // Regression: file DOM must not linger in the content area after switching
+  // to a Side Chat (transient) tab. Leftover .file-code-editor nodes are
+  // height:100% and overlap the appended Side Chat view inside the
+  // overflow:hidden content container, making the Side Chat invisible.
+  test("switching from a file tab to a transient tab clears leftover file DOM", async () => {
+    const p = createPanel();
+    await p.openFile("/test/workspace/main.js");
+    expect(content.querySelectorAll(".file-code-editor").length).toBe(1);
+
+    const body = document.createElement("div");
+    body.className = "ephemeral-chat-view";
+    body.textContent = "side chat body";
+    p.registerTransientTab({
+      id: "sc1",
+      title: "Side Chat",
+      status: "ready",
+      contentElement: body,
+      onActivate: () => {},
+      onDeactivate: () => {},
+      onRequestClose: () => {},
+    });
+    p.activateContent({ kind: "transient", id: "sc1" });
+
+    expect(content.contains(body)).toBe(true);
+    expect(content.children.length).toBe(1);
+    expect(content.firstChild).toBe(body);
+    expect(content.querySelectorAll(".file-code-editor").length).toBe(0);
+    p.destroy();
+  });
+
+  test("switching back to a transient tab after opening a file restores it", async () => {
+    const p = createPanel();
+    const body = document.createElement("div");
+    body.className = "ephemeral-chat-view";
+    body.textContent = "side chat body";
+    p.registerTransientTab({
+      id: "sc1",
+      title: "Side Chat",
+      status: "ready",
+      contentElement: body,
+      onActivate: () => {},
+      onDeactivate: () => {},
+      onRequestClose: () => {},
+    });
+    p.activateContent({ kind: "transient", id: "sc1" });
+    await p.openFile("/test/workspace/main.js");
+    expect(content.contains(body)).toBe(false);
+
+    p.activateContent({ kind: "transient", id: "sc1" });
+
+    expect(content.contains(body)).toBe(true);
+    expect(content.children.length).toBe(1);
+    expect(content.firstChild).toBe(body);
+    p.destroy();
+  });
+
+  // Regression: closing the last file tab must not collapse the panel while a
+  // Side Chat (transient) tab still exists — the panel should switch to it.
+  test("closing the last file tab keeps the panel open when a transient tab remains", async () => {
+    const p = createPanel();
+    p.registerTransientTab({
+      id: "sc1",
+      title: "Side Chat",
+      status: "ready",
+      contentElement: document.createElement("div"),
+      onActivate: () => {},
+      onDeactivate: () => {},
+      onRequestClose: () => {},
+    });
+    await p.openFile("/test/workspace/main.js");
+
+    await p._closeTab(p.state.getActiveTab().id);
+
+    expect(panel.classList.contains("collapsed")).toBe(false);
+    expect(p.activeContent).toEqual({ kind: "transient", id: "sc1" });
+    expect(p.state.getTabs().length).toBe(0);
+    p.destroy();
+  });
+
+  test("closing the last file tab still closes the panel with no transient tab", async () => {
+    const p = createPanel();
+    await p.openFile("/test/workspace/main.js");
+
+    await p._closeTab(p.state.getActiveTab().id);
+
+    expect(panel.classList.contains("collapsed")).toBe(true);
+    p.destroy();
+  });
+});
+
+describe("FilePreviewPanel workspace restore", () => {
+  function seededStorage(seed) {
+    const memStorage = new Map();
+    memStorage.set("picot-file-tabs", JSON.stringify(seed));
+    return {
+      getItem: (k) => memStorage.get(k) ?? null,
+      setItem: (k, v) => memStorage.set(k, String(v)),
+      removeItem: (k) => memStorage.delete(k),
+    };
+  }
+
+  // Regression: during a foreground workspace switch the persisted tabs can
+  // belong to a workspace the current server is not scoped to, so the content
+  // fetch 403s. The panel must not flash open with a load error before the
+  // authoritative state closes it.
+  test("does not flash the panel open when restored content fails to load", async () => {
+    const storage = seededStorage({
+      byRoot: {
+        "/ws/a": {
+          tabs: [
+            {
+              id: "file:/ws/a/missing.js",
+              kind: "file",
+              filePath: "/ws/a/missing.js",
+              fileName: "missing.js",
+              mode: "edit",
+            },
+          ],
+          activeTabId: "file:/ws/a/missing.js",
+          touchedAt: Date.now(),
+        },
+      },
+    });
+    const p = createPanel({ storage });
+    global.fetch = vi.fn(async () => ({
+      ok: false,
+      status: 403,
+      json: async () => ({}),
+    }));
+
+    expect(panel.classList.contains("collapsed")).toBe(true);
+    await p.setWorkspaceRoot("/ws/a");
+
+    expect(panel.classList.contains("collapsed")).toBe(true);
+    expect(p.state.getTabs().length).toBe(1);
+    p.destroy();
+  });
+
+  test("opens the panel when restored content loads successfully", async () => {
+    const storage = seededStorage({
+      byRoot: {
+        "/ws/a": {
+          tabs: [
+            {
+              id: "file:/ws/a/real.js",
+              kind: "file",
+              filePath: "/ws/a/real.js",
+              fileName: "real.js",
+              mode: "edit",
+            },
+          ],
+          activeTabId: "file:/ws/a/real.js",
+          touchedAt: Date.now(),
+        },
+      },
+    });
+    const p = createPanel({ storage });
+    global.fetch = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ content: "real content\n", mtimeMs: 1 }),
+    }));
+
+    await p.setWorkspaceRoot("/ws/a");
+
+    expect(panel.classList.contains("collapsed")).toBe(false);
+    p.destroy();
+  });
+
+  test("hasPersistedTabs peeks storage without switching state", () => {
+    const storage = seededStorage({
+      byRoot: {
+        "/ws/a": {
+          tabs: [
+            {
+              id: "file:/ws/a/peek.js",
+              kind: "file",
+              filePath: "/ws/a/peek.js",
+              fileName: "peek.js",
+              mode: "edit",
+            },
+          ],
+          activeTabId: "file:/ws/a/peek.js",
+          touchedAt: Date.now(),
+        },
+      },
+    });
+    const p = createPanel({ storage });
+
+    expect(p.hasPersistedTabs("/ws/a")).toBe(true);
+    expect(p.hasPersistedTabs("/ws/empty")).toBe(false);
+    // Peeking must not load tabs into the active state.
+    expect(p.state.getTabs().length).toBe(0);
+    p.destroy();
+  });
 });

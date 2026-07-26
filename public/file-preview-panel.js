@@ -171,10 +171,22 @@ export class FilePreviewPanel {
       return true;
     }
 
-    this._openPanel();
     const activeTab = this.state.getActiveTab();
     this.activeContent = activeTab ? { kind: "file", id: activeTab.id } : null;
-    if (activeTab) await this._loadTabContent(activeTab);
+    // Defer opening the panel until the restored tab's content loads. During
+    // a foreground workspace switch the persisted tabs can belong to a
+    // workspace the current server is not scoped to, so the content fetch
+    // returns 403; opening first would flash the panel open with a load
+    // error before the authoritative state closes it again. Only open on a
+    // successful load that is still the current workspace.
+    if (activeTab) {
+      const loaded = await this._loadTabContent(activeTab);
+      if (loaded && this.workspaceRoot === normalized) {
+        this._openPanel();
+      } else if (this.workspaceRoot === normalized) {
+        this.activeContent = null;
+      }
+    }
     return true;
   }
 
@@ -334,6 +346,14 @@ export class FilePreviewPanel {
     this._closePanel();
   }
 
+  /**
+   * Whether the given workspace has any persisted file tabs in storage, without
+   * switching the active state. See FileTabState.hasTabsForRoot.
+   */
+  hasPersistedTabs(workspaceRoot) {
+    return this.state.hasTabsForRoot?.(workspaceRoot) ?? false;
+  }
+
   // Close-risk participant contract consumed by the window close coordinator.
   getCloseRisk() {
     this._riskVersion += 1;
@@ -409,6 +429,11 @@ export class FilePreviewPanel {
     } else if (this.activeContent?.kind === "file" || this.currentRenderer) {
       this._captureActiveRenderer();
       this._destroyRenderer();
+      // Match the transient branch's element removal: clear any file renderer
+      // DOM left in the content node so it cannot overlap a subsequently
+      // mounted transient (Side Chat) view. _mountRenderer already does this
+      // before re-mounting a file; only the deactivation path was missing it.
+      this.content?.replaceChildren();
     }
     this.activeContent = null;
   }
@@ -736,6 +761,21 @@ export class FilePreviewPanel {
         Array.from(this.tabBar?.querySelectorAll("[data-tab-id]") || [])
           .find((tab) => tab.dataset.tabId === result.nextTabId)
           ?.focus();
+      }
+    } else if (this.transientTabs.size > 0) {
+      // The last file tab closed but a Side Chat (transient) tab remains:
+      // keep the panel open and switch to the most recent transient tab.
+      // Mirrors unregisterTransientTab's dual-empty check — only collapse
+      // when neither file nor transient tabs remain.
+      const lastTransient = Array.from(this.transientTabs.keys()).pop();
+      if (lastTransient) {
+        this.activateContent({ kind: "transient", id: lastTransient });
+        Array.from(this.tabBar?.querySelectorAll("[data-transient-id]") || [])
+          .find((tab) => tab.dataset.transientId === lastTransient)
+          ?.focus();
+      } else {
+        this._closePanel();
+        if (wasActive) document.getElementById("file-sidebar-toggle")?.focus();
       }
     } else {
       this._closePanel();

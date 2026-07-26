@@ -3409,6 +3409,14 @@ async function handleSessionSelectImpl(session, project) {
     foregroundWorkspacePath = selectedWorkspacePath;
     updateWorkspaceIndicator(selectedWorkspacePath);
     updateSuperAgentActiveStateFromWorkspace();
+    // When the target workspace has no persisted file tabs, collapse the
+    // editor panel immediately instead of waiting ~2-3s for mirror_sync to
+    // drive setWorkspaceRoot. hasPersistedTabs peeks storage without
+    // switching state, so switching back to a workspace that DOES have tabs
+    // is left to setWorkspaceRoot (no collapse-then-reopen flicker).
+    if (!filePreviewPanel.hasPersistedTabs?.(selectedWorkspacePath)) {
+      filePreviewPanel.hidePanel();
+    }
     // A workspace switch changes the HTTP origin that serves the file API.
     // Navigate before any branch can fall through to an in-process switch.
     const targetPort = targetLiveInstance?.port ?? foregroundPort;

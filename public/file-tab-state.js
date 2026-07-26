@@ -145,6 +145,22 @@ export class FileTabState {
     return [...this.tabs];
   }
 
+  /**
+   * Whether any persisted tabs exist for the given workspace root, without
+   * loading or switching the active state. Lets callers decide whether a
+   * cross-workspace switch should immediately collapse the editor panel
+   * (target has no persisted tabs) instead of waiting for the authoritative
+   * setWorkspaceRoot driven by mirror_sync.
+   */
+  hasTabsForRoot(workspaceRoot) {
+    const normalized = this._normalizeRoot(workspaceRoot);
+    if (!normalized) return false;
+    const snapshot = this._readSnapshot();
+    if (!snapshot) return false;
+    const rootState = snapshot.byRoot?.[normalized];
+    return Array.isArray(rootState?.tabs) && rootState.tabs.length > 0;
+  }
+
   getActiveTab() {
     if (!this.activeTabId) return null;
     return this.getTab(this.activeTabId);
