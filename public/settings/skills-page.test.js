@@ -315,6 +315,29 @@ describe("skills-page tree renderer", () => {
     expect(container.querySelector(".skills-error").textContent).toContain("boom");
   });
 
+  it("rescans from an error state", async () => {
+    const rpcCommand = vi
+      .fn()
+      .mockResolvedValueOnce({ success: false, error: "offline" })
+      .mockResolvedValueOnce({ success: true, data: makeInventory() });
+    const page = setupSkillsPage({ container, rpcCommand });
+    await page.load("global");
+    expect(container.querySelector(".skills-error").textContent).toContain("offline");
+
+    container.querySelector(".skills-rescan").click();
+    await flushPromises();
+    expect(rpcCommand).toHaveBeenCalledTimes(2);
+    expect(container.querySelector("[data-skill-root]")).not.toBeNull();
+  });
+
+  it("destroy clears the page and unsubscribes from locale updates", async () => {
+    const page = setupSkillsPage({ container, rpcCommand: mockRpc(makeInventory()) });
+    await page.load("global");
+    page.destroy();
+    for (const listener of localeListeners) listener();
+    expect(container.children).toHaveLength(0);
+  });
+
   it("rerenders on locale change without losing the selected scope", async () => {
     const page = setupSkillsPage({ container, rpcCommand: mockRpc(makeInventory()) });
     await page.load("global");

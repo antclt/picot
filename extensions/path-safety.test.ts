@@ -13,6 +13,10 @@ test("rejects traversal and sibling-prefix paths", () => {
   expect(isPathWithinRoot("/app/public", "/app/public-assets/index.html")).toBe(false);
 });
 
+test("treats the POSIX root as containing absolute paths", () => {
+  expect(isPathWithinRoot("/", "/child")).toBe(true);
+});
+
 test("handles Windows drive paths case-insensitively", () => {
   expect(isPathWithinRoot("C:\\Users\\Lin\\Public", "c:/users/lin/public/index.html")).toBe(true);
   expect(isPathWithinRoot("C:\\Users\\Lin\\Public", "C:/Users/Lin/Public-assets/index.html")).toBe(

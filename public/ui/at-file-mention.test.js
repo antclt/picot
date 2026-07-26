@@ -106,6 +106,27 @@ describe("at-file-mention", () => {
     controller.destroy();
   });
 
+  test("falls back to direct replacement when setRangeText throws", async () => {
+    const controller = setupAtFileMention({
+      input,
+      container,
+      getWorkspaceRoot: () => "/repo",
+      searchFiles: canned([
+        { value: "@src/a.ts", label: "a.ts", description: "src/a.ts", isDirectory: false },
+      ]),
+    });
+    input.value = "@src/a tail";
+    setCaret(input, 6);
+    input.setRangeText = () => {
+      throw new Error("unsupported");
+    };
+    await controller.update();
+    controller.select(0);
+    expect(input.value).toBe("@src/a.ts  tail");
+    expect(input.selectionStart).toBe("@src/a.ts ".length);
+    controller.destroy();
+  });
+
   test("closing the menu aborts the in-flight request", async () => {
     let resolveSearch;
     const searchFiles = vi.fn(

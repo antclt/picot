@@ -20,3 +20,11 @@ test("keeps POSIX root semantics", () => {
   expect(parentLocalPath("/")).toBe("/");
   expect(basenameLocalPath("/Users/Lin/file.ts")).toBe("file.ts");
 });
+
+test("preserves relative parent traversal and normalizes empty dot segments", () => {
+  expect(normalizeLocalPath("..")).toBe("..");
+  expect(normalizeLocalPath("")).toBe("");
+  expect(normalizeLocalPath(".")).toBe("");
+  expect(normalizeLocalPath("a/./b/../c")).toBe("a/c");
+  expect(parentLocalPath(".")).toBe("");
+});

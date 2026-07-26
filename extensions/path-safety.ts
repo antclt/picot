@@ -21,8 +21,8 @@ export function isPathWithinRoot(root: string, candidate: string): boolean {
   const comparableCandidate = useWindowsSemantics
     ? normalizedCandidate.toLowerCase()
     : normalizedCandidate;
-  return (
-    comparableCandidate === comparableRoot ||
-    comparableCandidate.startsWith(`${comparableRoot}${separator}`)
-  );
+  const rootPrefix = comparableRoot.endsWith(separator)
+    ? comparableRoot
+    : `${comparableRoot}${separator}`;
+  return comparableCandidate === comparableRoot || comparableCandidate.startsWith(rootPrefix);
 }

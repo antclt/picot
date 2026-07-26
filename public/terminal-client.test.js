@@ -89,6 +89,15 @@ describe("TerminalClient replay", () => {
     expect(send).toHaveBeenCalledTimes(1);
   });
 
+  test("rejects an invalid workspace generation without replacing the current token", () => {
+    const send = vi.fn();
+    const client = new TerminalClient({ send, createTab: fakeTab });
+    expect(client.setWorkspaceGeneration(7)).toBe(true);
+    expect(client.setWorkspaceGeneration(-1)).toBe(false);
+    client.command({ type: "terminal_list" });
+    expect(send).toHaveBeenCalledWith(expect.objectContaining({ workspaceGeneration: 7 }));
+  });
+
   test("command wraps payload in a terminal_command envelope with generation", () => {
     const send = vi.fn();
     const client = new TerminalClient({ send, createTab: fakeTab });

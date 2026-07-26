@@ -20,7 +20,7 @@ function mountedPanel(opts = {}) {
 }
 
 afterEach(() => {
-  document.body.innerHTML = "";
+  document.body.textContent = "";
 });
 
 test("first native expansion lazily creates one default tab", async () => {
@@ -178,4 +178,80 @@ test("beforeWorkspaceTransition checkpoints even when collapsed", async () => {
   const ok = await panel.beforeWorkspaceTransition();
   expect(ok).toBe(true);
   expect(checkpointAll).toHaveBeenCalledTimes(1);
+});
+
+test("settleCloseRisk unlocks on cancel and closes every terminal on discard", async () => {
+  const closeAll = vi.fn(async () => {});
+  const { panel } = mountedPanel({ client: { closeAll } });
+
+  panel.setInteractionLocked(true);
+  await panel.settleCloseRisk("cancel");
+  expect(panel.locked).toBe(false);
+  expect(closeAll).not.toHaveBeenCalled();
+
+  await panel.settleCloseRisk("discard");
+  expect(panel.locked).toBe(true);
+  expect(closeAll).toHaveBeenCalledTimes(1);
+});
+
+test("restored terminal metadata shows one restart notice and recreates tabs", async () => {
+  const create = vi.fn(async () => {});
+  const { panel } = mountedPanel({ client: { create } });
+  panel.setTabs([
+    {
+      terminalId: "restored-1",
+      generation: 0,
+      label: "zsh",
+      profileId: "bash",
+      status: "restoredMetadata",
+    },
+  ]);
+
+  await panel.expand();
+  expect(create).toHaveBeenCalledWith("bash");
+  expect(panel.bodyEl.querySelectorAll(".terminal-restart-notice")).toHaveLength(1);
+  await panel.expand();
+  expect(panel.bodyEl.querySelectorAll(".terminal-restart-notice")).toHaveLength(1);
+});
+
+test("pointer resizing persists the new height after the drag ends", () => {
+  vi.useFakeTimers();
+  const refitAll = vi.fn();
+  const setPanelHeight = vi.fn();
+  const { panel } = mountedPanel({ client: { refitAll, setPanelHeight } });
+  panel.setHeight(300);
+  panel._beginResize({ clientY: 500, preventDefault: vi.fn() });
+
+  const move = new Event("pointermove");
+  Object.defineProperty(move, "clientY", { value: 450 });
+  window.dispatchEvent(move);
+  expect(panel.heightPx).toBe(350);
+  vi.advanceTimersByTime(100);
+
+  window.dispatchEvent(new Event("pointerup"));
+  expect(setPanelHeight).toHaveBeenCalledWith(350);
+  expect(refitAll).toHaveBeenCalled();
+  vi.useRealTimers();
+});
+
+test("keyboard resize and tab roving update the active terminal", () => {
+  const refitTab = vi.fn();
+  const focusTab = vi.fn();
+  const { panel } = mountedPanel({ client: { refitTab, focusTab } });
+  panel.setHeight(300);
+  const preventResize = vi.fn();
+  panel._keyboardResize({ key: "ArrowUp", shiftKey: false, preventDefault: preventResize });
+  expect(panel.heightPx).toBe(320);
+  expect(preventResize).toHaveBeenCalledTimes(1);
+
+  panel.setTabs([
+    { terminalId: "t1", generation: 1, label: "one", profileId: "default", status: "running" },
+    { terminalId: "t2", generation: 1, label: "two", profileId: "default", status: "running" },
+  ]);
+  const preventRove = vi.fn();
+  panel._tabKeydown({ key: "ArrowRight", preventDefault: preventRove }, "t1");
+  expect(panel.activeTerminalId).toBe("t2");
+  expect(refitTab).toHaveBeenCalledWith("t2");
+  expect(focusTab).toHaveBeenCalledWith("t2");
+  expect(preventRove).toHaveBeenCalledTimes(1);
 });

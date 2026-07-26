@@ -1,7 +1,7 @@
 // ABOUTME: Tests for the terminal tab xterm adapter and its vendor bundle contract.
 // ABOUTME: The vendor contract test guards that xterm is bundled same-origin only.
 import { beforeAll, expect, test, vi } from "vitest";
-import { encodeBase64, TerminalTab } from "./terminal-tab.js";
+import { encodeBase64, picotThemeToXterm, TerminalTab } from "./terminal-tab.js";
 
 // xterm probes a canvas 2D context during module load to detect renderer
 // capabilities. jsdom does not implement getContext, which only emits a noisy
@@ -127,4 +127,37 @@ test("ack tracks the last applied sequence", () => {
   tab.ack(42);
   expect(tab.lastAppliedSequence).toBe(42);
   tab.destroy();
+});
+
+test("serializes checkpoints and refreshes after a theme change", () => {
+  const serialize = vi.fn(() => "checkpoint");
+  const { tab, term } = makeTab({ serializeAddonFactory: () => ({ serialize }) });
+  term.options = {};
+  term.rows = 24;
+  term.refresh = vi.fn();
+
+  expect(tab.serializeForCheckpoint(123)).toBe("checkpoint");
+  expect(serialize).toHaveBeenCalledWith({ scrollback: 123 });
+
+  const theme = { background: "#123456" };
+  tab.setTheme(theme);
+  expect(term.options.theme).toBe(theme);
+  expect(term.refresh).toHaveBeenCalledWith(0, 23);
+  tab.destroy();
+});
+
+test("maps Picot CSS variables and a light theme to xterm colors", () => {
+  document.documentElement.setAttribute("data-theme", "light");
+  document.documentElement.style.setProperty("--bg-solid", "#fefefe");
+  document.documentElement.style.setProperty("--text-primary", "#101010");
+  document.documentElement.style.setProperty("--bg-glass-active", "#dddddd");
+
+  expect(picotThemeToXterm()).toMatchObject({
+    background: "#fefefe",
+    foreground: "#101010",
+    cursor: "#101010",
+    cursorAccent: "#fefefe",
+    selection: "#dddddd",
+    red: "#c72424",
+  });
 });
