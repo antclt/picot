@@ -5,6 +5,8 @@ import { initI18n } from "../i18n.js";
 import {
   buildWorkspaceUrl,
   isDeadPortError,
+  openFolderAsWorkspace,
+  openProjectWorkspace,
   startInWindowNewSession,
   startNewProjectChat,
   withBrokerWs,
@@ -300,7 +302,25 @@ describe("navigation propagates the broker WS url", () => {
     expect(ok).toBe(true);
     expect(navigate).toHaveBeenCalledWith(
       "http://localhost:47826/?brokerWs=ws%3A%2F%2F127.0.0.1%3A47999%2Fbroker",
+      { targetCwd: "/work" },
     );
+  });
+
+  it("startInWindowNewSession propagates targetCwd to navigate metadata", async () => {
+    const transport = makeTransport(47826, "ws://127.0.0.1:47999/broker");
+    const navigate = vi.fn();
+
+    await startInWindowNewSession({
+      transport,
+      getCurrentCwd: () => "/work/alpha",
+      getCurrentPort: () => 47820,
+      navigate,
+      onBeforeSwap: vi.fn(),
+      shouldSpawnParallel: () => true,
+      renderError: vi.fn(),
+    });
+
+    expect(navigate).toHaveBeenCalledWith(expect.any(String), { targetCwd: "/work/alpha" });
   });
 
   it("startNewProjectChat appends brokerWs on full-page navigation", async () => {
@@ -322,7 +342,70 @@ describe("navigation propagates the broker WS url", () => {
     expect(ok).toBe(true);
     expect(navigate).toHaveBeenCalledWith(
       "http://localhost:47826/?brokerWs=ws%3A%2F%2F127.0.0.1%3A47999%2Fbroker",
+      { targetCwd: "/work" },
     );
+  });
+
+  it("startNewProjectChat cross-workspace attach propagates targetCwd", async () => {
+    const transport = makeTransport(47826, "ws://127.0.0.1:47999/broker");
+    const navigate = vi.fn();
+
+    await startNewProjectChat({
+      project: { path: "/work/beta", sessions: [{ cwd: "/work/beta" }] },
+      transport,
+      getCurrentPort: () => 47820,
+      getCurrentCwd: () => "/work/alpha",
+      shouldSpawnParallel: () => false,
+      fetchInstances: vi
+        .fn()
+        .mockResolvedValue([{ port: 47826, cwd: "/work/beta", sessionFile: "/s/b.jsonl" }]),
+      navigate,
+      onBeforeSwap: vi.fn(),
+      renderError: vi.fn(),
+    });
+
+    expect(navigate).toHaveBeenCalledWith(expect.any(String), { targetCwd: "/work/beta" });
+  });
+
+  it("openProjectWorkspace propagates the project cwd to navigate", async () => {
+    const transport = makeTransport(47826, "ws://127.0.0.1:47999/broker");
+    const navigate = vi.fn();
+
+    const ok = await openProjectWorkspace({
+      project: { path: "/work/gamma", sessions: [{ cwd: "/work/gamma" }] },
+      transport,
+      fetchInstances: vi
+        .fn()
+        .mockResolvedValue([{ port: 47826, cwd: "/work/gamma", sessionFile: "/s/g.jsonl" }]),
+      getCurrentPort: () => 47820,
+      navigate,
+      onBeforeSwap: vi.fn(),
+      renderError: vi.fn(),
+    });
+
+    expect(ok).toBe(true);
+    expect(navigate).toHaveBeenCalledWith(expect.any(String), { targetCwd: "/work/gamma" });
+  });
+
+  it("openFolderAsWorkspace propagates the picked folder as targetCwd", async () => {
+    const transport = makeTransport(47826, "ws://127.0.0.1:47999/broker");
+    transport.pickFolder = vi.fn().mockResolvedValue("/work/delta");
+    const navigate = vi.fn();
+
+    const ok = await openFolderAsWorkspace({
+      transport,
+      fetchInstances: vi
+        .fn()
+        .mockResolvedValue([{ port: 47826, cwd: "/work/delta", sessionFile: "/s/d.jsonl" }]),
+      getCurrentPort: () => 47820,
+      navigate,
+      onBeforeSwap: vi.fn(),
+      renderError: vi.fn(),
+    });
+
+    expect(ok).toBe(true);
+    expect(transport.pickFolder).toHaveBeenCalled();
+    expect(navigate).toHaveBeenCalledWith(expect.any(String), { targetCwd: "/work/delta" });
   });
 });
 

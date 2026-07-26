@@ -1,0 +1,120 @@
+// ABOUTME: Shared DOM builder for a single session row.
+// ABOUTME: Consumed by the normal sidebar, the focus sidebar, and the archived section.
+import { t } from "../i18n.js";
+
+export function buildSessionItem({
+  session,
+  project,
+  isActive = false,
+  isUnread = false,
+  isStreaming = false,
+  isArchived = false,
+  isPinned = false,
+  showPinButton = true,
+  showArchiveButton = true,
+  showDeleteButton = false,
+  archiveDisabledReason = null,
+  projectSearchText = "",
+  formattedTime = "",
+  onSelect = null,
+  onPinToggle = null,
+  onArchiveToggle = null,
+  onDelete = null,
+  createIcon = null,
+}) {
+  const item = document.createElement("div");
+  item.className = "session-item";
+  item.dataset.filePath = session.filePath;
+  item.dataset.projectSearchText = projectSearchText;
+
+  if (isActive) item.classList.add("active");
+  if (isUnread) item.classList.add("unread");
+  if (isStreaming) item.classList.add("streaming");
+
+  const title = session.name || session.firstMessage || t("sidebar.emptySession");
+  const pinBtnLabel = isPinned ? t("sidebar.unpinSession") : t("sidebar.pinSession");
+  const archiveBtnLabel = isArchived ? t("sidebar.unarchiveSession") : t("sidebar.archiveSession");
+
+  const titleRow = document.createElement("div");
+  titleRow.className = "session-title-row";
+  const titleElement = document.createElement("div");
+  titleElement.className = "session-title";
+  titleElement.title = title;
+  titleElement.textContent = title;
+  titleRow.appendChild(titleElement);
+  if (session.tmux) {
+    const tmuxTag = document.createElement("span");
+    tmuxTag.className = "session-tag tmux-tag";
+    tmuxTag.textContent = "tmux";
+    titleRow.appendChild(tmuxTag);
+  }
+  const actionSlot = document.createElement("span");
+  actionSlot.className = "session-action-slot";
+  const timeElement = document.createElement("span");
+  timeElement.className = "session-time";
+  timeElement.textContent = formattedTime;
+  actionSlot.appendChild(timeElement);
+  titleRow.appendChild(actionSlot);
+  item.appendChild(titleRow);
+
+  if (typeof onSelect === "function") {
+    item.addEventListener("click", () => onSelect(session, project));
+  }
+
+  if (showPinButton) {
+    const pinBtn = document.createElement("button");
+    pinBtn.type = "button";
+    pinBtn.className = "session-pin-btn";
+    pinBtn.title = pinBtnLabel;
+    pinBtn.setAttribute("aria-label", pinBtnLabel);
+    pinBtn.setAttribute("aria-pressed", String(isPinned));
+    const pinIcon = document.createElement("span");
+    pinIcon.className = "session-pin-icon";
+    pinIcon.setAttribute("aria-hidden", "true");
+    pinBtn.appendChild(pinIcon);
+    pinBtn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      if (typeof onPinToggle === "function") onPinToggle(session.filePath);
+    });
+    actionSlot.appendChild(pinBtn);
+  }
+
+  if (showArchiveButton) {
+    const archiveBtn = document.createElement("button");
+    archiveBtn.type = "button";
+    archiveBtn.className = "session-archive-btn";
+    if (archiveDisabledReason) {
+      archiveBtn.disabled = true;
+      archiveBtn.classList.add("disabled");
+      archiveBtn.title = archiveDisabledReason;
+      archiveBtn.setAttribute("aria-label", archiveDisabledReason);
+    } else {
+      archiveBtn.title = archiveBtnLabel;
+      archiveBtn.setAttribute("aria-label", archiveBtnLabel);
+    }
+    if (typeof createIcon === "function") archiveBtn.appendChild(createIcon("archive"));
+    archiveBtn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      if (archiveBtn.disabled) return;
+      if (typeof onArchiveToggle === "function") onArchiveToggle(session.filePath);
+    });
+    actionSlot.appendChild(archiveBtn);
+  }
+
+  if (showDeleteButton) {
+    const deleteBtn = document.createElement("button");
+    deleteBtn.type = "button";
+    deleteBtn.className = "session-delete-btn";
+    const deleteLabel = t("sidebar.deleteSession");
+    deleteBtn.title = deleteLabel;
+    deleteBtn.setAttribute("aria-label", deleteLabel);
+    if (typeof createIcon === "function") deleteBtn.appendChild(createIcon("trash"));
+    deleteBtn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      if (typeof onDelete === "function") onDelete(session.filePath);
+    });
+    actionSlot.appendChild(deleteBtn);
+  }
+
+  return item;
+}

@@ -93,7 +93,11 @@ describe("t() lookup and fallback", () => {
     vi.stubGlobal("fetch", makeFetchMock({ en: {}, zh: {} }));
     const { initI18n, t } = await importFreshI18n();
     await initI18n();
+    // The missing-key fallback intentionally logs a warning; silence it here
+    // to keep the test output clean without changing the asserted behavior.
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     expect(t("nonexistent.key")).toBe("nonexistent.key");
+    warnSpy.mockRestore();
   });
 
   it("interpolates {var} placeholders", async () => {

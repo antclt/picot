@@ -2,6 +2,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { setSuperAgentEnabled } from "../super-agent/settings.js";
 import { SessionSidebar } from "./index.js";
 
+// These tests assert structural DOM, not localized copy, so stub i18n to return
+// the key itself. This keeps t() deterministic and silences missing-key warns.
+vi.mock("../i18n.js", () => ({ t: (key) => key, onLocaleChange: () => () => {} }));
+
 describe("SessionSidebar Super Agent pinned session", () => {
   beforeEach(() => {
     document.body.innerHTML = '<div id="sessions"></div>';

@@ -54,8 +54,16 @@ import {
   setupSettingsToggles,
 } from "./settings/toggles.js";
 import { SideChatManager } from "./side-chat-manager.js";
+import { buildSessionItem } from "./sidebar/build-session-item.js";
+import {
+  clearFocusParam,
+  FOCUS_WORKSPACE_PARAM,
+  resolveFocusState,
+  withFocusParam,
+} from "./sidebar/focus-state.js";
 import { SessionSidebar } from "./sidebar/index.js";
 import { setupSidebarSearchControl } from "./sidebar/search-control.js";
+import { WorkspaceFocusSidebar } from "./sidebar/workspace-focus-sidebar.js";
 import { createSidebarResizer } from "./sidebar-resizer.js";
 import { ensureSuperAgentSession } from "./super-agent/bootstrap.js";
 import { dispatchSuperAgentTask as dispatchSuperAgentTaskCore } from "./super-agent/dispatch.js";
@@ -118,20 +126,36 @@ const getCurrentPort = () => {
   return Number.isFinite(fromLocation) && fromLocation > 0 ? fromLocation : 47821;
 };
 const mobileClientMode = new URLSearchParams(window.location.search).get("mobile") === "1";
-const navigateInWindow = (url) => {
+// Workspace Focus mode orchestration state.
+// `currentFocusProject` is the project whose task-workspace sidebar is
+// currently rendered; null while the normal sidebar is shown. It is the
+// single in-memory mirror of the URL `focusWorkspaceId` param: navigation
+// uses it to decide whether to carry focus across a same-workspace port hop.
+let currentFocusProject = null;
+// Snapshot of the normal sidebar (scroll/search/expansion) captured on
+// focus entry and restored on exit. Null outside an active focus session.
+let normalSidebarSnapshot = null;
+let currentFocusSidebar = null;
+const navigateInWindow = (url, metadata = {}) => {
   let targetUrl;
   try {
-    targetUrl = new URL(url, window.location.href);
+    // Validate origin first so a cross-origin target is rejected before any
+    // focus-param mutation runs. withFocusParam then keeps focusWorkspaceId
+    // only when the target cwd equals the focused project's canonical path;
+    // any stale param is stripped, so cross-workspace/unknown navigation
+    // clears focus rather than carrying a dangling id onto the next page.
+    const parsed = new URL(url, window.location.href);
     const currentUrl = new URL(window.location.href);
     if (
-      targetUrl.protocol !== currentUrl.protocol ||
-      targetUrl.hostname !== currentUrl.hostname ||
-      targetUrl.username ||
-      targetUrl.password
+      parsed.protocol !== currentUrl.protocol ||
+      parsed.hostname !== currentUrl.hostname ||
+      parsed.username ||
+      parsed.password
     ) {
       console.error("[navigation] rejected cross-origin target");
       return;
     }
+    targetUrl = withFocusParam(metadata.targetCwd, currentFocusProject, parsed);
     if (mobileClientMode) targetUrl.searchParams.set("mobile", "1");
   } catch {
     console.error("[navigation] rejected invalid target");
@@ -149,7 +173,239 @@ async function navigateToWorkspacePort(targetCwd, targetPort) {
     }
     await transport.commitWorkspaceTransition(prepared.transitionGeneration);
   }
-  navigateInWindow(withBrokerWs(buildWorkspaceUrl(targetPort), transport));
+  navigateInWindow(withBrokerWs(buildWorkspaceUrl(targetPort), transport), { targetCwd });
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Workspace Focus mode orchestration
+// ──────────────────────────────────────────────────────────────────────
+// Focus replaces the normal sidebar with a task-workbench view of a single
+// workspace (back / new task / read-only session list). Its state lives only
+// in the URL `focusWorkspaceId` param: it survives a same-workspace port hop
+// (New Task / parallel session) and is dropped on any cross-workspace nav.
+// `currentFocusProject` is the in-memory mirror used by navigateInWindow.
+function focusSidebarEl() {
+  return document.getElementById("sidebar");
+}
+
+function enterFocus(project) {
+  if (!project) return;
+  // Switching focus directly between two workspaces is rare (the focus button
+  // is only shown for the active workspace), but guard against it so the prior
+  // snapshot is not silently overwritten by the new workspace's focus view.
+  if (currentFocusProject && currentFocusProject.path !== project.path) {
+    currentFocusProject = null;
+    normalSidebarSnapshot = null;
+  }
+  if (currentFocusProject?.path === project.path) return;
+  // Close any open transient UI from the normal sidebar before snapshotting.
+  sidebar.closeContextMenu?.();
+  sidebar.quickInfo?.close?.();
+
+  const sessionList = document.getElementById("session-list");
+  // Make sure the snapshot reflects real DOM, not a loading skeleton, when
+  // focus is entered during boot before the first render completed.
+  if (!normalSidebarSnapshot) sidebar.render();
+  normalSidebarSnapshot = {
+    scrollTop: sessionList.scrollTop,
+    searchQuery: sidebar.searchQuery,
+    expandedWorkspaces: new Set(sidebar.expandedWorkspaces),
+  };
+
+  focusSidebarEl()?.classList.add("focus-mode");
+  // Show a "Workspace" label after the logo while focus is active; removed on exit.
+  const modeToggle = document.querySelector(".mode-toggle");
+  if (modeToggle && !modeToggle.parentElement.querySelector(".sidebar-focus-brand")) {
+    const brand = document.createElement("span");
+    brand.className = "sidebar-focus-brand";
+    brand.textContent = t("workspace.focusTitle");
+    modeToggle.after(brand);
+  }
+  currentFocusProject = project;
+
+  const focusCardInfo = {
+    path: project.path,
+    count: Array.isArray(project.sessions) ? project.sessions.length : 0,
+  };
+  const focusSidebar = new WorkspaceFocusSidebar(sessionList, {
+    project,
+    cardInfo: focusCardInfo,
+    activeSessionFile: sidebar.activeSessionFile,
+    unread: sidebar.unread,
+    streaming: sidebar.streamingFiles,
+    isArchived: (filePath) => sidebar.isArchived(filePath),
+    buildSessionItem,
+    onBack: () => exitFocus(),
+    onNewTask: (p) => {
+      handleNewProjectChat(p);
+    },
+    onSessionSelect: handleSessionSelect,
+    onDelete: (filePath) => deleteFocusSession(filePath),
+  });
+  currentFocusSidebar = focusSidebar;
+  focusSidebar.render();
+
+  // Persist focus in the URL so a same-workspace port navigation carries it.
+  try {
+    const next = withFocusParam(project.path, currentFocusProject, window.location.href);
+    if (next.toString() !== window.location.href) {
+      history.replaceState(history.state, "", next.toString());
+    }
+  } catch {
+    /* URL mutation is best-effort; focus still works in-memory. */
+  }
+
+  // Asynchronously enrich the focus info card with the git repository name.
+  if (project.workspaceId) {
+    fetchWorkspaceRepository(project.workspaceId).then((repository) => {
+      if (!repository || !currentFocusSidebar) return;
+      if (currentFocusProject?.path !== project.path) return;
+      currentFocusSidebar.setProjectState({
+        cardInfo: {
+          path: project.path,
+          count: Array.isArray(project.sessions) ? project.sessions.length : 0,
+          repository,
+        },
+      });
+      currentFocusSidebar.render();
+    });
+  }
+}
+
+function exitFocus() {
+  const snapshot = normalSidebarSnapshot;
+  normalSidebarSnapshot = null;
+  currentFocusSidebar = null;
+  currentFocusProject = null;
+
+  try {
+    const cleaned = clearFocusParam(window.location.href);
+    if (cleaned.toString() !== window.location.href) {
+      history.replaceState(history.state, "", cleaned.toString());
+    }
+  } catch {
+    /* best-effort */
+  }
+
+  document.querySelector(".sidebar-focus-brand")?.remove();
+  focusSidebarEl()?.classList.remove("focus-mode");
+  if (snapshot) {
+    sidebar.expandedWorkspaces = snapshot.expandedWorkspaces;
+    // Restore the search filter BEFORE render so the rebuilt list reflects it.
+    sidebar.searchQuery = snapshot.searchQuery;
+  }
+  sidebar.render();
+  if (snapshot) {
+    const sessionList = document.getElementById("session-list");
+    if (sessionList) sessionList.scrollTop = snapshot.scrollTop;
+    const searchInput = document.getElementById("session-search-input");
+    if (searchInput) searchInput.value = snapshot.searchQuery;
+  }
+}
+
+// Refreshes the live focus view with the latest sidebar data. Called by
+// SessionSidebar.render (via the isFocusActive/onFocusRefresh delegation) and
+// by resolveAndApplyFocus when focus is already active on the matched
+// workspace, so loadSessions()/setActive() updates reach the focus view
+// instead of being dropped by the matched-state early return.
+function refreshFocusView() {
+  if (!currentFocusSidebar || !currentFocusProject) return;
+  const project =
+    sidebar.projects.find((p) => p?.path === currentFocusProject.path) || currentFocusProject;
+  currentFocusSidebar.setProjectState({
+    project,
+    cardInfo: {
+      path: project.path,
+      count: Array.isArray(project.sessions) ? project.sessions.length : 0,
+    },
+    activeSessionFile: sidebar.activeSessionFile,
+    unread: sidebar.unread,
+    streaming: sidebar.streamingFiles,
+  });
+  currentFocusSidebar.render();
+}
+
+// Deletes a single session from the focus view. Reuses the archived-delete
+// confirmation + delete-batch flow; the server rejects any path still held by
+// a running Pi instance. On confirmed success it cleans the recent cookie and
+// session pin, then reloads sessions (which refreshes the focus view).
+async function deleteFocusSession(filePath) {
+  if (!filePath) return;
+  const ok = await sidebar.confirmArchivedDeletion(1);
+  if (!ok) return;
+  try {
+    const res = await fetch("/api/sessions/delete-batch", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ filePaths: [filePath] }),
+    });
+    const data = await res.json();
+    const running = new Set(data.running || []);
+    const errors = new Set(data.errors || []);
+    if (running.has(filePath)) {
+      sidebar.onSessionNotice?.(t("sidebar.deleteSessionRunning"));
+      return;
+    }
+    if (errors.has(filePath)) return;
+    sidebar.removeFromRecentSessions(filePath);
+    sidebar.pinStore.unpinSession(filePath);
+  } catch (err) {
+    console.error("[Focus] deleteFocusSession failed:", err);
+  }
+  await sidebar.loadSessions();
+}
+
+// Fetches the git repository name for the focus info card. Mirrors the
+// WorkspaceQuickInfo metadata path; returns null when the workspace is not a
+// git repo or the request fails so the card simply omits the repo row.
+async function fetchWorkspaceRepository(workspaceId) {
+  if (!workspaceId) return null;
+  try {
+    const params = new URLSearchParams();
+    params.set("workspaceId", workspaceId);
+    const res = await fetch(`/api/workspace-info?${params}`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data?.isGit === true && data.repository) return data.repository;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+// Idempotent focus resolver called at boot and after every session/project
+// data update. pending (active session or its project still unknown) never
+// touches the UI; matched re-enters focus only when the resolved workspace
+// differs from the one already focused; mismatched exits focus if active,
+// otherwise just scrubs a residual URL param.
+function resolveAndApplyFocus() {
+  const requestedId = new URLSearchParams(window.location.search).get(FOCUS_WORKSPACE_PARAM);
+  const { state, project } = resolveFocusState({
+    requestedId,
+    projects: sidebar.projects,
+    activeSessionFile: sidebar.activeSessionFile,
+  });
+  if (state === "pending") return;
+  if (state === "matched") {
+    if (currentFocusProject?.path === project.path) {
+      refreshFocusView();
+      return;
+    }
+    enterFocus(project);
+    return;
+  }
+  if (currentFocusProject) {
+    exitFocus();
+    return;
+  }
+  try {
+    const cleaned = clearFocusParam(window.location.href);
+    if (cleaned.toString() !== window.location.href) {
+      history.replaceState(history.state, "", cleaned.toString());
+    }
+  } catch {
+    /* best-effort */
+  }
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -273,6 +529,18 @@ const sidebar = new SessionSidebar(
         body: JSON.stringify({ filePath: project.path }),
       });
     },
+    onWorkspaceFocus: (project) => enterFocus(project),
+    isCurrentWorkspace: (project) => project?.path === getCurrentWorkspacePath(),
+    getLiveInstances: () => liveInstances,
+    onSessionNotice: (message) => {
+      if (typeof messageRenderer?.renderSystemMessage === "function") {
+        messageRenderer.renderSystemMessage(message);
+      } else {
+        console.warn("[Sidebar] session notice:", message);
+      }
+    },
+    isFocusActive: () => currentFocusProject !== null,
+    onFocusRefresh: () => refreshFocusView(),
   },
 );
 
@@ -1993,6 +2261,7 @@ async function refreshSidebarForNewSession(event = null, attempt = 0) {
     );
     if (found) {
       sidebar.setActive(liveFile);
+      resolveAndApplyFocus();
       pendingNewSessionRefresh = false;
       pendingNewSessionPreviousFile = null;
       return;
@@ -3190,6 +3459,7 @@ async function resetUiForNewSession() {
   clearConversationRenderers();
   renderWorkspaceWelcome();
   sidebar.clearActive();
+  resolveAndApplyFocus();
   updateSuperAgentActiveState(null, null);
   mirrorActiveSessionFile = null;
   viewingActiveSession = true;
@@ -3384,6 +3654,7 @@ async function handleSessionSelectImpl(session, project) {
     pendingSessionSwitchPath = null;
   }
   sidebar.setActive(session.filePath);
+  resolveAndApplyFocus();
   updateSuperAgentActiveState(session, project);
   const targetLiveInstance = liveInstances.find(
     (instance) => instance.sessionFile === session.filePath,
@@ -3734,6 +4005,7 @@ function handleMirrorSync(data) {
     },
     setSidebarActive: (filePath) => {
       sidebar.setActive(filePath);
+      resolveAndApplyFocus();
     },
   });
   if (!appliedForegroundSession) {
@@ -4310,6 +4582,7 @@ async function handleSuperAgentEnabledChanged(enabled) {
   await loadSessionsWithSuperAgentBootstrap();
   sessionsLoaded = true;
   updateUI();
+  resolveAndApplyFocus();
 }
 
 function selectSettingsTab(tabKey = "general") {
@@ -5255,6 +5528,7 @@ initSuperAgentPath()
       handleMirrorSync(syncData);
     }
     if (isMirrorMode) updateMirrorLiveIndicator();
+    resolveAndApplyFocus();
   });
 
 // Dismiss mobile splash screen

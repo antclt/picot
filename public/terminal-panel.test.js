@@ -3,6 +3,10 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { TerminalPanel } from "./terminal-panel.js";
 
+// Tests assert aria-labels against the i18n key (fallback form), so stub
+// i18n to return the key itself and avoid missing-key console warns.
+vi.mock("./i18n.js", () => ({ t: (key) => key }));
+
 function mountedPanel(opts = {}) {
   const client = opts.client || { create: vi.fn(), closeAll: vi.fn(), checkpointAll: vi.fn() };
   const panel = new TerminalPanel({

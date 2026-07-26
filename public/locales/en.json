@@ -368,7 +368,13 @@
       "branch": "Branch",
       "detachedAt": "Detached at {sha}",
       "pinCapacityError": "Too many pinned items"
-    }
+    },
+    "brand": "Picot Workspace",
+    "deleteSession": "Delete",
+    "deleteSessionRunning": "Cannot delete a running session",
+    "archiveDisabledActive": "Cannot archive the active session",
+    "archiveDisabledStreaming": "Cannot archive a streaming session",
+    "archiveDisabledRunning": "Cannot archive a running session"
   },
   "updater": {
     "update": "Update",
@@ -603,5 +609,12 @@
   },
   "fileMention": {
     "listLabel": "Files"
+  },
+  "workspace": {
+    "focus": "Enter focus mode",
+    "focusTitle": "Workspace",
+    "back": "Back",
+    "newTask": "New Task",
+    "showMore": "Show more"
   }
 }

@@ -128,7 +128,7 @@ async function attachToWorkspace({
       dismissOverlay = runOnBeforeSwap(onBeforeSwap, "Opening workspace…");
       await transport.commitWorkspaceTransition(prepared.transitionGeneration);
       targetPort = Number(new URL(prepared.targetOrigin).port);
-      navigate(withBrokerWs(buildWorkspaceUrl(targetPort), transport));
+      navigate(withBrokerWs(buildWorkspaceUrl(targetPort), transport), { targetCwd });
       return { samePort: false, port: targetPort };
     }
 
@@ -140,7 +140,7 @@ async function attachToWorkspace({
         waitForSessions: false,
       });
     }
-    navigate(withBrokerWs(buildWorkspaceUrl(targetPort), transport));
+    navigate(withBrokerWs(buildWorkspaceUrl(targetPort), transport), { targetCwd });
     return { samePort: false, port: targetPort };
   } catch (e) {
     dismissOverlay();
@@ -318,7 +318,7 @@ async function spawnFreshSession({
     const targetPort = prepared?.targetOrigin
       ? Number(new URL(prepared.targetOrigin).port)
       : newPort;
-    navigate(withBrokerWs(buildWorkspaceUrl(targetPort), transport));
+    navigate(withBrokerWs(buildWorkspaceUrl(targetPort), transport), { targetCwd });
     return true;
   } catch (e) {
     dismissOverlay();

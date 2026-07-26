@@ -368,7 +368,13 @@
       "branch": "分支",
       "detachedAt": "分离于 {sha}",
       "pinCapacityError": "固定项目数量过多"
-    }
+    },
+    "brand": "Picot 工作区",
+    "deleteSession": "删除",
+    "deleteSessionRunning": "无法删除正在运行的会话",
+    "archiveDisabledActive": "无法归档当前会话",
+    "archiveDisabledStreaming": "无法归档正在流式输出的会话",
+    "archiveDisabledRunning": "无法归档正在运行的会话"
   },
   "updater": {
     "update": "更新",
@@ -603,5 +609,12 @@
   },
   "fileMention": {
     "listLabel": "文件"
+  },
+  "workspace": {
+    "focus": "进入专注模式",
+    "focusTitle": "工作区",
+    "back": "返回",
+    "newTask": "新任务",
+    "showMore": "显示更多"
   }
 }

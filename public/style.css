@@ -163,6 +163,91 @@ body {
   -webkit-app-region: drag;
 }
 
+/* Task-workbench sidebar rendered in place of the normal session list while
+   a workspace is focused: back control, workspace name, New Task, and a
+   read-only paginated session list. */
+.workspace-focus-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+}
+
+.focus-back-btn {
+  align-self: flex-start;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: var(--font-size-md);
+  padding: var(--space-1) 0;
+}
+
+.focus-back-btn:hover {
+  background: var(--bg-glass-hover);
+  color: var(--text-primary);
+  border-radius: var(--radius-md);
+}
+
+.focus-back-icon {
+  font-size: var(--font-size-lg);
+  line-height: 1;
+}
+
+/* Static workspace info card in Focus mode — reuses .workspace-quick-info
+   visuals but lays out inline (no fixed positioning or 306 px width cap). */
+.workspace-focus-card {
+  position: static;
+  display: block;
+  width: auto;
+  max-width: 100%;
+  border-radius: var(--radius-md);
+  box-shadow: none;
+}
+
+.focus-new-task-btn {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--bg-glass);
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  padding: var(--space-2) var(--space-3);
+}
+
+.focus-new-task-btn:hover {
+  background: var(--bg-glass-hover);
+}
+
+.focus-session-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-top: var(--space-1);
+}
+
+.focus-sessions-toggle-row {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+}
+
+.focus-sessions-toggle {
+  border: 0;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  padding: var(--space-1) 0;
+}
+
+.focus-sessions-toggle:hover {
+  color: var(--text-primary);
+}
+
 /* Mode toggle pills */
 .mode-toggle {
   display: flex;
@@ -286,6 +371,26 @@ body {
   display: flex;
   gap: var(--space-0-5);
   -webkit-app-region: no-drag;
+}
+
+/* Focus mode keeps the logo + Workspace label + refresh button; hides the
+   search box and the open-folder / quick-chat buttons. */
+.sidebar.focus-mode .sidebar-search-wrap,
+.sidebar.focus-mode #open-folder-btn,
+.sidebar.focus-mode #quick-chat-btn {
+  display: none;
+}
+
+.sidebar.focus-mode .sidebar-actions {
+  margin-left: auto;
+}
+
+.sidebar-focus-brand {
+  font-size: var(--font-size-lg);
+  font-weight: 700;
+  color: var(--text-primary);
+  user-select: none;
+  margin-left: var(--space-1);
 }
 
 .icon-btn {
@@ -629,6 +734,33 @@ body {
   outline: none;
 }
 
+/* Focus-mode entry button on active workspace headers. Mirrors the
+   more-actions/new-chat icon buttons so the three sit on the same baseline. */
+.workspace-focus-btn {
+  display: flex;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  flex-shrink: 0;
+  font-size: var(--font-size-lg);
+  font-weight: 700;
+  line-height: 1;
+}
+
+.workspace-focus-btn:hover,
+.workspace-focus-btn:focus-visible {
+  background: var(--bg-glass-hover);
+  color: var(--text-primary);
+  outline: none;
+}
+
 /* Section headers (RECENT / PINNED / PROJECTS / ARCHIVED) render as muted
    group labels, visually distinct from the workspace folder headers below.
    All four share one disclosure arrow and one typographic treatment. */
@@ -668,14 +800,11 @@ body {
   transform: rotate(0deg);
 }
 
-/* Open project in external app (VS Code / Cursor / Terminal / …) */
-.archived-delete-all-btn {
-  display: none;
+.session-delete-btn {
   background: none;
   border: none;
   cursor: pointer;
   padding: var(--space-0-5) var(--space-1);
-  margin-left: auto;
   color: var(--text-dim);
   border-radius: var(--radius-xs);
   line-height: 0;
@@ -685,12 +814,7 @@ body {
     background var(--duration) var(--ease);
 }
 
-.archived-header:hover .archived-delete-all-btn {
-  display: flex;
-  align-items: center;
-}
-
-.archived-delete-all-btn:hover {
+.session-delete-btn:hover {
   color: #e53e3e;
   background: rgba(229, 62, 62, 0.1);
 }

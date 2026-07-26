@@ -29,7 +29,12 @@ beforeEach(async () => {
             projects: "Projects",
             newChat: "New chat in {path}",
             emptySession: "Empty session",
+            archived: "Archived",
+            openProject: "Open project",
             untitled: "Untitled",
+          },
+          workspace: {
+            focus: "Enter focus mode",
           },
         }),
       };
@@ -423,5 +428,72 @@ describe("section vs workspace disclosure icon", () => {
     });
     expect(header.querySelector(".folder-icon")).not.toBeNull();
     expect(header.querySelector(".section-chevron")).toBeNull();
+  });
+});
+
+describe("workspace focus affordance", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  test("focus button appears only when focusEnabled and onFocus are provided", () => {
+    setupDom();
+    const withFocus = buildSidebarWorkspaceGroup({
+      workspaceId: "w1",
+      folderName: "w",
+      sessionCount: 1,
+      focusEnabled: true,
+      onFocus: vi.fn(),
+    });
+    const without = buildSidebarWorkspaceGroup({
+      workspaceId: "w2",
+      folderName: "w",
+      sessionCount: 1,
+    });
+    expect(withFocus.header.querySelector(".workspace-focus-btn")).toBeTruthy();
+    expect(without.header.querySelector(".workspace-focus-btn")).toBeNull();
+  });
+
+  test("focus button click fires onFocus and stops propagation", () => {
+    setupDom();
+    const onFocus = vi.fn();
+    const { header } = buildSidebarWorkspaceGroup({
+      workspaceId: "w1",
+      folderName: "w",
+      focusEnabled: true,
+      onFocus,
+    });
+    header.querySelector(".workspace-focus-btn").click();
+    expect(onFocus).toHaveBeenCalled();
+  });
+
+  test("double-click on a focus-enabled header does not enter focus", () => {
+    setupDom();
+    const onFocus = vi.fn();
+    const { header } = buildSidebarWorkspaceGroup({
+      workspaceId: "w1",
+      folderName: "w",
+      expanded: false,
+      focusEnabled: true,
+      onFocus,
+    });
+    header.dispatchEvent(new document.defaultView.MouseEvent("dblclick", { bubbles: true }));
+    expect(onFocus).not.toHaveBeenCalled();
+  });
+
+  test("single click on a focus-enabled header toggles immediately", () => {
+    setupDom();
+    const { header } = buildSidebarWorkspaceGroup({
+      workspaceId: "w1",
+      folderName: "w",
+      expanded: false,
+      focusEnabled: true,
+      onFocus: vi.fn(),
+    });
+    header.click();
+    expect(header.getAttribute("aria-expanded")).toBe("true");
   });
 });

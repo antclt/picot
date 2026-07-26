@@ -13,7 +13,8 @@
       "!.pi",
       "!.worktrees",
       "!node_modules",
-      "!public/vendor"
+      "!public/vendor",
+      "!coverage"
     ]
   },
   "formatter": {

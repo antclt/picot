@@ -72,15 +72,17 @@ function wireDisclosure(header, body, expanded, onToggle) {
   header.classList.toggle("collapsed", !expanded);
   body.classList.toggle("collapsed", !expanded);
 
+  const runToggle = () => flipDisclosure(header, body, onToggle);
+
   header.addEventListener("click", (event) => {
     if (event.target.closest("button")) return;
-    flipDisclosure(header, body, onToggle);
+    runToggle();
   });
 
   header.addEventListener("keydown", (event) => {
     if (event.key !== "Enter" && event.key !== " ") return;
     event.preventDefault();
-    flipDisclosure(header, body, onToggle);
+    runToggle();
   });
 }
 
@@ -187,6 +189,8 @@ export function buildSidebarWorkspaceGroup({
   onNewChat = null,
   onContextMenu = null,
   onMoreActions = null,
+  focusEnabled = false,
+  onFocus = null,
   newChatTitleKey = "sidebar.newChat",
   moreActionsTitleKey = "sidebar.workspaceActions",
   renderSessions = null,
@@ -252,6 +256,21 @@ export function buildSidebarWorkspaceGroup({
       onNewChat(event);
     });
     header.appendChild(newChatBtn);
+  }
+
+  if (focusEnabled && onFocus) {
+    const label = t("workspace.focus");
+    const focusBtn = document.createElement("button");
+    focusBtn.type = "button";
+    focusBtn.className = "workspace-focus-btn";
+    focusBtn.title = label;
+    focusBtn.setAttribute("aria-label", label);
+    focusBtn.textContent = "→";
+    focusBtn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      onFocus(event);
+    });
+    header.appendChild(focusBtn);
   }
 
   group.appendChild(header);

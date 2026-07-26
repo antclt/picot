@@ -61,6 +61,7 @@ const locale = {
   },
   voice: { voiceInput: "Voice", stopRecording: "Stop" },
   misc: { model: "model" },
+  fileMention: { listLabel: "Files" },
 };
 
 beforeEach(async () => {

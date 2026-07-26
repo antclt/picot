@@ -15,6 +15,7 @@ describe("ephemeral chat entry points", () => {
     const toolbar = sidebar.querySelector(".sidebar-header > .sidebar-actions");
     const quickChat = toolbar?.querySelector("#quick-chat-btn");
 
+    expect(toolbar).not.toBeNull();
     expect(quickChat).not.toBeNull();
     expect(quickChat.classList.contains("lan-only")).toBe(false);
     expect(sidebar.querySelector(".header #quick-chat-btn")).toBeNull();

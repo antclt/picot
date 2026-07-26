@@ -1,7 +1,7 @@
 import { JSDOM } from "jsdom";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { initI18n } from "./i18n.js";
-import { writeRecentSessions } from "./recent-sessions.js";
+import { readRecentSessions, writeRecentSessions } from "./recent-sessions.js";
 import { SessionSidebar } from "./sidebar/index.js";
 
 function createProjects() {
@@ -56,6 +56,16 @@ beforeEach(async () => {
             workspaceActions: "Workspace actions",
             newChat: "New chat in {path}",
             deleteAllArchived: "Delete all archived sessions",
+            deleteSession: "Delete",
+            deleteSessionRunning: "Cannot delete a running session",
+            deleteArchivedConfirmOne: "Delete this archived session?",
+            deleteArchivedConfirmMany: "Delete {count} archived sessions?",
+            deleteArchivedAriaLabel: "Confirm delete archived",
+            archiveDisabledActive: "Cannot archive the active session",
+            archiveDisabledStreaming: "Cannot archive a streaming session",
+            archiveDisabledRunning: "Cannot archive a running session",
+            archiveWorkspaceSessions: "Archive workspace sessions",
+            unavailable: "Unavailable",
             justNow: "Just now",
             minutesAgo: "{minutes}m ago",
             hoursAgo: "{hours}h ago",
@@ -267,5 +277,83 @@ describe("SessionSidebar RECENT group", () => {
     });
 
     expect(sidebar.recent).toEqual(paths.slice(1).reverse());
+  });
+});
+
+describe("SessionSidebar archived deletion", () => {
+  function deleteBatchMock(response) {
+    return vi.fn(async (url) => {
+      const target = String(url);
+      if (target.includes("/api/sessions/delete-batch")) {
+        return { ok: true, status: 200, json: async () => response };
+      }
+      if (target.includes("/api/sessions")) {
+        return { ok: true, status: 200, json: async () => ({ projects: [] }) };
+      }
+      return { ok: false, status: 404, json: async () => ({}) };
+    });
+  }
+
+  function archivedSidebar({ onSessionNotice } = {}) {
+    setupDom();
+    const sidebar = new SessionSidebar(document.getElementById("sessions"), vi.fn(), vi.fn(), {
+      onSessionNotice,
+    });
+    sidebar.projects = createProjects();
+    sidebar.archived = ["/sessions/alpha.jsonl"];
+    sidebar.showFallbackConfirmDialog = vi.fn(async () => true);
+    sidebar.render();
+    return sidebar;
+  }
+
+  test("archived row shows a delete button, no pin/archive, and no bulk-delete button", () => {
+    global.fetch = deleteBatchMock({ deleted: 0, errors: [], running: [] });
+    archivedSidebar();
+    const archivedItem = document.querySelector(".archived-group .session-item");
+    expect(archivedItem).toBeTruthy();
+    expect(archivedItem.querySelector(".session-delete-btn")).toBeTruthy();
+    expect(archivedItem.querySelector(".session-pin-btn")).toBeNull();
+    expect(archivedItem.querySelector(".session-archive-btn")).toBeNull();
+    expect(document.querySelector(".archived-delete-all-btn")).toBeNull();
+  });
+
+  test("deleteArchivedSession removes the path and cleans recent and session pin on success", async () => {
+    global.fetch = deleteBatchMock({ deleted: 1, errors: [], running: [] });
+    writeRecentSessions(["/sessions/alpha.jsonl"]);
+    const sidebar = archivedSidebar();
+    sidebar.pinStore.pinSession("/sessions/alpha.jsonl");
+
+    await sidebar.deleteArchivedSession("/sessions/alpha.jsonl");
+
+    expect(sidebar.archived).toEqual([]);
+    expect(readRecentSessions()).not.toContain("/sessions/alpha.jsonl");
+    expect(sidebar.pinStore.isSessionPinned("/sessions/alpha.jsonl")).toBe(false);
+  });
+
+  test("a running response retains the row and surfaces a notice", async () => {
+    const onNotice = vi.fn();
+    global.fetch = deleteBatchMock({
+      deleted: 0,
+      errors: [],
+      running: ["/sessions/alpha.jsonl"],
+    });
+    const sidebar = archivedSidebar({ onSessionNotice: onNotice });
+
+    await sidebar.deleteArchivedSession("/sessions/alpha.jsonl");
+
+    expect(sidebar.archived).toEqual(["/sessions/alpha.jsonl"]);
+    expect(onNotice).toHaveBeenCalled();
+  });
+
+  test("confirm cancel does not call delete-batch", async () => {
+    const fetchMock = deleteBatchMock({ deleted: 1, errors: [], running: [] });
+    global.fetch = fetchMock;
+    const sidebar = archivedSidebar();
+    sidebar.showFallbackConfirmDialog = vi.fn(async () => false);
+
+    await sidebar.deleteArchivedSession("/sessions/alpha.jsonl");
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(sidebar.archived).toEqual(["/sessions/alpha.jsonl"]);
   });
 });

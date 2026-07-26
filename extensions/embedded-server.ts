@@ -382,6 +382,51 @@ function getRunningInstances(): Array<{
   return instances;
 }
 
+// Plans and executes session-file deletions with a hard safety boundary: a path
+// still held by a running Pi instance is never unlinked, only reported in
+// `running`. Containment (.jsonl + inside sessionsDir) is enforced first, so
+// invalid paths land in `errors` without touching the filesystem. `removeFile`
+// and `onRemoved` are injected so the route can bind fs/cache side effects
+// while tests stay pure.
+export async function applySessionDeletions(
+  filePaths: unknown,
+  options: {
+    sessionsDir: string;
+    runningInstances: ReadonlyArray<{ sessionFile?: string }>;
+    removeFile: (filePath: string) => Promise<void>;
+    onRemoved?: (filePath: string) => void;
+  },
+): Promise<{ deleted: number; errors: string[]; running: string[] }> {
+  const { sessionsDir, runningInstances, removeFile, onRemoved } = options;
+  if (!Array.isArray(filePaths)) {
+    throw new Error("filePaths must be an array");
+  }
+  const result = { deleted: 0, errors: [] as string[], running: [] as string[] };
+  const resolvedSessionsDir = path.resolve(sessionsDir);
+  for (const fp of filePaths) {
+    if (
+      typeof fp !== "string" ||
+      !fp.endsWith(".jsonl") ||
+      !path.resolve(fp).startsWith(resolvedSessionsDir + path.sep)
+    ) {
+      result.errors.push(fp as string);
+      continue;
+    }
+    if (runningInstances.some((instance) => instance.sessionFile === fp)) {
+      result.running.push(fp);
+      continue;
+    }
+    try {
+      await removeFile(fp);
+      onRemoved?.(fp);
+      result.deleted++;
+    } catch {
+      result.errors.push(fp);
+    }
+  }
+  return result;
+}
+
 type SessionListProject = {
   path: string;
   dirName: string;
@@ -3112,32 +3157,18 @@ export default function (pi: ExtensionAPI) {
             return;
           }
 
-          let deleted = 0;
-          const errors: string[] = [];
-          const resolvedSessionsDir = path.resolve(SESSIONS_DIR);
-
-          for (const fp of filePaths) {
-            // Safety: must be a string, end with .jsonl, and resolve inside SESSIONS_DIR
-            if (
-              typeof fp !== "string" ||
-              !fp.endsWith(".jsonl") ||
-              !path.resolve(fp).startsWith(resolvedSessionsDir + path.sep)
-            ) {
-              errors.push(fp);
-              continue;
-            }
-            try {
-              await fs.promises.unlink(fp);
+          const result = await applySessionDeletions(filePaths, {
+            sessionsDir: SESSIONS_DIR,
+            runningInstances: getRunningInstances(),
+            removeFile: (fp) => fs.promises.unlink(fp),
+            onRemoved: (fp) => {
               globalState.sessionHeaderCache.delete(fp);
               globalState.sessionMetricsCache.delete(fp);
-              deleted++;
-            } catch {
-              errors.push(fp);
-            }
-          }
+            },
+          });
 
           res.writeHead(200, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ deleted, errors }));
+          res.end(JSON.stringify(result));
         } catch (e: unknown) {
           res.writeHead(400, { "Content-Type": "application/json" });
           res.end(JSON.stringify({ error: errMessage(e) }));
