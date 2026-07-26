@@ -286,8 +286,11 @@ HTTP+WS server 有两条运行时路径：`Bun.serve`（生产环境，pi 通过
 - **侧栏 / 文件工作区** —— `sidebar/index.js`、`recent-sessions.js`、
   `pinned-items.js`（跨端口 Pin cookie）、`workspace-projects.js`
   （history/live workspace 合并）、`workspace-quick-info.js`
-  （按需 Git quick-info）和 `sidebar-workspace-group.js`（安全、可访问的
-  region/workspace DOM builder）；以及 `workspace/file-browser.js`、
+  （按需 Git quick-info）、`sidebar/build-session-item.js`（普通、归档与 Focus
+  session row 共用 DOM builder）、`sidebar/focus-state.js`（URL-scoped Focus 状态机）、
+  `sidebar/workspace-focus-sidebar.js`（Focus 工作台）和
+  `sidebar-workspace-group.js`（安全、可访问的 region/workspace DOM builder）；以及
+  `workspace/file-browser.js`、
   `file-preview-panel.js`、`file-tab-state.js`、`file-preview-renderers.js`、
   `file-preview-markdown.js`、`file-pdf-preview.js`、`code-editor.js`、
   `file-language.js`、`sidebar/search-control.js`、`workspace/path-utils.js`。
@@ -585,6 +588,16 @@ Tauri command handler（`new_session_core`、`switch_session_core`、
 `~/.pi/agent/settings.json` 来获取用户上次的工作区路径；它不依赖
 该文件存在。
 
+### 自动更新
+
+Tauri v2 updater 在 Rust 宿主中注册。`public/app/updater.js` 通过
+`public/app/transport.js` 的 broker control 调用 `check_for_update` 和
+`download_and_install_update`；`src-tauri/src/main.rs` 使用
+`tauri-plugin-updater` 执行检查、下载与安装，并把下载进度经 broker 回传。
+更新源、公钥与 Windows 安装模式在 `src-tauri/tauri.conf.json` 的 updater 配置中；
+release workflow 以 `TAURI_SIGNING_PRIVATE_KEY` 和
+`TAURI_SIGNING_PRIVATE_KEY_PASSWORD` 生成签名与 `latest.json`。
+
 ### 错误处理
 
 - **Rust：** 派生失败以 `Result<_, String>` 返回；`setup` 闭包记录错误
@@ -605,7 +618,11 @@ Tauri command handler（`new_session_core`、`switch_session_core`、
   （POSIX / Windows / UNC 路径）、`public/super-agent/navigation.test.js`
   （Super Agent 导航）以及 `public/i18n-keys-completeness.test.js`（locale
   文件缺失时直接失败，不再静默跳过）。
-- 前端单元测试贴在对应模块旁。
+- 前端单元测试贴在对应模块旁。Focus/归档删除回归包括
+  `public/sidebar/focus-state.test.js`、`public/sidebar/workspace-focus-sidebar.test.js`、
+  `public/session-sidebar-focus.test.js`、`public/sidebar/archive-protection.test.js`，以及
+  `extensions/embedded-server-session-delete.test.ts` 的 containment 与 live-instance
+  拒绝验证。
 - `embedded-server` 在与框架无关的逻辑上有单元测试（搜索、session
   列表、cost-dashboard 聚合、git-branch 解析、LAN URL 构建）。
 - 没有自动化 UI 测试。仓库的规约是：每次改 Rust 后跑
@@ -667,6 +684,25 @@ unavailable。旧 `pi-studio-favourites` 仅在当前 origin 尽力迁移。
 会话的 thread 总数，完整路径，以及有 Git remote 时在分隔线后的 repository
 名称。type、branch 与 detached HEAD 仍可由 API 返回，但当前卡片不显示它们；
 卡片和所有 workspace 文本均以 `textContent` 构建。
+
+#### Workspace Focus 与归档删除
+
+Focus 只替换左侧的 session list，不改变聊天与文件面板。当前 foreground Pi
+实例 `cwd` 所属 workspace header 显示唯一的 `workspace-focus-btn` 入口；这在
+没有 `activeSessionFile` 的 New Task 启动状态也成立。workspace header 的 click、Enter
+和 Space 始终只控制展开/收起，**不以双击进入 Focus**。Focus 保存普通侧栏的
+search、scroll 与 workspace 展开状态；以 URL query `focusWorkspaceId` 在同 cwd 的跨
+port 导航中传递，并在跨 workspace 或无 cwd 导航时清除。该值是 `workspace:<path>`
+形式的不可信标识，只与已加载 project 比较，绝不作为路径访问。
+
+Focus 显示返回、inline workspace quick-info card、New Task 和非归档 session。该卡片
+复用 `.workspace-quick-info` / `.wqi-git-region` 的 Git 分隔线样式。Focus session row
+隐藏 pin/archive，仍可删除；归档区同样只提供单条删除。两条删除路径都调用
+`POST /api/sessions/delete-batch`：`applySessionDeletions()` 先限制 `.jsonl` 与
+sessions directory containment，再以 `getRunningInstances()` 中的 `sessionFile` 拒绝
+live session。成功后清理跨端口 recent cookie 与 session pin；从归档区删除还会清除
+本端 localStorage `pi-studio-archived` 条目。归档本身不会删除文件，但 active、streaming
+或 live-instance session 不可归档，批量归档也跳过它们。
 
 **跨边界与视觉验证不变量：** `embedded-server.ts` 的 HTTP 路由必须同时兼容
 Node HTTP 生命周期和 Bun Fetch adapter；adapter 路径以 `AbortSignal` 为标准，

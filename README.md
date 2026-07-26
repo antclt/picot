@@ -4,14 +4,11 @@
 
 A local desktop GUI for the [Pi](https://github.com/badlogic/pi-mono) coding agent. No cloud, no account — runs entirely on your machine.
 
-
 Picot ships a known-good build of the `pi` runtime **inside the .app bundle**, so there's no separate `pi` install to manage, no PATH shenanigans, and no version drift between Picot and the agent it talks to.
 
 <p align="center">
   <img width="1200" alt="Picot hero" src="https://github.com/user-attachments/assets/27d1b71e-77e8-420c-84ab-5e56eb48335a" />
 </p>
-
-
 
 ---
 
@@ -32,7 +29,6 @@ Picot currently ships macOS builds without Apple Developer ID signing/notarizati
 1. Drag `Picot.app` into `/Applications`
 2. Right-click → **Open**
 3. If blocked: **System Settings → Privacy & Security → Open Anyway**
-
 
 <p align="center">
   <img width="420" alt="macOS Gatekeeper warning" src="https://github.com/user-attachments/assets/02e9cb30-9314-4c47-bc61-87d9f37b6848" />
@@ -72,7 +68,6 @@ Picot gives you a full visual interface for Pi. Open any project folder, start c
 - **Message queuing** — type while the agent is working; messages queue as pills and auto-send when ready
 - **`@` file mentions** — type `@` in any composer to search and insert a file-path reference (workspace, `../`, `~/`, or absolute); shared across Main, Side, and Quick Chat
 
-
 ### ⚡ Temporary chats
 
 - **Side Chat** keeps tools available in an isolated, unsaved Pi process for the current workspace; open up to five as tabs alongside file tabs in the right panel — the panel stays open while any Side Chat tab remains, and collapses only when both file and Side Chat tabs are closed.
@@ -86,6 +81,8 @@ Picot gives you a full visual interface for Pi. Open any project folder, start c
 - Full-text search across all session history with highlighted snippets
 - Sessions sorted by creation time; live session marked with a green dot
 - Inline session rename, favourites, tags, and filtering
+- **Workspace Focus** — use the arrow on the current workspace to switch the left sidebar into a task view, including before a new task has created its first saved session
+- **Safe individual deletion** — delete a session from Focus or ARCHIVED; running sessions are refused by the server
 - **RECENT** — a cross-workspace, most-recently-used list keeps the last five visited sessions at the top of the sidebar
 
 ### 🗃️ Projects & Workspace
@@ -96,6 +93,7 @@ Picot gives you a full visual interface for Pi. Open any project folder, start c
 - Native folder picker to open any project without touching the terminal
 
 ### 📱 Mobile & LAN Access
+
 <p align="center">
   <img width="900" alt="LAN and mobile access panel" src="https://github.com/user-attachments/assets/f50ce09d-1ba7-4a67-93dd-f8ff1bc2631f" />
 </p>
@@ -103,15 +101,14 @@ Picot gives you a full visual interface for Pi. Open any project folder, start c
   <img width="360" alt="Picot on mobile" src="https://github.com/user-attachments/assets/d1975347-a3d9-49fd-9d66-94942016ed19" />
 </p>
 
-
 - **LAN QR code** — scan to open Picot on any device on the same network
 - Mobile-optimised URL handling and App Launcher support (installable as PWA on iOS/Android)
 
 ### 📦 Package Manager
+
 <p align="center">
   <img width="1200" alt="Built-in package manager UI" src="https://github.com/user-attachments/assets/e7e3a100-16db-4b63-b257-801b7f6b5e00" />
 </p>
-
 
 - Browse, install, and remove community packages from within the UI
 - Built on top of `pi install` — no separate package commands needed
@@ -124,7 +121,6 @@ Picot gives you a full visual interface for Pi. Open any project folder, start c
 <p align="center">
   <img width="1200" alt="Per-model and trend breakdown" src="https://github.com/user-attachments/assets/d9f07d41-d38a-454d-a46a-1ab8ed34c19b" />
 </p>
-
 
 - Per-session cost tracking with live token/cost metrics
 - Full cost dashboard with infobar, trends, and per-model breakdown
@@ -153,10 +149,10 @@ Picot gives you a full visual interface for Pi. Open any project folder, start c
 - Drag a file from the tree onto the chat input to insert a workspace-relative `@path` reference
 
 ### ⚙️ Settings & Control
+
 <p align="center">
   <img width="1200" alt="Settings and controls" src="https://github.com/user-attachments/assets/44f884de-f2d1-45af-8a13-9b8d01d227a5" />
 </p>
-
 
 - Model picker with search/filter and keyboard support
 - Thinking level toggle (off / low / medium / high)

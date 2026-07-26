@@ -1,258 +1,94 @@
-# Picot
+# Picot agent guide
 
-## Product
+This file contains repository-wide development rules. Product architecture,
+feature invariants, transport paths, security boundaries, and module ownership
+live in [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
-**Picot** is a local desktop GUI for the Pi coding agent. It is a Tauri app that bundles its own `pi` runtime — there is no separate install of `pi` to manage.
+## Read first
 
-### Architecture
+- Read the applicable `ARCHITECTURE.md` section and its linked design documents
+  before changing UI behavior, persistence, workspace I/O, or cross-process
+  communication.
+- For Quick Chat or Side Chat work, read
+  [`docs/superpowers/specs/2026-07-15-quick-and-side-chat-design.md`](docs/superpowers/specs/2026-07-15-quick-and-side-chat-design.md)
+  and the temporary-chat architecture section.
+- Before changing a browser/server adapter, popup/overlay, or shared-state
+  rerender behavior, read and apply [`docs/engineering-lessons.md`](docs/engineering-lessons.md).
+- Update `ARCHITECTURE.md` when an implementation materially changes its
+  architecture, invariants, lifecycle, security boundary, or validation
+  contract. Changes to LAN access, cross-platform paths, or static serving also
+  require the corresponding architecture update.
 
-Tauri wraps the web UI. A Rust `PiManager` (`src-tauri/src/pi_manager.rs`) spawns one `pi --mode rpc` subprocess per workspace, each on its own port, using the embedded pi binary shipped in `src-tauri/resources/pi/` (downloaded by `scripts/fetch-pi-binary.js` from pi-mono releases at the version pinned in `scripts/pi-version.json`). Each workspace gets its own OS window. Workspaces are opened via the native folder picker ("Open Folder"); clicking it opens or focuses a workspace window. Multi-project, multi-agent, no terminal required.
+## Pi references
 
-```
-Picot .app
-  resources/
-    public/                       (frontend)
-    extensions/embedded-server.mjs (HTTP + WS server, runs inside pi)
-    pi/<bun-compiled pi binary + assets>
-  Rust PiManager
-    spawn pi --mode rpc --extension embedded-server.mjs  (project A, :3001)
-    spawn pi --mode rpc --extension embedded-server.mjs  (project B, :3002)
-    OS Window per project  →  WebView  →  localhost:300X
-  Tauri IPC commands wired through public/tauri-bridge.js
-```
+- [RPC protocol](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/rpc.md)
+- [SDK](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/sdk.md)
+- [Session format](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/session-format.md)
+- [JSON mode](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/json.md)
 
-Tauri IPC commands (invoked via `window.tauriNative` in `public/tauri-bridge.js`):
-- `cmd_open_workspace(cwd)` — spawn pi for a workspace, open a window
-- `cmd_new_session(port)` — create a new session in a running pi
-- `cmd_switch_session(port, sessionPath)` — resume a historical session
-- `cmd_stop_instance(port)` — kill a pi process
-- `cmd_pick_folder()` — native folder picker
+## Toolchain
 
-### Goals
-
-- Local desktop GUI: all projects and agents visible in one app
-- Multi-project: each project has its own window, isolated working directory, session history, and running agent
-- Multi-agent: spawn new agents per project; switch between sessions without leaving the app
-- Multi-task: a `pi --mode rpc` process can only drive **one active session at a time** (switching/forking inside one process *replaces* the active session — the old `.jsonl` is preserved on disk, but it stops being the live, running session). So every concurrently-running session structurally needs its own `pi` process. Picot handles this without spawning OS windows: both "+ New Session" (header) and "start new chat" (sidebar project tile) spawn a fresh **headless** pi for the target cwd and navigate the current window's WebView to it. The previously-attached pi process keeps running in the background (PiManager retains it; reachable from the running-instances list / launcher / sidebar). Net effect: no new OS window, no interruption of the previously-running session, and you can still run multiple agents in parallel against the same project.
-- Visualization: streaming chat, tool-call cards, thinking blocks, token/cost tracking per session
-- Fully self-contained desktop app: zero dependency on the user's PATH / shell environment / globally installed pi
-
-### Constraints
-
-- Frontend: vanilla JS, no framework (`public/`)
-- Backend: Rust (Tauri) wraps + manages process lifecycle; Node.js extension (`embedded-server.ts`) implements the HTTP + WS surface the WebView talks to
-- PI integration: always via embedded `pi --mode rpc` subprocess — never re-implement PI runtime logic
-- Session history and working directory are isolated per project/port
-- The embedded pi version is the source of truth: `pi --version` shown in the UI comes from `PI_STUDIO_PI_VERSION` (set by Rust at spawn time, populated from `scripts/pi-version.json`). A user-installed pi on `$PATH` is irrelevant and never touched.
-- User extensions under `~/.pi/agent/extensions/` and `<workspace>/.pi/extensions/` are still auto-loaded by the embedded pi (embedding doesn't disable user extensions).
-
-### PI references
-
-- RPC protocol: `/opt/homebrew/lib/node_modules/@mariozechner/pi-coding-agent/docs/rpc.md`
-- SDK: `/opt/homebrew/lib/node_modules/@mariozechner/pi-coding-agent/docs/sdk.md`
-- Session format: `/opt/homebrew/lib/node_modules/@mariozechner/pi-coding-agent/docs/session.md`
-- JSON mode: `/opt/homebrew/lib/node_modules/@mariozechner/pi-coding-agent/docs/json.md`
-
----
-
-# Agent working notes
-
-Conventions for any coding agent working in this directory.
-
-## Package manager
-
-Use **Bun** exclusively. Never run `npm install` or `npm ci` — this would create a stray `package-lock.json` that drifts from `bun.lock` and confuses CI (`bun install --frozen-lockfile`).
+Use **Bun** exclusively. Never run `npm install` or `npm ci`; they create a
+stray `package-lock.json` that conflicts with `bun.lock`.
 
 ```bash
-bun install --frozen-lockfile   # install deps
-bun run <script>                # run package.json scripts
-```
-
-## Common commands
-
-```bash
-bun run dev              # fetch embedded pi binary, then start tauri dev (hot reload)
-bun run test             # vitest run + check-tauri-permissions
-bun run test:watch       # vitest in watch mode
-bun run check:rust       # cargo check + clippy + fmt (use after every Rust edit)
-bun run fetch:pi         # download the locked pi binary into src-tauri/resources/pi/
-bun run build:extensions # compile extensions/embedded-server.ts → dist/embedded-server.mjs
-bun run build            # full release build (runs prebuild: fetch:pi + build:extensions)
-```
-
-Single test file: `bun run vitest run public/settings-save-status.test.js`
-
-## Linting & Formatting
-
-This project uses [Biome](https://biomejs.dev/) for JS/TS linting and formatting.
-
-After every frontend or extension edit, run the check before declaring the work done:
-
-```bash
-bun run check         # lint + format check (read-only, shows violations)
-bun run check:fix     # auto-fix all safe issues
-bun run lint          # lint only
-bun run format        # format check only
-bun run format:fix    # auto-fix formatting
-```
-
-### Rules
-
-- **Always** run `bun run check` after editing any `.js` / `.ts` file under `public/` or `extensions/`.
-- Only mark the task complete if `bun run check` exits 0 (or all remaining violations are intentional and documented).
-- Prefer `bun run check:fix` over manual reformatting — Biome is the source of truth for style.
-
-## Module Design
-
-The frontend (`public/`) is vanilla JS with **no framework**. Keep it modular:
-
-- **One concern per file.** Each module owns a single responsibility (e.g. WebSocket client, session sidebar, file browser, theme switching). Do not add unrelated logic to an existing file just because it is convenient.
-- **Avoid growing `app.js`.** `app.js` is the entry point / orchestrator. New feature logic belongs in a dedicated module that `app.js` imports, not inline in `app.js` itself.
-- **New file threshold.** If a feature adds more than ~50 lines of logic, extract it into its own module (e.g. `public/my-feature.js`) and import it from the appropriate entry point.
-- **No shared-state side-effects at import time.** Modules should export functions/classes; side-effects that mutate global state should be triggered explicitly by the caller, not at module load.
-- **Security/path/i18n changes require the full test suite.** Run `bun run test` before declaring work complete when touching loopback access, filesystem paths, static assets, or locale coverage; the focused regression tests are listed under `## Tests`.
-- **Naming.** Use kebab-case filenames that match the single responsibility (`session-sidebar.js`, `file-browser.js`, `workspace-actions.js`).
-
-## Architecture authority
-
-[`ARCHITECTURE.md`](ARCHITECTURE.md) is the authoritative source for product
-architecture, feature invariants, lifecycle rules, security boundaries, and
-feature-specific validation. Before changing any UI behavior, persistence,
-workspace I/O, or cross-process communication, read the applicable architecture
-section and the design documents it links. Do not duplicate those detailed
-contracts in this guide.
-
-When changing the LAN boundary, cross-platform path handling, or static-asset
-serving shape, also update the `## 边界与不变量` and file-browsing security
-sections in `ARCHITECTURE.md`.
-
-## Architecture map
-
-[`ARCHITECTURE.md`](ARCHITECTURE.md) is the canonical map of the Rust host,
-embedded server, vanilla-JS frontend, transport paths, startup sequence,
-persistence model, and feature ownership. Read it before selecting a module or
-adding a new communication path.
-
-This guide intentionally keeps only repository-wide operating rules. Put
-feature-specific invariants, module indexes, and design links in
-`ARCHITECTURE.md`, then update that document whenever the implementation
-materially changes.
-
-For Quick Chat or Side Chat changes, read the corresponding
-[`docs/superpowers/specs/2026-07-15-quick-and-side-chat-design.md`](docs/superpowers/specs/2026-07-15-quick-and-side-chat-design.md)
-and the temporary-chat section of `ARCHITECTURE.md` before choosing an entry
-point, transport path, or lifecycle behavior.
-
-## Cross-boundary and prototype verification
-
-Before changing a browser/server adapter, a popup/overlay, or shared-state
-rerender behavior, read and apply
-[`docs/engineering-lessons.md`](docs/engineering-lessons.md). Its applicable
-rules are mandatory release criteria; do not treat a visual prototype as
-non-binding inspiration or assume a Node HTTP object when the production path
-uses Bun's Fetch adapter.
-
-## Bumping the embedded pi version
-
-1. Edit `scripts/pi-version.json` → `version`.
-2. `bun run fetch:pi` (re-downloads the platform tarball, replaces `src-tauri/resources/pi/`).
-3. Smoke test: `./src-tauri/resources/pi/pi --version` and `bun run dev`.
-4. Commit `scripts/pi-version.json`. Do **not** commit `src-tauri/resources/pi/`; it is gitignored.
-
-## Embedded pi: how it ends up inside the .app
-
-End users never run `fetch:pi`. The flow that puts `pi` inside the shipped bundle is:
-
-1. **Pre-build hook.** `package.json` `prebuild` runs `bun run fetch:pi` before `tauri build`. Downloads the platform tarball into `src-tauri/resources/pi/` (idempotent; skipped if `.version` matches). Bun honors npm-style `pre*` / `post*` lifecycle hooks for `bun run`.
-2. **Tauri before-hooks.** `tauri.conf.json` `build.beforeBuildCommand` and `build.beforeDevCommand` BOTH run `bun run fetch:pi` first, so even invoking `tauri build` / `tauri dev` directly (no `bun run build`) still guarantees the binary is present.
-3. **Tauri bundling.** `tauri.conf.json` `bundle.resources` maps `./resources/pi` → `pi`, so the entire pi runtime tree is copied into `<App>.app/Contents/Resources/pi/` at package time.
-4. **Last-line guard (build.rs).** `src-tauri/build.rs` PANICS at compile time if `resources/pi/<bin>` is missing in a release profile. This prevents `cargo build --release` (or any IDE that bypasses bun) from silently producing a .app with no pi inside. Override only for local experiments via `PI_STUDIO_SKIP_BIN_CHECK=1`.
-
-Net effect: there is no path that ships a Picot release without the embedded pi binary. End users get a self-contained app — no PATH lookups, no `bun run fetch:pi`, no manual install of pi.
-
-## Post-fix verification (Rust / Tauri)
-
-After every edit under `src-tauri/` (or any Rust fix), run the lint+check script before declaring the work done. It catches compile-time errors (e.g. `E0282`, `E0061`, Tauri v1→v2 API drift, deprecated APIs) without producing a binary, so it is much faster than `tauri build`.
-
-```bash
+bun install --frozen-lockfile
+bun run dev
+bun run test
+bun run check
 bun run check:rust
-# or directly
-bash scripts/check-rust.sh
+bun run build:extensions
 ```
 
-`scripts/check-rust.sh` runs, in order:
+Useful focused test form:
 
-1. `cargo check --all-targets` — type/borrow/API signature check (~1–5s).
-2. `cargo clippy --all-targets -- -D warnings` — lints, warnings as errors.
-3. `cargo fmt --check` — advisory only; prints a hint if formatting drifts, but does not fail the script.
+```bash
+bun run vitest run public/settings-save-status.test.js
+```
 
-### Rules
+## Frontend and extension checks
 
-- **Never** run `tauri build` / `cargo build` just to verify a fix — use `bun run check:rust` instead. Per project policy, full builds are not used for verification.
-- After editing any `*.rs` file under `src-tauri/`, run `bun run check:rust` and only mark the task complete if it exits 0.
-- When upgrading Tauri or its plugins, run the script first to surface any deprecation warnings before touching feature code.
+Biome is the JS/TS formatter and linter.
 
-## Auto-updater
+```bash
+bun run check       # lint, format, and design check
+bun run check:fix   # safe automatic fixes
+bun run lint
+bun run format
+bun run format:fix
+```
 
-Picot uses the Tauri v2 updater plugin to fetch new releases from GitHub. The runtime side lives in `public/tauri-bridge.js` + `public/app.js` (Settings → General → Updates), and the build side is wired into `.github/workflows/release.yml` via the `TAURI_SIGNING_PRIVATE_KEY` / `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` secrets. See `docs/AUTO_UPDATER.md` for the one-time signing-key setup and how `latest.json` flows from CI → GitHub release → installed app.
+After editing `.js` or `.ts` under `public/` or `extensions/`, run `bun run check`.
+After editing `extensions/embedded-server.ts`, also run `bun run build:extensions`.
 
-## Tests
+## Module discipline
 
-Vitest tests live beside their modules in `public/` (`*.test.js`) and
-`extensions/` (`*.test.ts`) under the jsdom/Vitest environment. The full
-`bun run test` also runs `scripts/check-tauri-permissions.js` to validate Tauri
-capability permissions.
+The WebView is vanilla JavaScript with no framework.
 
-Security and cross-platform regression coverage includes:
+- Keep one concern per file; do not add unrelated logic for convenience.
+- Keep `app.js` as an orchestrator. Put new feature logic in a dedicated module
+  and import it explicitly.
+- Extract a feature adding roughly 50 lines or more into its own module.
+- Do not mutate shared state as an import side effect.
+- Use kebab-case filenames that describe one responsibility.
+- For loopback access, filesystem paths, static assets, or locale coverage,
+  run the full `bun run test` suite before completion.
 
-- `extensions/request-access.test.ts` — loopback-only HTTP/WS policy.
-- `extensions/embedded-server-file-mentions.test.ts` — loopback-only `/api/file-mentions` root binding and status mapping.
-- `extensions/file-mention-search.test.ts` — `@`-mention bounded traversal, ignore list, budgets, and symlink handling.
-- `extensions/ephemeral-env.test.ts` — ephemeral-process gating predicate that blocks the mention endpoint on Side/Quick Chat Pi.
-- `extensions/path-safety.test.ts` — filesystem containment and sibling-prefix escapes.
-- `extensions/open-path.test.ts` — platform-specific system opener selection.
-- `extensions/skill-inventory.test.ts` — Pi-compatible skill discovery, `!`/`+`/`-` rule resolution, proper-lockfile-compatible settings lock, and legacy `skills` object migration.
-- `extensions/embedded-server-skills.test.ts` — Skills inventory/mutation RPC and loopback owner-only gating.
-- `public/workspace/path-utils.test.js` — POSIX, Windows drive, and UNC paths.
-- `public/super-agent/navigation.test.js` — Super Agent navigation successor.
-- `public/i18n-keys-completeness.test.js` — locale parity and missing-file failures;
-  it must not silently skip when a locale file is absent.
-- `public/settings/skills-page.test.js` — Skills page tree rendering, single-skill/group cards, and toggle wiring.
+## Verification
 
-File preview / Side Chat tab coordination regression coverage includes:
+- After Rust edits, run `bun run check:rust`; do not use `tauri build` or
+  `cargo build` merely to verify a fix.
+- After frontend or extension edits, run `bun run check`; run the focused test
+  first, then the relevant broader suite.
+- `bun run test` includes Vitest and Tauri capability validation.
+- Do not claim completion with failing tests or undocumented intentional
+  warnings.
 
-- `public/file-preview-panel.test.js` — file↔transient tab switching clears leftover file DOM, closing the last file tab keeps the panel open while a Side Chat tab remains, and `setWorkspaceRoot` does not flash the panel open on a failed (403) content restore.
-- `public/file-tab-state.test.js` — per-root persistence, out-of-order loads, and the read-only `hasTabsForRoot` peek used by the cross-workspace collapse decision.
+## Embedded Pi version
 
-After changing Rust, run `bun run check:rust`. After changing frontend or
-extension code, run `bun run check`; after changes to the embedded server, also
-run `bun run build:extensions`.
-
-## Security boundaries
-
-The embedded server keeps LAN access intentionally read-only. Static assets and
-approved read-only REST endpoints may be available to LAN/mobile clients, but
-`/ws`, `/api/rpc`, file writes, system/workspace/session controls, configuration,
-skill inventory and mutation, Telegram, Super Agent controls, and picker-scope
-directory enumeration are loopback-only. CORS is not authentication. The single source of truth is
-`extensions/request-access.ts`, which checks the socket peer address and fails
-closed when a controlled request has no peer address. Both Node and Bun adapter
-paths must use the same policy. Mobile control flows through the authenticated
-broker rather than bypassing this boundary.
-
-Filesystem containment belongs to `extensions/path-safety.ts`; static serving
-must validate both the resolved candidate and its `realpath` so traversal,
-sibling-prefix, and symlink escapes are rejected. The design contract is
-[`docs/superpowers/specs/2026-07-21-complete-merge-fixes-design.md`](docs/superpowers/specs/2026-07-21-complete-merge-fixes-design.md).
-
-## Cross-platform paths
-
-Frontend path handling is platform-neutral and must use
-`public/workspace/path-utils.js` for POSIX, Windows drive, and UNC strings;
-do not use browser-host OS APIs or hard-code `/` splitting in feature modules.
-System opening is centralized in `extensions/open-path.ts` and selects
-`open`, `explorer.exe`, or `xdg-open` without shell concatenation. Static assets
-are served by `extensions/embedded-server.ts` with the realpath containment
-checks from `extensions/path-safety.ts`. The Rust super-agent workspace lookup
-uses `PathBuf::join` and HOME/USERPROFILE/HOMEDRIVE+HOMEPATH fallbacks. See the
-same complete-merge-fixes design spec before changing these boundaries.
+The embedded binary is the only Pi runtime Picot launches; do not rely on a
+user-installed `pi` from `$PATH`. To upgrade it, follow the verified procedure
+in [`ARCHITECTURE.md`](ARCHITECTURE.md#如何读这个仓库): change
+`scripts/pi-version.json`, run `bun run fetch:pi`, smoke-test the embedded
+binary and `bun run dev`, then commit only the version pin—not
+`src-tauri/resources/pi/`.
