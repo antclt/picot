@@ -60,7 +60,7 @@ The tab row contains, at the far right:
 - Enlarge panel / Collapse panel;
 - Close panel.
 
-Closing the panel preserves open tabs. Closing the last open tab closes the panel automatically.
+Closing the panel preserves open tabs. Closing the last open **file** tab closes the panel automatically — unless a transient (Side Chat) tab is also present, in which case the panel switches to that transient tab and only collapses once both file and transient tabs are empty.
 
 ### 3.3 Header and preview alignment
 
@@ -298,6 +298,8 @@ All content/raw endpoints and workspace-scoped directory requests resolve and ca
 - paths outside the active workspace.
 
 If a stale client requests a path outside the current session root, the server returns a structured `outsideWorkspace` error. In normal browsing this is prevented by `scope=workspace`; the panel state is primarily for persisted tabs from a previous workspace or session-root change. The panel shows a localized outside-workspace state and keeps Close tab and Copy file path available.
+
+This `outsideWorkspace` path also occurs transiently during a foreground workspace switch: `setWorkspaceRoot` restores the target workspace's persisted tabs before the embedded server is re-scoped, so the active tab's content fetch can return `403`. To avoid a visible "open → load error → close" flicker, `setWorkspaceRoot` opens the panel only after the restored tab's content actually loads; a `403` (or any failed load) during the switch leaves the panel untouched. See the Side Chat spec (`docs/superpowers/specs/2026-07-15-quick-and-side-chat-design.md`, §Workspace switch panel behavior) for the matching cross-workspace collapse rule.
 
 ## 7. Renderer behavior
 

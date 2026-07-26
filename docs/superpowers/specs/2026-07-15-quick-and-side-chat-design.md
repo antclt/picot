@@ -540,8 +540,11 @@ Registration and updates are in-memory and never enter `FileTabState`.
 Transitions follow these rules:
 
 - file → transient: capture the file renderer value, preserve it in
-  `FileTabState`, destroy/unmount only the file renderer, hide file-only toolbar
-  controls, show the transient content, and call `onActivate`;
+  `FileTabState`, destroy/unmount only the file renderer, **clear the content
+  container DOM** (text/markdown renderers do not remove their own mounted
+  node on `destroy()`, and the `overflow:hidden` content area would otherwise
+  let a leftover `height:100%` node overlap the transient view), hide file-only
+  toolbar controls, show the transient content, and call `onActivate`;
 - transient → file: call `onDeactivate`, hide but do not destroy the transient
   content, then mount the selected file renderer and toolbar;
 - transient → transient: deactivate/hide the old content and activate/show the
@@ -549,7 +552,11 @@ Transitions follow these rules:
 - panel hide/collapse: hide presentation only; no transient close callback or
   runtime destruction occurs;
 - Side Chat tab close: await `onRequestClose`; remove and destroy the view only
-  after confirmed host cleanup, while failure/cancel leaves the tab intact; and
+  after confirmed host cleanup, while failure/cancel leaves the tab intact;
+- closing the last file tab while a transient (Side Chat) tab remains switches
+  to that transient tab instead of collapsing the panel — the panel collapses
+  only when **both** file and transient tabs are empty (mirrors
+  `unregisterTransientTab`'s dual-empty check); and
 - panel close: retain existing dirty-file settlement semantics, then hide the
   panel; it never closes Side Chats merely because they share the panel.
 
@@ -564,6 +571,28 @@ After closing the active tab, focus and activation move to the next tab on the
 right, otherwise the previous tab; if no tabs remain, the panel hides and focus
 returns to the relevant header control. Horizontal overflow keeps the focused
 tab visible.
+
+#### Workspace switch panel behavior
+
+A foreground workspace switch (broker in-place, same origin) drives the panel
+through `FilePreviewPanel.setWorkspaceRoot(targetRoot)`, which restores that
+workspace's persisted file tabs. Two transition-window rules prevent a visible
+"open → load error → close" flicker:
+
+- `setWorkspaceRoot` opens the panel only after the restored active tab's
+  content actually loads. During a foreground switch the persisted tabs can
+  belong to a workspace the current server is not yet scoped to, so the content
+  fetch returns `403 outsideWorkspace`; opening first would flash the panel
+  open with a load error before the authoritative state closes it again. A
+  failed load (or a raced-away switch) leaves the panel untouched.
+- On a cross-workspace session select, if the target workspace has no persisted
+  file tabs (`FilePreviewPanel.hasPersistedTabs`, backed by the read-only
+  `FileTabState.hasTabsForRoot`), the panel collapses immediately via
+  `hidePanel()` instead of waiting for `mirror_sync` to drive `setWorkspaceRoot`
+  (~2–3s). Switching back to a workspace that does have tabs is left to
+  `setWorkspaceRoot`, so there is no collapse-then-reopen flicker. `hidePanel`
+  preserves any dirty content in tab state via the renderer-value capture, so
+  the deferred `setWorkspaceRoot` can still settle it.
 
 ## Side Chat Interaction
 

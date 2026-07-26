@@ -219,6 +219,11 @@ Security and cross-platform regression coverage includes:
   it must not silently skip when a locale file is absent.
 - `public/settings/skills-page.test.js` — Skills page tree rendering, single-skill/group cards, and toggle wiring.
 
+File preview / Side Chat tab coordination regression coverage includes:
+
+- `public/file-preview-panel.test.js` — file↔transient tab switching clears leftover file DOM, closing the last file tab keeps the panel open while a Side Chat tab remains, and `setWorkspaceRoot` does not flash the panel open on a failed (403) content restore.
+- `public/file-tab-state.test.js` — per-root persistence, out-of-order loads, and the read-only `hasTabsForRoot` peek used by the cross-workspace collapse decision.
+
 After changing Rust, run `bun run check:rust`. After changing frontend or
 extension code, run `bun run check`; after changes to the embedded server, also
 run `bun run build:extensions`.

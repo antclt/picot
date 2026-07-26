@@ -75,7 +75,7 @@ Picot gives you a full visual interface for Pi. Open any project folder, start c
 
 ### ⚡ Temporary chats
 
-- **Side Chat** keeps tools available in an isolated, unsaved Pi process for the current workspace; open up to five in the file-panel tab strip.
+- **Side Chat** keeps tools available in an isolated, unsaved Pi process for the current workspace; open up to five as tabs alongside file tabs in the right panel — the panel stays open while any Side Chat tab remains, and collapses only when both file and Side Chat tabs are closed.
 - **Quick Chat** is a single non-modal, tool-free, unsaved chat. Open it from the icon directly after the sidebar search field.
 - Both compose with the same model selector, thinking-level control, voice input, and icon controls as the primary chat. They are available only in authenticated desktop windows, never through mobile or LAN access.
 

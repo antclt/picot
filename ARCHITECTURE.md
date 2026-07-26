@@ -695,7 +695,11 @@ design spec 要列出可见/省略字段、图标、分隔线和截断，测试�
    1.5 秒自动保存、保存冲突对话框和 renderer 生命周期；
    `FileTabState` 将**标签身份、顺序、选中标签和预览 / 编辑模式**按
    workspace root 存进该端口的 `localStorage`（最多 20 个 root）。
-   未保存内容、加载态和冲突态绝不持久化。
+   未保存内容、加载态和冲突态绝不持久化。Side Chat 的 transient tab
+   也投影进同一 tab 条与面板（仅内存，从不进 `FileTabState`）；两类 tab
+   在切换、关闭与工作区切换时的协调不变量（清 content DOM、混合关闭、
+   过渡窗口不撑开）见
+   [`docs/superpowers/specs/2026-07-15-quick-and-side-chat-design.md`](docs/superpowers/specs/2026-07-15-quick-and-side-chat-design.md)。
 4. `file-preview-renderers.js` 按 `file-language.js` 的分类分派：
    Markdown 经 allowlist sanitizer 后预览，普通文本用 CodeMirror，
    图片走 `<img>`，PDF 用 PDF.js canvas renderer。CodeMirror / PDF.js
@@ -915,13 +919,13 @@ Quick Chat 与 Side Chat 是隔离的、**不持久化**的临时 Pi 会话进�
 - `ephemeral-chat-view.js`：元素级隔离的聊天视图，复用 `MessageRenderer`/`ToolCardRenderer`/`DialogHandler`/voice（均有幂等 `destroy()`）；Side Chat `toolsEnabled=true`、Quick Chat `false`；composer 复用主聊天的 `composer-card`、模型下拉、thinking 和图标控件样式，并通过 owner-scoped runtime 获取模型；extension UI 请求经 scoped `DialogHandler` → `runtime.respondToExtensionUi`。
 - `side-chat-manager.js`：Side Chat 集合 + 5 配额 + Unicode-grapheme 安全标题（40 簇）+ transient tab 投影 + 创建/关闭 + 工作区转换 settle + rebind。
 - `quick-chat-dialog.js`：单 Quick Chat 非模态对话框 + 最小化芯片 + 标题拖拽（pointer 捕获 + blur/cancel 清理）+ New Chat 事务替换 + 几何仅内存；标题栏操作为本地化的图标按钮。
-- `file-preview-panel.js`：discriminated `activeContent={kind:"file"|"transient",id}` + transient tab 投影 API（register/update/activate/requestClose/unregister）+ close-risk 参与者 API + tab-bar 动作适配器（“New Side Chat”图标按钮）。`FileTabState` 仍是文件唯一持久化源；transient 仅内存。
+- `file-preview-panel.js`：discriminated `activeContent={kind:"file"|"transient",id}` + transient tab 投影 API（register/update/activate/requestClose/unregister）+ close-risk 参与者 API + tab-bar 动作适配器（“New Side Chat”图标按钮）。`FileTabState` 仍是文件唯一持久化源；transient 仅内存。两类 tab 的协调不变量：file→transient 切换时停用 file renderer 后必须清空 content 容器 DOM（text/markdown renderer 的 `destroy()` 不移除自身挂载节点，`overflow:hidden` 内容区会令残留的 `height:100%` 节点遮挡 transient 视图）；关最后 file tab 时若仍有 transient tab 则切过去而非收起面板（仅在 file 与 transient tab 均为空时才收起，与 `unregisterTransientTab` 的双判空对称）；foreground 切工作区时 `setWorkspaceRoot` 只在恢复的 active tab 内容加载成功后才撑开面板（过渡窗口的 `403 outsideWorkspace` 不撑开，避免「撑开→加载失败→关闭」抖动）。
 - `window-close-coordinator.js`：唯一窗口关闭决策流——冻结交互→收集 versioned risk（脏文件 + 非空/流式 ephemeral）→单摘要对话框→settle 文件→generation-checked ephemeral cleanup→approve；cancel/失败解锁，重复请求合并；owns 唯一 `beforeunload` 脏文件守卫。
 
 ### 工作区转换与原生关闭
 
 - 同规范 cwd 导航：保留 Side Chat + Quick Chat，更新主 port/origin（`prepare_navigation`/`commit`），提交时不执行旧工作区 Side Chat 清理。
-- 跨工作区导航：`begin_workspace_transition`→前端 settle 旧 Side Chat→`side_chat_cleanup_for_transition`→`commit`（提交 cwd/port/origin + workspace_generation）；Quick Chat 独立于工作区故保留；取消保留旧绑定。
+- 跨工作区导航：`begin_workspace_transition`→前端 settle 旧 Side Chat→`side_chat_cleanup_for_transition`→`commit`（提交 cwd/port/origin + workspace_generation）；Quick Chat 独立于工作区故保留；取消保留旧绑定。跨工作区 session 选择时，若目标工作区无持久化 file tab（`FilePreviewPanel.hasPersistedTabs`／`FileTabState.hasTabsForRoot` 只读 peek），前端立即 `hidePanel()` 收起文件面板，不再等 `mirror_sync` 驱动 `setWorkspaceRoot`（~2–3s）；`hidePanel` 经 renderer 值捕获保留脏内容到 tab state，供后续 `setWorkspaceRoot` settle。
 - 原生关闭：`CloseRequested` 拦截→owner 定向 `window_close_request`→前端协调器；取消/settle 失败通过 `window_close_cancel` 清除挂起请求，确认后调用 `window_close_approve`（一次性审批，下次 `CloseRequested` 消费）；`Destroyed` 做最终幂等 owner cleanup（杀进程/注销路由/ephemeral owner_cleanup/删 owned temp 目录/revoke owner）；断连 WebView 走原生 fallback 警告。
 
 ---
