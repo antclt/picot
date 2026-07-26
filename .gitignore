@@ -1,4 +1,5 @@
 node_modules/
+coverage/
 .npm-cache/
 .worktrees/
 # npm lock file (this project uses bun exclusively; see AGENTS.md)
@@ -31,12 +32,6 @@ pi-session-*.html
 *.zip
 # husky internal scripts (managed by `bun run prepare`)
 .husky/_/
-
-# Superpowers plans
-docs/superpowers/plans
-
-# plannator plans
-plans/
 
 # Frontend vendor bundles (produced by scripts/build-frontend.js)
 public/vendor/

@@ -7,5 +7,19 @@ export default defineConfig({
     environment: "jsdom",
     setupFiles: ["./vitest.setup.js"],
     include: ["public/**/*.test.js", "extensions/**/*.test.ts", "scripts/**/*.test.js"],
+    coverage: {
+      provider: "istanbul",
+      enabled: false,
+      reporter: ["text", "html", "lcov"],
+      reportsDirectory: "./coverage",
+      include: ["public/**/*.js", "extensions/**/*.ts", "scripts/**/*.js"],
+      exclude: [
+        "**/*.test.{js,ts}",
+        "extensions/dist/**",
+        "extensions/embedded-server.ts",
+        "public/**/*-vendor-entry.js",
+        "public/vendor/**",
+      ],
+    },
   },
 });
