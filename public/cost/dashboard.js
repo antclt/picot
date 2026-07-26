@@ -1,3 +1,4 @@
+import { onLocaleChange, t } from "../i18n.js";
 import { renderCostInfobar } from "./infobar.js";
 
 const FILTER_STORAGE_KEY = "pi-studio-cost-filters";
@@ -30,10 +31,10 @@ function renderShell(target) {
       <section id="infobar-cost-section">
         <div class="infobar-topbar">
           <div class="infobar-topbar-actions">
-            <div class="infobar-quick-range" role="group" aria-label="Quick range">
-              <button type="button" class="infobar-range-chip" data-range-chip="7d">7d</button>
-              <button type="button" class="infobar-range-chip is-active" data-range-chip="30d">30d</button>
-              <button type="button" class="infobar-range-chip" data-range-chip="90d">90d</button>
+            <div class="infobar-quick-range" role="group" aria-label="${escapeHtml(t("cost.quickRange"))}">
+              <button type="button" class="infobar-range-chip" data-range-chip="7d">${escapeHtml(t("cost.range.7d"))}</button>
+              <button type="button" class="infobar-range-chip is-active" data-range-chip="30d">${escapeHtml(t("cost.range.30d"))}</button>
+              <button type="button" class="infobar-range-chip" data-range-chip="90d">${escapeHtml(t("cost.range.90d"))}</button>
             </div>
           </div>
         </div>
@@ -42,7 +43,7 @@ function renderShell(target) {
           <div class="infobar-panel is-active" id="usage-overview">
             <div class="infobar-cost-block">
               <div class="infobar-subsection-head">
-                <h3>Overview</h3>
+                <h3>${escapeHtml(t("cost.overview"))}</h3>
               </div>
               <div class="infobar-overview-grid" id="infobar-overview-grid"></div>
               <div class="infobar-activity-wrap">
@@ -56,7 +57,7 @@ function renderShell(target) {
             <div class="infobar-panel is-active" id="usage-models">
               <div class="infobar-cost-block">
                 <div class="infobar-subsection-head">
-                  <h3>Models</h3>
+                  <h3>${escapeHtml(t("cost.models"))}</h3>
                 </div>
                 <div class="infobar-rank-list" id="infobar-models-list"></div>
               </div>
@@ -66,7 +67,7 @@ function renderShell(target) {
               <div class="infobar-panel is-active" id="usage-tool-cost">
                 <div class="infobar-cost-block">
                   <div class="infobar-subsection-head">
-                    <h3>Tool Cost</h3>
+                    <h3>${escapeHtml(t("cost.toolCost"))}</h3>
                   </div>
                   <div id="infobar-tool-cost-panel"></div>
                 </div>
@@ -75,7 +76,7 @@ function renderShell(target) {
               <div class="infobar-panel is-active" id="usage-projects">
                 <div class="infobar-cost-block">
                   <div class="infobar-subsection-head">
-                    <h3>Projects</h3>
+                    <h3>${escapeHtml(t("cost.projects"))}</h3>
                   </div>
                   <div class="infobar-rank-list" id="infobar-projects-list"></div>
                 </div>
@@ -86,8 +87,8 @@ function renderShell(target) {
           <div class="infobar-panel is-active" id="usage-sessions">
             <div class="infobar-cost-block">
               <div class="infobar-subsection-head">
-                <h3>Sessions</h3>
-                <span>Recent sessions in range</span>
+                <h3>${escapeHtml(t("cost.sessions"))}</h3>
+                <span>${escapeHtml(t("cost.recentSessionsInRange"))}</span>
               </div>
               <div id="infobar-sessions-panel"></div>
             </div>
@@ -140,7 +141,10 @@ function renderLoadError(section, error) {
 
 export class CostDashboard extends HTMLElement {
   connectedCallback() {
-    if (this._initialized) return;
+    if (this._initialized) {
+      this._unsubscribeLocale = onLocaleChange(() => this._renderForLocale());
+      return;
+    }
     this._initialized = true;
     this._currentRange = loadSavedRange();
     this._inFlight = null;
@@ -148,11 +152,8 @@ export class CostDashboard extends HTMLElement {
     this._hasLoaded = false;
 
     this._root = this.attachShadow({ mode: "open" });
-    renderShell(this._root);
-    this._section = this._root.querySelector("#infobar-cost-section");
-    this._rangeChips = Array.from(this._root.querySelectorAll("[data-range-chip]"));
-    this._bindEvents();
-    this._syncRangeChips();
+    this._renderShell();
+    this._unsubscribeLocale = onLocaleChange(() => this._renderForLocale());
 
     if (!this.hasAttribute("defer-load")) {
       this.ensureLoaded().catch((error) => {
@@ -163,6 +164,25 @@ export class CostDashboard extends HTMLElement {
 
   get currentRange() {
     return this._currentRange || DEFAULT_RANGE;
+  }
+
+  _renderShell() {
+    renderShell(this._root);
+    this._section = this._root.querySelector("#infobar-cost-section");
+    this._rangeChips = Array.from(this._root.querySelectorAll("[data-range-chip]"));
+    this._bindEvents();
+    this._syncRangeChips();
+  }
+
+  _renderForLocale() {
+    const hadLoadedData = this._hasLoaded && this._lastPayload;
+    this._renderShell();
+    if (hadLoadedData) renderCostInfobar(this._section, this._lastPayload);
+  }
+
+  disconnectedCallback() {
+    this._unsubscribeLocale?.();
+    this._unsubscribeLocale = null;
   }
 
   get loading() {
@@ -189,6 +209,7 @@ export class CostDashboard extends HTMLElement {
       })
       .then((payload) => {
         if (loadVersion !== this._loadVersion) return;
+        this._lastPayload = payload;
         renderCostInfobar(this._section, payload);
         this._hasLoaded = true;
       })

@@ -409,6 +409,11 @@ function renderActivityPanel(target, payload) {
     { length: leadingEmptyDays },
     () => '<div class="infobar-activity-cell is-empty" aria-hidden="true"></div>',
   ).join("");
+  const weekdayMonday = escapeHtml(t("cost.activity.monday"));
+  const weekdayWednesday = escapeHtml(t("cost.activity.wednesday"));
+  const weekdayFriday = escapeHtml(t("cost.activity.friday"));
+  const activityLess = escapeHtml(t("cost.activity.less"));
+  const activityMore = escapeHtml(t("cost.activity.more"));
 
   target.innerHTML = `
     <div class="infobar-activity-calendar" style="--activity-columns:${weekColumns}">
@@ -423,11 +428,11 @@ function renderActivityPanel(target, payload) {
       <div class="infobar-activity-body">
         <div class="infobar-activity-weekdays" aria-hidden="true">
           <span></span>
-          <span>Mon</span>
+          <span>${weekdayMonday}</span>
           <span></span>
-          <span>Wed</span>
+          <span>${weekdayWednesday}</span>
           <span></span>
-          <span>Fri</span>
+          <span>${weekdayFriday}</span>
           <span></span>
         </div>
         <div class="infobar-activity-grid">
@@ -447,13 +452,13 @@ function renderActivityPanel(target, payload) {
         </div>
       </div>
       <div class="infobar-activity-footer">
-        <span>Less</span>
+        <span>${activityLess}</span>
         <span class="infobar-activity-cell level-0" aria-hidden="true"></span>
         <span class="infobar-activity-cell level-1" aria-hidden="true"></span>
         <span class="infobar-activity-cell level-2" aria-hidden="true"></span>
         <span class="infobar-activity-cell level-3" aria-hidden="true"></span>
         <span class="infobar-activity-cell level-4" aria-hidden="true"></span>
-        <span>More</span>
+        <span>${activityMore}</span>
       </div>
     </div>
   `;

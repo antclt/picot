@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { initI18n, setLocale } from "../i18n.js";
+import "./dashboard.js";
 import {
   renderCostInfobar,
   renderInfobarModels,
@@ -17,6 +18,25 @@ const zhMessages = JSON.parse(readFileSync(resolve(localeDir, "zh.json"), "utf-8
 
 function clearLanguageCookie() {
   document.cookie = "picot-language=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/";
+}
+
+function buildInfobarSection() {
+  const section = document.createElement("section");
+  for (const id of [
+    "infobar-page-title",
+    "infobar-overview-grid",
+    "infobar-activity-panel",
+    "infobar-overview-note",
+    "infobar-models-list",
+    "infobar-tool-cost-panel",
+    "infobar-projects-list",
+    "infobar-sessions-panel",
+  ]) {
+    const element = document.createElement("div");
+    element.id = id;
+    section.appendChild(element);
+  }
+  return section;
 }
 
 beforeEach(async () => {
@@ -274,28 +294,7 @@ describe("cost infobar renderers", () => {
   });
 
   it("renders the single-page infobar sections including sessions", () => {
-    const section = document.createElement("section");
-    section.innerHTML = `
-      <span id="infobar-page-title"></span>
-      <div class="infobar-tabs">
-        <a class="infobar-tab" href="#usage-overview">Overview</a>
-        <a class="infobar-tab" href="#usage-models">Models</a>
-        <a class="infobar-tab" href="#usage-tool-cost">Tool Cost</a>
-        <a class="infobar-tab" href="#usage-projects">Projects</a>
-        <a class="infobar-tab" href="#usage-sessions">Sessions</a>
-      </div>
-      <div class="infobar-panel is-active" data-infobar-panel="overview">
-        <div id="infobar-overview-grid"></div>
-        <div id="infobar-activity-panel"></div>
-        <div id="infobar-overview-note"></div>
-      </div>
-      <div class="infobar-panel is-active" data-infobar-panel="tool-cost">
-        <div id="infobar-tool-cost-panel"></div>
-      </div>
-      <div class="infobar-panel is-active" data-infobar-panel="models"><div id="infobar-models-list"></div></div>
-      <div class="infobar-panel is-active" data-infobar-panel="projects"><div id="infobar-projects-list"></div></div>
-      <div class="infobar-panel is-active" data-infobar-panel="sessions"><div id="infobar-sessions-panel"></div></div>
-    `;
+    const section = buildInfobarSection();
 
     renderCostInfobar(section, {
       range: {
@@ -414,5 +413,34 @@ describe("cost infobar renderers", () => {
     const toolCost = document.createElement("div");
     renderInfobarToolCost(toolCost, { tools: [] });
     expect(toolCost.textContent).toContain("所选范围内无工具使用。");
+
+    const section = buildInfobarSection();
+    renderCostInfobar(section, {
+      range: { from: "2026-06-01T00:00:00.000Z", to: "2026-06-02T00:00:00.000Z" },
+      sessions: [{ time: "2026-06-01T10:00:00.000Z", totalTokens: 100 }],
+      infobar: { overview: { sessionCount: 1 } },
+    });
+    expect(section.querySelector("#infobar-activity-panel").textContent).toContain("周一");
+    expect(section.querySelector("#infobar-activity-panel").textContent).toContain("较多");
+  });
+
+  it("repaints the usage dashboard shell when the locale changes", async () => {
+    const dashboard = document.createElement("cost-dashboard");
+    dashboard.setAttribute("defer-load", "");
+    document.body.appendChild(dashboard);
+
+    await setLocale("zh");
+
+    expect(dashboard.shadowRoot.querySelector("#usage-overview h3").textContent).toBe("概览");
+    expect(dashboard.shadowRoot.querySelector("#usage-models h3").textContent).toBe("模型");
+    expect(dashboard.shadowRoot.querySelector("#usage-tool-cost h3").textContent).toBe("工具成本");
+    expect(dashboard.shadowRoot.querySelector("#usage-projects h3").textContent).toBe("项目");
+    expect(dashboard.shadowRoot.querySelector("#usage-sessions h3").textContent).toBe("会话");
+    expect(dashboard.shadowRoot.querySelector(".infobar-subsection-head span").textContent).toBe(
+      "范围内的最近会话",
+    );
+    expect(dashboard.shadowRoot.querySelector('[data-range-chip="7d"]').textContent).toBe("7 天");
+
+    dashboard.remove();
   });
 });

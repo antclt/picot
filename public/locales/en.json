@@ -571,7 +571,19 @@
     "unknown": "unknown",
     "notAvailable": "N/A",
     "untitled": "Untitled",
-    "daysShort": "{count}d"
+    "daysShort": "{count}d",
+    "range": {
+      "7d": "7d",
+      "30d": "30d",
+      "90d": "90d"
+    },
+    "activity": {
+      "monday": "Mon",
+      "wednesday": "Wed",
+      "friday": "Fri",
+      "less": "Less",
+      "more": "More"
+    }
   },
   "misc": {
     "new": "New",

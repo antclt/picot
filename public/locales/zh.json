@@ -571,7 +571,19 @@
     "unknown": "未知",
     "notAvailable": "无",
     "untitled": "未命名",
-    "daysShort": "{count} 天"
+    "daysShort": "{count} 天",
+    "range": {
+      "7d": "7 天",
+      "30d": "30 天",
+      "90d": "90 天"
+    },
+    "activity": {
+      "monday": "周一",
+      "wednesday": "周三",
+      "friday": "周五",
+      "less": "较少",
+      "more": "较多"
+    }
   },
   "misc": {
     "new": "新",

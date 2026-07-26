@@ -1,4 +1,7 @@
-import "./cost/dashboard.js";
+import { initI18n } from "./i18n.js";
+
+await initI18n();
+await import("./cost/dashboard.js");
 
 syncThemeFromCookie();
 
