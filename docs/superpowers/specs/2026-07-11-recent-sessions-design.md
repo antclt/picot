@@ -95,3 +95,11 @@ Frontend tests cover:
 10. RECENT starts expanded, supports pointer and keyboard folding, remains collapsed when a new session is recorded, and resets to expanded with a new sidebar instance.
 
 Run the focused Vitest tests, `bun run check`, and the required i18n safety grep on changed frontend files.
+
+## Implementation delta (2026-07-25)
+
+A successful individual deletion from either ARCHIVED or Workspace Focus now calls
+`SessionSidebar.removeFromRecentSessions(filePath)` before the normal session
+reload/pruning pass. This eagerly removes the deleted file from the shared
+`picot-recent-sessions` cookie; `setActive()` remains the only path that records
+new MRU access.

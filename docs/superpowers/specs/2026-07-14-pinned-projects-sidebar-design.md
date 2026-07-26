@@ -412,3 +412,19 @@ session groups, cross-window Pin updates, a full-cookie failure, narrow desktop
 windows, popup boundaries, keyboard operation, and live locale switching. When a
 prototype image defines the popup, capture the real card and compare its visible
 rows, icons, separators, labels, truncation, and Pin state against that image.
+
+## Implementation delta (2026-07-25)
+
+The later archive/delete implementation intentionally changes the historical
+ARCHIVED contract above:
+
+- Archiving no longer removes a session Pin. ARCHIVED rows hide Pin/Unpin and
+  Archive controls, while a successful real deletion removes the session Pin.
+- There is no user-facing unarchive control.
+- ARCHIVED rows offer confirmed individual deletion. The server refuses a path
+  still held by a running Pi instance; active, streaming, and live-instance
+  sessions are also excluded from archive actions.
+- Workspace headers can expose a separate Focus arrow for the current
+  foreground workspace. It does not alter the existing disclosure behavior:
+  click, Enter, and Space only fold or unfold; there is no double-click Focus
+  shortcut.
