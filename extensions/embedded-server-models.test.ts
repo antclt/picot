@@ -8,6 +8,7 @@ import {
   buildModelCatalog,
   getAvailableModelsForRpc,
   ModelPreferencesStore,
+  persistProviderApiKey,
   sanitizeHealthError,
 } from "./embedded-server.ts";
 
@@ -149,6 +150,29 @@ describe("embedded server model listing", () => {
     expect(JSON.parse(readFileSync(path, "utf8"))).toMatchObject({
       visibility: { "anthropic/claude-opus-5": false },
     });
+  });
+
+  it("persists an API key through the registry runtime credential store", async () => {
+    let saved: unknown;
+    const registry = {
+      runtime: {
+        credentials: {
+          modify: async (provider: string, update: (current: unknown) => Promise<unknown>) => {
+            saved = [provider, await update(undefined)];
+          },
+        },
+      },
+    };
+
+    await persistProviderApiKey(registry, "anthropic", "sk-test");
+
+    expect(saved).toEqual(["anthropic", { type: "api_key", key: "sk-test" }]);
+  });
+
+  it("reports registries without a persistent credential store clearly", async () => {
+    await expect(persistProviderApiKey({}, "anthropic", "sk-test")).rejects.toThrow(
+      "Persistent credential storage is unavailable",
+    );
   });
 
   it("sanitizes health errors before storing or returning them", () => {

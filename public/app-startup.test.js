@@ -3,7 +3,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { initI18n } from "./i18n.js";
 
 const enMessages = JSON.parse(readFileSync(join(process.cwd(), "public/locales/en.json"), "utf8"));
 
@@ -26,10 +25,11 @@ class FakeWebSocket extends EventTarget {
 }
 
 beforeEach(async () => {
-  document.documentElement.innerHTML = readFileSync(
-    join(process.cwd(), "public/index.html"),
-    "utf8",
+  const fixture = new DOMParser().parseFromString(
+    readFileSync(join(process.cwd(), "public/index.html"), "utf8"),
+    "text/html",
   );
+  document.documentElement.replaceChildren(...fixture.documentElement.childNodes);
   const storage = new Map();
   const storageApi = {
     getItem: (key) => storage.get(key) ?? null,
@@ -45,7 +45,6 @@ beforeEach(async () => {
     }
     return new Response(JSON.stringify({}), { status: 404 });
   });
-  await initI18n();
   vi.spyOn(console, "debug").mockImplementation(() => {});
   vi.spyOn(console, "log").mockImplementation(() => {});
   globalThis.requestAnimationFrame = (callback) => callback();
@@ -63,7 +62,7 @@ beforeEach(async () => {
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
-  document.documentElement.innerHTML = "";
+  document.documentElement.replaceChildren();
   delete globalThis.WebSocket;
   delete globalThis.fetch;
   delete globalThis.requestAnimationFrame;
@@ -83,10 +82,13 @@ test("places the preview workspace below the shared header", () => {
   expect(content).toContain(document.getElementById("file-sidebar"));
 });
 
-test("initializes the application and opens Settings", async () => {
+test("initializes the application without reporting existing i18n keys as missing", async () => {
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
   await import("./app.js?startup-regression");
 
-  document.getElementById("settings-btn").click();
+  expect(warn).not.toHaveBeenCalledWith(expect.stringContaining("[i18n] missing key:"));
 
+  document.getElementById("settings-btn").click();
   expect(document.getElementById("settings-panel").classList.contains("hidden")).toBe(false);
 });

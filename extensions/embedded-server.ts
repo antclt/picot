@@ -45,6 +45,7 @@ import {
   type ExtensionContext,
   type ModelRegistry,
   type SessionEntry,
+  type SessionInfo,
   SessionManager,
 } from "@earendil-works/pi-coding-agent";
 import QRCode from "qrcode";
@@ -146,6 +147,16 @@ function buildHomeDirCandidates(): string[] {
 }
 
 function resolvePiAgentRoot(): string {
+  const configured = process.env.PI_CODING_AGENT_DIR?.trim();
+  if (configured) {
+    const resolved = path.resolve(configured);
+    try {
+      return fs.realpathSync.native(resolved);
+    } catch {
+      return resolved;
+    }
+  }
+
   // Prefer whichever home candidate already has .pi/agent on disk.
   for (const home of buildHomeDirCandidates()) {
     const candidate = path.join(home, ".pi", "agent");
@@ -559,7 +570,6 @@ export function mergeLiveInstanceSessions(
       file,
       filePath: instance.sessionFile,
       cwd: projectPath,
-      name: "New Session",
       timestamp: instance.startedAt || new Date().toISOString(),
       mtime: instance.startedAt ? new Date(instance.startedAt).getTime() : Date.now(),
       ctime: instance.startedAt ? new Date(instance.startedAt).getTime() : Date.now(),
@@ -833,6 +843,17 @@ type UnifiedWS = {
   isAlive?: boolean;
 };
 
+export type ActiveSessionBinding = {
+  generation: number;
+  api: Pick<ExtensionAPI, "setSessionName">;
+  sessionFile: string;
+};
+
+export type ActiveSessionState = {
+  nextGeneration: number;
+  activeSessionBinding: ActiveSessionBinding | null;
+};
+
 type EmbeddedServerGlobal = {
   server: ServerHandle | null;
   wss: WebSocketServer | null;
@@ -881,19 +902,53 @@ type EmbeddedServerGlobal = {
   // `history:<dirName>` IDs even when the frontend hasn't re-fetched
   // `/api/sessions` yet (or that fetch failed).
   lastSessionProjects: SessionProject[];
+  nextGeneration: number;
+  activeSessionBinding: ActiveSessionBinding | null;
 };
 
 type AvailableModelRegistry = {
   getAvailable: () => Promise<unknown[]>;
 };
 
-/** Runtime shape: ModelRegistry instances carry an AuthStorage for key management */
-type ModelRegistryWithAuth = ModelRegistry & {
-  authStorage: {
-    modify: (provider: string, fn: (current: unknown) => Promise<unknown>) => Promise<unknown>;
-    delete: (provider: string) => Promise<void>;
-  };
+/** Runtime shape: Pi 0.82 keeps persistent credentials on ModelRuntime. */
+type PersistentCredentialStore = {
+  modify: (provider: string, fn: (current: unknown) => Promise<unknown>) => Promise<unknown>;
+  delete: (provider: string) => Promise<void>;
 };
+
+/**
+ * Pi 0.82 keeps persistent credentials behind ModelRuntime rather than
+ * exposing `authStorage` on ModelRegistry. Keep this compatibility boundary
+ * in one place so authentication writes use Pi's locking and JSON format.
+ */
+function getPersistentCredentialStore(registry: unknown): PersistentCredentialStore {
+  const candidate = (registry as { runtime?: { credentials?: unknown } } | null)?.runtime
+    ?.credentials as Partial<PersistentCredentialStore> | undefined;
+  if (!candidate || typeof candidate.modify !== "function") {
+    throw new Error("Persistent credential storage is unavailable");
+  }
+  return candidate as PersistentCredentialStore;
+}
+
+export async function persistProviderApiKey(
+  registry: unknown,
+  provider: string,
+  apiKey: string,
+): Promise<void> {
+  const credentials = getPersistentCredentialStore(registry);
+  await credentials.modify(provider, async () => ({ type: "api_key", key: apiKey }));
+}
+
+export async function removePersistedProviderApiKey(
+  registry: unknown,
+  provider: string,
+): Promise<void> {
+  const credentials = getPersistentCredentialStore(registry);
+  if (typeof credentials.delete !== "function") {
+    throw new Error("Persistent credential storage is unavailable");
+  }
+  await credentials.delete(provider);
+}
 
 type CatalogModel = {
   provider?: string;
@@ -1189,6 +1244,97 @@ function readJsonBody(req: http.IncomingMessage): Promise<unknown> {
   });
 }
 
+export class BoundedBodyError extends Error {
+  status = 413 as const;
+}
+
+export type BoundedBodySource =
+  | Request
+  | (NodeJS.ReadableStream & {
+      headers?: Record<string, string | string[] | undefined>;
+      resume?: () => void;
+      removeListener?: (event: string, listener: (...args: unknown[]) => void) => unknown;
+    });
+
+export async function readBoundedJsonBody(
+  source: BoundedBodySource,
+  maxBytes: number,
+): Promise<unknown> {
+  const isWebRequest =
+    (typeof Request !== "undefined" && source instanceof Request) ||
+    ("body" in source && typeof source.body?.getReader === "function");
+  if (isWebRequest) {
+    const webRequest = source as Request;
+    const declared = Number(webRequest.headers.get("content-length"));
+    if (Number.isFinite(declared) && declared > maxBytes)
+      throw new BoundedBodyError("Request body too large");
+    const reader = webRequest.body?.getReader();
+    if (!reader) return {};
+    const chunks: Uint8Array[] = [];
+    let total = 0;
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        total += value.byteLength;
+        if (total > maxBytes) {
+          await reader.cancel();
+          throw new BoundedBodyError("Request body too large");
+        }
+        chunks.push(value);
+      }
+    } catch (error) {
+      if (error instanceof BoundedBodyError) throw error;
+      throw error;
+    }
+    const body = Buffer.concat(chunks.map((chunk) => Buffer.from(chunk))).toString("utf8");
+    return body ? JSON.parse(body) : {};
+  }
+
+  const nodeSource = source as Exclude<BoundedBodySource, Request>;
+  const headers = nodeSource.headers ?? {};
+  const declaredHeader = headers["content-length"];
+  const declared = Number(Array.isArray(declaredHeader) ? declaredHeader[0] : declaredHeader);
+  if (Number.isFinite(declared) && declared > maxBytes) {
+    nodeSource.resume?.();
+    throw new BoundedBodyError("Request body too large");
+  }
+  return await new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    let total = 0;
+    let settled = false;
+    const fail = (error: unknown) => {
+      if (settled) return;
+      settled = true;
+      nodeSource.removeListener?.("data", onData);
+      nodeSource.removeListener?.("end", onEnd);
+      nodeSource.removeListener?.("error", onError);
+      nodeSource.resume?.();
+      reject(error);
+    };
+    const onData = (chunk: Buffer | string) => {
+      const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      total += buffer.byteLength;
+      if (total > maxBytes) fail(new BoundedBodyError("Request body too large"));
+      else chunks.push(buffer);
+    };
+    const onEnd = () => {
+      if (settled) return;
+      settled = true;
+      try {
+        const body = Buffer.concat(chunks).toString("utf8");
+        resolve(body ? JSON.parse(body) : {});
+      } catch (error) {
+        reject(error);
+      }
+    };
+    const onError = (error: unknown) => fail(error);
+    nodeSource.on("data", onData);
+    nodeSource.on("end", onEnd);
+    nodeSource.on("error", onError);
+  });
+}
+
 function getStringField(body: unknown, field: string): string | undefined {
   if (!body || typeof body !== "object") return undefined;
   const value = (body as Record<string, unknown>)[field];
@@ -1218,9 +1364,99 @@ function getOrCreateGlobalState(): EmbeddedServerGlobal {
       sessionHeaderCache: new Map<string, SessionFileCacheEntry<unknown>>(),
       sessionMetricsCache: new Map<string, SessionFileCacheEntry<unknown>>(),
       lastSessionProjects: [],
+      nextGeneration: 0,
+      activeSessionBinding: null,
     } as EmbeddedServerGlobal;
   }
   return g[EMBEDDED_GLOBAL_KEY] as EmbeddedServerGlobal;
+}
+
+export function publishActiveSessionBinding(
+  state: ActiveSessionState,
+  api: Pick<ExtensionAPI, "setSessionName">,
+  sessionFile: string,
+): ActiveSessionBinding {
+  const binding = { generation: ++state.nextGeneration, api, sessionFile };
+  state.activeSessionBinding = binding;
+  return binding;
+}
+
+export function clearActiveSessionBinding(state: ActiveSessionState, generation: number): void {
+  if (state.activeSessionBinding?.generation === generation) state.activeSessionBinding = null;
+}
+
+export type RenameFailure = {
+  ok: false;
+  status: 400 | 404 | 413 | 500;
+  error: string;
+};
+
+export type RenameSuccess = { ok: true; filePath: string; name: string };
+
+export type RenameSessionDeps = {
+  sessionsDir: string;
+  listAll: () => Promise<SessionInfo[]>;
+  getActiveBinding: () => ActiveSessionBinding | null;
+  openSession: typeof SessionManager.open;
+};
+
+async function canonicalizeExistingPath(filePath: string): Promise<string> {
+  return realpathAsync(filePath);
+}
+
+/**
+ * Rename a managed session using Pi's append-only SessionManager API. The
+ * containment checks protect browser/LAN input from static path escape; they
+ * intentionally retain Pi TUI's same-user TOCTOU model.
+ */
+export async function renameManagedSession(
+  request: unknown,
+  deps: RenameSessionDeps,
+): Promise<RenameSuccess | RenameFailure> {
+  if (!request || typeof request !== "object") {
+    return { ok: false, status: 400, error: "Invalid rename request" };
+  }
+  const value = request as Record<string, unknown>;
+  if (typeof value.filePath !== "string" || typeof value.name !== "string") {
+    return { ok: false, status: 400, error: "filePath and name are required" };
+  }
+  const name = value.name.trim();
+  if (!name || Array.from(name).length > 200) {
+    return { ok: false, status: 400, error: "Name must be 1-200 characters" };
+  }
+  try {
+    const root = await canonicalizeExistingPath(deps.sessionsDir);
+    const target = await canonicalizeExistingPath(value.filePath);
+    if (!target.toLowerCase().endsWith(".jsonl") || !isPathWithinRoot(root, target)) {
+      return { ok: false, status: 404, error: "Session is unavailable" };
+    }
+    const infos = await deps.listAll();
+    const managed = (
+      await Promise.all(
+        infos.map(async (info) => {
+          try {
+            return (await canonicalizeExistingPath(info.path)) === target ? info : null;
+          } catch {
+            return null;
+          }
+        }),
+      )
+    ).find((info): info is SessionInfo => info !== null);
+    if (!managed) return { ok: false, status: 404, error: "Session is unavailable" };
+
+    const binding = deps.getActiveBinding();
+    if (
+      binding &&
+      (await canonicalizeExistingPath(binding.sessionFile).catch(() => "")) === target
+    ) {
+      binding.api.setSessionName(name);
+    } else {
+      deps.openSession(target).appendSessionInfo(name);
+    }
+    return { ok: true, filePath: target, name };
+  } catch (error) {
+    return { ok: false, status: 500, error: errMessage(error) };
+  }
 }
 
 export default function (pi: ExtensionAPI) {
@@ -1228,6 +1464,7 @@ export default function (pi: ExtensionAPI) {
 
   // Store latest context reference for use in command handlers
   let latestCtx: ExtensionContext | null = null;
+  let publishedGeneration: number | null = null;
 
   // ═══════════════════════════════════════
   // Always resolve the freshest `pi` from globalState before calling any
@@ -1980,20 +2217,16 @@ export default function (pi: ExtensionAPI) {
           break;
         }
 
-        // ─── API keys (auth.json) ───
+        // ─── API keys (Pi credential store) ───
         //
-        // Why: GUI-launched Picot (Finder/dock) does not inherit
-        // ANTHROPIC_API_KEY etc. from the user's login shell, and we
-        // deliberately removed the brittle login-shell env-harvest path in
-        // commit 8b1f5e4. The user therefore needs an in-app way to write
-        // their API key into ~/.pi/agent/auth.json once, which then sticks
-        // across runs (same file format pi's `/login` writes).
+        // GUI launches import provider variables from the user's login shell,
+        // but Settings also supports persistent API keys for providers that
+        // need local configuration. Mutations use Pi's credential store so
+        // they retain Pi's file locking and auth.json format across launches.
         //
-        // These handlers expose a minimal CRUD over auth.json scoped to the
-        // built-in providers we know about. OAuth providers are deliberately
-        // excluded — they require a browser round-trip we don't support yet
-        // from the desktop UI; users who need OAuth should run `pi /login`
-        // from a terminal.
+        // OAuth providers are deliberately excluded — they require a browser
+        // round-trip we do not support from the desktop UI; users who need
+        // OAuth should run `pi /login` from a terminal.
         case "list_auth_status": {
           // Use the cached process-scoped registry when available so this
           // works even if the user opens Settings → Authentication before
@@ -2048,12 +2281,9 @@ export default function (pi: ExtensionAPI) {
             break;
           }
           try {
-            await (registry as ModelRegistryWithAuth).authStorage.modify(provider, async () => ({
-              type: "api_key",
-              key: apiKey,
-            }));
+            await persistProviderApiKey(registry, provider, apiKey);
             // Refresh so getAvailable() picks up the new key without restart.
-            registry.refresh();
+            await registry.refresh();
             sendTo(ws, success("set_api_key", { provider }));
           } catch (e: unknown) {
             sendTo(ws, error("set_api_key", errMessage(e)));
@@ -2076,8 +2306,8 @@ export default function (pi: ExtensionAPI) {
             break;
           }
           try {
-            await (registry as ModelRegistryWithAuth).authStorage.delete(provider);
-            registry.refresh();
+            await removePersistedProviderApiKey(registry, provider);
+            await registry.refresh();
             sendTo(ws, success("remove_api_key", { provider }));
           } catch (e: unknown) {
             sendTo(ws, error("remove_api_key", errMessage(e)));
@@ -2510,6 +2740,26 @@ export default function (pi: ExtensionAPI) {
         res.end(JSON.stringify({ projects: [] }));
       } else {
         serveSessionsList(res);
+      }
+      return;
+    }
+    if (urlPath === "/api/sessions/rename" && req.method === "POST") {
+      try {
+        const body = await readBoundedJsonBody(req, 8192);
+        const result = await renameManagedSession(body, {
+          sessionsDir: SESSIONS_DIR,
+          listAll: () => SessionManager.listAll(),
+          getActiveBinding: () => globalState.activeSessionBinding,
+          openSession: SessionManager.open,
+        });
+        res.writeHead(result.ok ? 200 : (result as RenameFailure).status, {
+          "Content-Type": "application/json",
+        });
+        res.end(JSON.stringify(result));
+      } catch (error) {
+        const status = error instanceof BoundedBodyError ? 413 : 400;
+        res.writeHead(status, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ ok: false, status, error: errMessage(error) }));
       }
       return;
     }
@@ -3697,6 +3947,15 @@ export default function (pi: ExtensionAPI) {
       }
 
       const readline = await import("node:readline");
+      const infos = await SessionManager.listAll();
+      const infosByCanonicalPath = new Map<string, SessionInfo>();
+      for (const info of infos) {
+        try {
+          infosByCanonicalPath.set(fs.realpathSync.native(info.path), info);
+        } catch {
+          // Ignore sessions removed while the catalog is being read.
+        }
+      }
       const dirEntries = fs.readdirSync(SESSIONS_DIR, { withFileTypes: true });
       const liveFiles = new Set<string>();
 
@@ -3739,8 +3998,11 @@ export default function (pi: ExtensionAPI) {
               try {
                 const result = await parseSessionFileCached(filePath, readline);
                 if (!result?.parsed) return null;
+                const canonicalFilePath = fs.realpathSync.native(filePath);
+                const info = infosByCanonicalPath.get(canonicalFilePath);
                 return {
                   ...(result.parsed as Record<string, unknown>),
+                  name: info?.name,
                   file,
                   filePath,
                   mtime: result.stat.mtimeMs,
@@ -4138,7 +4400,6 @@ export default function (pi: ExtensionAPI) {
 
     let header: { id?: string; timestamp?: string; cwd?: string } | null = null;
     let firstMessage: string | null = null;
-    let sessionName: string | null = null;
     let userMessageCount = 0;
     let lineCount = 0;
 
@@ -4149,7 +4410,6 @@ export default function (pi: ExtensionAPI) {
       try {
         const entry = JSON.parse(line);
         if (entry.type === "session") header = entry;
-        else if (entry.type === "session_info" && entry.name) sessionName = entry.name;
         else if (entry.type === "message" && entry.message?.role === "user") {
           userMessageCount++;
           if (!firstMessage) {
@@ -4181,7 +4441,6 @@ export default function (pi: ExtensionAPI) {
     return {
       id: header.id,
       timestamp: header.timestamp || "",
-      name: sessionName,
       firstMessage,
       cwd: header.cwd || null,
     };
@@ -4321,6 +4580,7 @@ export default function (pi: ExtensionAPI) {
             let sessionWorkspace = decodedPath;
             // biome-ignore lint/suspicious/noExplicitAny: dynamic search match rows
             const matches: any[] = [];
+            let nameMatches = false;
 
             for await (const line of rl) {
               if (!line.trim()) continue;
@@ -4336,6 +4596,7 @@ export default function (pi: ExtensionAPI) {
                 }
                 if (entry.type === "session_info" && entry.name) {
                   sessionName = entry.name;
+                  if (sessionName.toLowerCase().includes(q)) nameMatches = true;
                 }
                 if (entry.type === "message") {
                   const content = entry.message?.content;
@@ -4352,8 +4613,9 @@ export default function (pi: ExtensionAPI) {
                     firstMessage = text.substring(0, 120);
                   }
 
-                  if (text?.toLowerCase().includes(q)) {
-                    // Extract a snippet around the match
+                  if (text?.toLowerCase().includes(q) && matches.length < 3) {
+                    // Extract a snippet around the match, but continue scanning
+                    // after the cap so a later session_info can supply the final name.
                     const idx = text.toLowerCase().indexOf(q);
                     const start = Math.max(0, idx - 60);
                     const end = Math.min(text.length, idx + q.length + 60);
@@ -4366,8 +4628,6 @@ export default function (pi: ExtensionAPI) {
                       role: entry.message?.role || "unknown",
                       snippet: snippet.replace(/\n/g, " "),
                     });
-
-                    if (matches.length >= 3) break; // max 3 matches per session
                   }
                 }
               } catch {
@@ -4381,6 +4641,10 @@ export default function (pi: ExtensionAPI) {
             const projectMatch = buildProjectSearchMatch(q, sessionWorkspace);
             if (projectMatch && !matches.some((match) => match.role === "project")) {
               matches.unshift(projectMatch);
+            }
+
+            if (nameMatches && !matches.some((match) => match.role === "name")) {
+              matches.unshift({ role: "name", snippet: sessionName });
             }
 
             if (matches.length > 0) {
@@ -4421,6 +4685,12 @@ export default function (pi: ExtensionAPI) {
   // the new session. This is what keeps the WebView's URL alive across
   // session changes.
   function startServer(ctx: ExtensionContext) {
+    const binding = publishActiveSessionBinding(
+      globalState,
+      pi,
+      ctx.sessionManager.getSessionFile() || "",
+    );
+    publishedGeneration = binding.generation;
     // Always (re)publish per-session bindings — these are what every
     // request and WS message dispatches through.
     globalState.handleCommand = handleCommand;
@@ -4835,7 +5105,23 @@ export default function (pi: ExtensionAPI) {
   async function runNodeStyleHandler(req: Request, remoteAddress?: string): Promise<Response> {
     const url = tryParseUrl(req.url);
     if (!url) return new Response("Invalid request URL", { status: 400 });
-    const bodyText = req.method !== "GET" && req.method !== "HEAD" ? await req.text() : "";
+    let bodyText = "";
+    if (req.method !== "GET" && req.method !== "HEAD") {
+      if (url.pathname === "/api/sessions/rename") {
+        try {
+          const bounded = await readBoundedJsonBody(req, 8192);
+          bodyText = JSON.stringify(bounded);
+        } catch (error) {
+          const status = error instanceof BoundedBodyError ? 413 : 400;
+          return new Response(JSON.stringify({ ok: false, status, error: errMessage(error) }), {
+            status,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+      } else {
+        bodyText = await req.text();
+      }
+    }
 
     return await new Promise<Response>((resolve) => {
       const headers: Record<string, string> = {};
@@ -4958,6 +5244,7 @@ export default function (pi: ExtensionAPI) {
   // Per-session teardown (NOT process shutdown — see EmbeddedServerGlobal)
   // ═══════════════════════════════════════
   pi.on("session_shutdown", async () => {
+    if (publishedGeneration !== null) clearActiveSessionBinding(globalState, publishedGeneration);
     // Drop our captured ctx so we don't accidentally use a torn-down session
     // before the next instance re-publishes its bindings.
     latestCtx = null;

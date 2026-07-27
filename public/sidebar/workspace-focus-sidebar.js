@@ -40,6 +40,7 @@ export class WorkspaceFocusSidebar {
     this.onNewTask = options.onNewTask || null;
     this.onSessionSelect = options.onSessionSelect || null;
     this.onDelete = options.onDelete || null;
+    this.onRename = options.onRename || null;
     this.initialLimit = INITIAL_LIMIT;
     this.step = STEP;
     // Default to fully expanded so the active session is never hidden, even
@@ -103,6 +104,7 @@ export class WorkspaceFocusSidebar {
         showDeleteButton: true,
         onSelect: (s, p) => this.onSessionSelect?.(s, p),
         onDelete: (filePath) => this.onDelete?.(filePath),
+        onRename: (filePath, targetSession, item) => this.onRename?.(filePath, targetSession, item),
       });
       list.appendChild(item);
     }

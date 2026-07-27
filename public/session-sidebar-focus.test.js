@@ -49,6 +49,7 @@ beforeEach(async () => {
             workspaceActions: "Workspace actions",
             unavailable: "Unavailable",
             emptySession: "Empty session",
+            rename: "Rename",
             pinSession: "Pin session",
             unpinSession: "Unpin session",
             archiveSession: "Archive session",

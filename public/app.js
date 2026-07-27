@@ -109,6 +109,11 @@ import {
 } from "./workspace/actions.js";
 import { FileBrowser } from "./workspace/file-browser.js";
 
+// Initialize locale messages before constructing components that call t().
+const savedTheme = getCurrentTheme();
+applyTheme(savedTheme);
+await initI18n();
+
 const fetchInstances = async () => {
   try {
     const res = await fetch("/api/instances");
@@ -241,6 +246,7 @@ function enterFocus(project) {
     },
     onSessionSelect: handleSessionSelect,
     onDelete: (filePath) => deleteFocusSession(filePath),
+    onRename: (filePath, session, item) => sidebar.renameSession(filePath, session, item),
   });
   currentFocusSidebar = focusSidebar;
   focusSidebar.render();
@@ -5429,11 +5435,6 @@ const skillsPage = setupSkillsPage({
   showSuccess: (msg) => showSettingsSaveSuccess(skillsSaveMessageEl, msg),
   showError: (msg) => showSettingsSaveError(skillsSaveMessageEl, msg),
 });
-
-// Restore saved theme, then initialize i18n before any UI setup that calls t()
-const savedTheme = getCurrentTheme();
-applyTheme(savedTheme);
-await initI18n();
 
 // Expose rpcCommand for modules that need to send Pi commands without a
 // circular import (e.g. the context-viz compact button).

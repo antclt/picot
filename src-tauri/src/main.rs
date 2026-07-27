@@ -2268,14 +2268,13 @@ fn handle_window_destroyed(window: &tauri::Window) {
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 fn main() {
-    // Sync PATH from the user's login shell before anything else.
-    // macOS GUI apps (launched from Finder/Dock) inherit only the minimal
-    // system PATH (/usr/bin:/bin:/usr/sbin:/sbin).  fix_path_env::fix() runs
-    // the user's login shell and merges its environment into this process so
-    // that all child processes (pi binary, npm, git, …) see the same tools
-    // as a normal terminal session.
-    if let Err(err) = fix_path_env::fix() {
-        eprintln!("[picot] failed to sync PATH from login shell: {err}");
+    // Sync the user's login-shell environment before anything else.
+    // macOS GUI apps (launched from Finder/Dock) inherit neither PATH nor
+    // provider API keys exported by shell startup files. `fix_all_vars()`
+    // makes the embedded pi process see the same provider configuration as a
+    // normal terminal session.
+    if let Err(err) = fix_path_env::fix_all_vars() {
+        eprintln!("[picot] failed to sync PATH and provider environment from login shell: {err}");
     }
 
     tauri::Builder::default()

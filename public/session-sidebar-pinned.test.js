@@ -124,6 +124,14 @@ beforeEach(async () => {
             minutesAgo: "{minutes}m ago",
             hoursAgo: "{hours}h ago",
             yesterday: "Yesterday",
+            rename: "Rename",
+            renameSessionAriaLabel: "Rename session",
+            renameInputPlaceholder: "Session name",
+            renameErrorInvalid: "Enter a name",
+            renameErrorNotFound: "Session unavailable",
+            renameErrorTooLarge: "Request too large",
+            renameErrorServer: "Rename failed",
+            renameRetry: "Retry",
           },
         }),
       };
@@ -190,7 +198,9 @@ describe("SessionSidebar PINNED integration", () => {
     expect(pinStore.pinSession).toHaveBeenCalledWith("/sessions/alpha.jsonl");
 
     item.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 10, clientY: 10 }));
-    expect(document.querySelector(".sidebar-context-menu")).toBeNull();
+    const menu = document.querySelector(".sidebar-context-menu");
+    expect(menu).not.toBeNull();
+    expect(menu.textContent).toContain("Rename");
   });
 
   test("opens the same workspace actions from an ellipsis button and right click", () => {

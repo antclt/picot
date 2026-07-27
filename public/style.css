@@ -972,7 +972,7 @@ body {
 
 .session-action-slot {
   position: relative;
-  width: 52px;
+  width: 76px;
   height: 22px;
   flex-shrink: 0;
   margin-left: auto;
@@ -990,7 +990,8 @@ body {
 }
 
 .session-pin-btn,
-.session-archive-btn {
+.session-archive-btn,
+.session-rename-btn {
   position: absolute;
   top: 0;
   display: inline-flex;
@@ -1015,6 +1016,10 @@ body {
 }
 
 .session-pin-btn {
+  right: 48px;
+}
+
+.session-rename-btn {
   right: 24px;
 }
 
@@ -1057,14 +1062,16 @@ body {
 }
 
 .session-item:hover .session-pin-btn,
-.session-item:hover .session-archive-btn {
+.session-item:hover .session-archive-btn,
+.session-item:hover .session-rename-btn {
   opacity: 1;
   visibility: visible;
   pointer-events: auto;
 }
 
 .session-pin-btn:hover,
-.session-archive-btn:hover {
+.session-archive-btn:hover,
+.session-rename-btn:hover {
   background: var(--bg-glass-hover);
 }
 
@@ -1231,6 +1238,17 @@ body {
   font-size: var(--font-size-sm);
   outline: none;
   box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
+.session-rename-input.busy {
+  opacity: 0.65;
+}
+
+.session-rename-error {
+  flex-basis: 100%;
+  color: var(--error, #f87171);
+  font-size: var(--font-size-xs);
+  margin-top: 2px;
 }
 
 .session-meta {

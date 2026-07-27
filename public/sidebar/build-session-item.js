@@ -2,6 +2,10 @@
 // ABOUTME: Consumed by the normal sidebar, the focus sidebar, and the archived section.
 import { t } from "../i18n.js";
 
+export function getSessionDisplayTitle(session) {
+  return session?.name || session?.firstMessage || t("sidebar.emptySession");
+}
+
 export function buildSessionItem({
   session,
   project,
@@ -20,18 +24,22 @@ export function buildSessionItem({
   onPinToggle = null,
   onArchiveToggle = null,
   onDelete = null,
+  onRename = null,
+  onContextMenu = null,
   createIcon = null,
 }) {
   const item = document.createElement("div");
   item.className = "session-item";
   item.dataset.filePath = session.filePath;
   item.dataset.projectSearchText = projectSearchText;
+  item.dataset.name = String(session.name || "").toLowerCase();
+  item.dataset.firstMessage = String(session.firstMessage || "").toLowerCase();
 
   if (isActive) item.classList.add("active");
   if (isUnread) item.classList.add("unread");
   if (isStreaming) item.classList.add("streaming");
 
-  const title = session.name || session.firstMessage || t("sidebar.emptySession");
+  const title = getSessionDisplayTitle(session);
   const pinBtnLabel = isPinned ? t("sidebar.unpinSession") : t("sidebar.pinSession");
   const archiveBtnLabel = isArchived ? t("sidebar.unarchiveSession") : t("sidebar.archiveSession");
 
@@ -59,6 +67,13 @@ export function buildSessionItem({
 
   if (typeof onSelect === "function") {
     item.addEventListener("click", () => onSelect(session, project));
+  }
+  if (typeof onContextMenu === "function") {
+    item.addEventListener("contextmenu", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      onContextMenu(event, item, session);
+    });
   }
 
   if (showPinButton) {
@@ -99,6 +114,21 @@ export function buildSessionItem({
       if (typeof onArchiveToggle === "function") onArchiveToggle(session.filePath);
     });
     actionSlot.appendChild(archiveBtn);
+  }
+
+  if (typeof onRename === "function") {
+    const renameBtn = document.createElement("button");
+    renameBtn.type = "button";
+    renameBtn.className = "session-rename-btn";
+    const renameLabel = t("sidebar.rename");
+    renameBtn.title = renameLabel;
+    renameBtn.setAttribute("aria-label", renameLabel);
+    renameBtn.textContent = "✎";
+    renameBtn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      onRename(session.filePath, session, item);
+    });
+    actionSlot.appendChild(renameBtn);
   }
 
   if (showDeleteButton) {

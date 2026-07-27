@@ -1,11 +1,14 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { JSDOM } from "jsdom";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { initI18n, setLocale } from "../i18n.js";
 import { setupSettingsEditors } from "./editors.js";
 
 describe("settings API key model refresh", () => {
   let dom;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     dom = new JSDOM(`
       <div id="settings-api-keys"></div>
       <button id="config-editor-close"></button>
@@ -21,6 +24,13 @@ describe("settings API key model refresh", () => {
     globalThis.document = dom.window.document;
     globalThis.confirm = vi.fn(() => true);
     globalThis.requestAnimationFrame = (callback) => callback();
+    vi.stubGlobal("fetch", async (url) => {
+      const locale = String(url).includes("/zh") ? "zh" : "en";
+      const content = readFileSync(join(process.cwd(), "public/locales", `${locale}.json`), "utf8");
+      return { ok: true, status: 200, json: async () => JSON.parse(content) };
+    });
+    await initI18n();
+    await setLocale("en");
   });
 
   afterEach(() => {
@@ -75,6 +85,55 @@ describe("settings API key model refresh", () => {
 
     expect(onModelConfigurationChanged).toHaveBeenCalledTimes(1);
     expect(fetchModelInfo).not.toHaveBeenCalled();
+  });
+
+  test("renders authentication controls in the selected locale", async () => {
+    await setLocale("zh");
+    const rpcCommand = vi.fn(async (command) => {
+      if (command.type === "list_model_catalog") {
+        return {
+          success: true,
+          data: {
+            providers: [
+              {
+                provider: "anthropic",
+                displayName: "Anthropic",
+                configured: true,
+                source: "stored",
+                models: [
+                  {
+                    provider: "anthropic",
+                    id: "claude-sonnet-5",
+                    available: true,
+                    visible: true,
+                    health: { status: "healthy" },
+                  },
+                ],
+              },
+            ],
+          },
+        };
+      }
+      throw new Error(`Unexpected command: ${command.type}`);
+    });
+
+    const { loadApiKeysPanel } = setupSettingsEditors({
+      rpcCommand,
+      closeSettings: vi.fn(),
+      onModelConfigurationChanged: vi.fn(),
+      clearSettingsSaveMessage: vi.fn(),
+      setSettingsSaveButtonSaving: vi.fn(),
+      showSettingsSaveError: vi.fn(),
+      showSettingsSaveSuccess: vi.fn(),
+    });
+
+    await loadApiKeysPanel();
+
+    expect(document.querySelector(".api-key-row-summary").textContent).toBe(
+      "1 个已启用 · 1 个健康 · 0 个问题",
+    );
+    expect(document.querySelector(".api-model-check-visible").textContent).toBe("检查健康状态");
+    expect(document.querySelector(".api-key-row-actions button").textContent).toBe("检查健康状态");
   });
 
   test("renders model rows under authentication providers", async () => {
@@ -537,19 +596,28 @@ describe("settings API key model refresh", () => {
   });
 
   test("keeps provider expansion state and scroll position after toggling a model", async () => {
-    document.body.innerHTML = `
-      <div class="settings-content" style="overflow-y: auto; height: 100px;">
-        <div id="settings-api-keys"></div>
-      </div>
-      <button id="config-editor-close"></button>
-      <button id="config-editor-cancel"></button>
-      <button id="config-editor-save"></button>
-      <div id="config-editor-overlay"></div>
-      <div id="config-editor-modal"></div>
-      <textarea id="config-editor-textarea"></textarea>
-      <div id="config-editor-error"></div>
-      <div id="config-editor-path"></div>
-    `;
+    const settingsContent = document.createElement("div");
+    settingsContent.className = "settings-content";
+    settingsContent.style.cssText = "overflow-y: auto; height: 100px;";
+    const settingsApiKeys = document.createElement("div");
+    settingsApiKeys.id = "settings-api-keys";
+    settingsContent.appendChild(settingsApiKeys);
+    const createNode = (tag, id) => {
+      const node = document.createElement(tag);
+      node.id = id;
+      return node;
+    };
+    document.body.replaceChildren(
+      settingsContent,
+      createNode("button", "config-editor-close"),
+      createNode("button", "config-editor-cancel"),
+      createNode("button", "config-editor-save"),
+      createNode("div", "config-editor-overlay"),
+      createNode("div", "config-editor-modal"),
+      createNode("textarea", "config-editor-textarea"),
+      createNode("div", "config-editor-error"),
+      createNode("div", "config-editor-path"),
+    );
     const rpcCommand = vi.fn(async (command) => {
       if (command.type === "list_model_catalog") {
         return {

@@ -32,6 +32,7 @@ describe("isLoopbackOnlyApiRequest", () => {
     ["PUT", "/api/files/content"],
     ["POST", "/api/open"],
     ["POST", "/api/sessions/delete-batch"],
+    ["POST", "/api/sessions/rename"],
     ["POST", "/api/sessions/switch"],
     ["POST", "/api/workspace/open"],
     ["GET", "/api/agent-config"],

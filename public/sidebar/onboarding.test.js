@@ -25,6 +25,7 @@ beforeEach(async () => {
             archived: "Archived",
             untitled: "Untitled",
             emptySession: "Empty session",
+            rename: "Rename",
             archive: "Archive",
             unarchive: "Unarchive",
             archiveSession: "Archive session",

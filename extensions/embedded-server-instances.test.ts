@@ -18,7 +18,7 @@ describe("Picot instance registry process filtering", () => {
 });
 
 describe("Picot live instance session merge", () => {
-  it("adds a placeholder session for a live instance whose session file has not been written yet", () => {
+  it("adds an unnamed session for a live instance whose session file has not been written yet", () => {
     const projects = mergeLiveInstanceSessions(
       [],
       [
@@ -43,11 +43,11 @@ describe("Picot live instance session merge", () => {
             filePath:
               "/Users/me/.pi/agent/sessions/--Users-me-.pi-agent-super-agent--/new-session.jsonl",
             cwd: "/Users/me/.pi/agent/super-agent",
-            name: "New Session",
           }),
         ],
       },
     ]);
+    expect(projects[0].sessions[0].name).toBeUndefined();
   });
 
   it("does not duplicate a live instance when the session file is already listed", () => {

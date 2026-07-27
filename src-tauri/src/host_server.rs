@@ -704,7 +704,10 @@ mod tests {
             .await
             .unwrap();
 
-        let health_response = reqwest::get(format!("{}/health", host.origin()))
+        let client = reqwest::Client::builder().no_proxy().build().unwrap();
+        let health_response = client
+            .get(format!("{}/health", host.origin()))
+            .send()
             .await
             .unwrap();
         let health_status = health_response.status();
@@ -717,7 +720,9 @@ mod tests {
             .unwrap_or_else(|error| panic!("invalid health JSON {health_body:?}: {error}"));
         assert_eq!(health["protocolVersion"], 2);
         assert_eq!(health["piVersion"], "0.82.0");
-        let index = reqwest::get(format!("{}/app/settings", host.origin()))
+        let index = client
+            .get(format!("{}/app/settings", host.origin()))
+            .send()
             .await
             .unwrap()
             .text()

@@ -22,7 +22,10 @@ import { isSuperAgentEnabled } from "../super-agent/settings.js";
 import { basenameLocalPath } from "../workspace/path-utils.js";
 import { mergeWorkspaceProjects, resolvePinnedWorkspaceGroups } from "../workspace-projects.js";
 import { WorkspaceQuickInfo } from "../workspace-quick-info.js";
-import { buildSessionItem as buildSessionItemNode } from "./build-session-item.js";
+import {
+  buildSessionItem as buildSessionItemNode,
+  getSessionDisplayTitle,
+} from "./build-session-item.js";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 
@@ -147,6 +150,7 @@ export class SessionSidebar {
     // brand-new session's just-written .jsonl).
     this.loadSeq = 0;
     this.loadCommitted = 0;
+    this.loadInvalidatedThrough = 0;
 
     // Close context menu on click anywhere
     document.addEventListener("click", () => {
@@ -373,7 +377,7 @@ export class SessionSidebar {
         }
         const merged = mergeWorkspaceProjects(historyProjects, instances, this.projects);
         const projects = merged.projects;
-        if (seq < this.loadCommitted) return this.projects;
+        if (seq <= this.loadInvalidatedThrough || seq < this.loadCommitted) return this.projects;
         for (const reconciliation of merged.reconciliations) {
           this.pinStore.reconcileWorkspace?.(reconciliation);
           // A live workspace's provisional `path:` id resolves to its stable
@@ -396,7 +400,7 @@ export class SessionSidebar {
     }
 
     console.error("[Sidebar] Failed to load sessions:", lastError);
-    if (seq < this.loadCommitted) return this.projects;
+    if (seq <= this.loadInvalidatedThrough || seq < this.loadCommitted) return this.projects;
     const reason = String(lastError?.message || lastError || "").toLowerCase();
     const likelyRuntimeDown =
       reason.includes("failed to fetch") ||
@@ -417,6 +421,10 @@ export class SessionSidebar {
     retryBtn.addEventListener("click", () => this.loadSessions());
     loading.append(" ", retryBtn);
     this.container.appendChild(loading);
+  }
+
+  invalidateSessionLoads() {
+    this.loadInvalidatedThrough = Math.max(this.loadInvalidatedThrough, this.loadSeq);
   }
 
   setSearchQuery(query) {
@@ -485,12 +493,17 @@ export class SessionSidebar {
       const item = document.createElement("div");
       item.className = "session-item search-result-item";
       item.dataset.filePath = result.filePath;
+      item.dataset.name = String(result.sessionName || "").toLowerCase();
+      item.dataset.firstMessage = String(result.firstMessage || "").toLowerCase();
 
       if (result.filePath === this.activeSessionFile) {
         item.classList.add("active");
       }
 
-      const title = result.sessionName || result.firstMessage || t("sidebar.untitled");
+      const title = getSessionDisplayTitle({
+        name: result.sessionName,
+        firstMessage: result.firstMessage,
+      });
       const snippet = result.matches[0]?.snippet || "";
       const matchCount = result.matches.length;
       const time = this.formatTime(result.sessionTimestamp);
@@ -502,6 +515,21 @@ export class SessionSidebar {
       titleElement.title = title;
       titleElement.textContent = title;
       titleRow.appendChild(titleElement);
+      const renameButton = document.createElement("button");
+      renameButton.type = "button";
+      renameButton.className = "session-rename-btn";
+      renameButton.title = t("sidebar.rename");
+      renameButton.setAttribute("aria-label", t("sidebar.renameSessionAriaLabel"));
+      renameButton.textContent = "✎";
+      renameButton.addEventListener("click", (event) => {
+        event.stopPropagation();
+        this.startRename(item, {
+          filePath: result.filePath,
+          name: result.sessionName || "",
+          firstMessage: result.firstMessage || "",
+        });
+      });
+      titleRow.appendChild(renameButton);
       const snippetElement = document.createElement("div");
       snippetElement.className = "search-snippet";
       appendHighlightedText(snippetElement, snippet, this.searchQuery);
@@ -512,6 +540,13 @@ export class SessionSidebar {
       item.append(titleRow, snippetElement, meta);
 
       // Find the matching project/session to pass to onSessionSelect
+      item.addEventListener("contextmenu", (event) => {
+        this.showSessionContextMenu(event, item, {
+          filePath: result.filePath,
+          name: result.sessionName || "",
+          firstMessage: result.firstMessage || "",
+        });
+      });
       item.addEventListener("click", () => {
         for (const project of this.projects) {
           const session = project.sessions.find((s) => s.filePath === result.filePath);
@@ -580,9 +615,12 @@ export class SessionSidebar {
   }
 
   sessionItemMatchesSearch(item) {
-    const title = (item.querySelector(".session-title")?.textContent || "").toLowerCase();
-    const projectText = item.dataset.projectSearchText || "";
-    return title.includes(this.searchQuery) || projectText.includes(this.searchQuery);
+    const searchable = [
+      item.dataset.name || "",
+      item.dataset.firstMessage || "",
+      item.dataset.projectSearchText || "",
+    ];
+    return searchable.some((value) => value.includes(this.searchQuery));
   }
 
   resolveRecentSessions() {
@@ -737,47 +775,172 @@ export class SessionSidebar {
     }
   }
 
-  startRename(itemEl) {
-    const titleEl = itemEl.querySelector(".session-title");
-    if (!titleEl) return;
-    const currentName = titleEl.textContent;
+  showSessionContextMenu(event, itemEl, session) {
+    event?.preventDefault();
+    this.closeContextMenu();
+    const menu = document.createElement("div");
+    menu.className = "sidebar-context-menu";
+    menu.setAttribute("role", "menu");
+    const rename = document.createElement("button");
+    rename.type = "button";
+    rename.className = "context-menu-item";
+    rename.setAttribute("role", "menuitem");
+    rename.textContent = t("sidebar.rename");
+    rename.addEventListener("click", (clickEvent) => {
+      clickEvent.stopPropagation();
+      this.closeContextMenu();
+      this.startRename(itemEl, session);
+    });
+    menu.appendChild(rename);
+    document.body.appendChild(menu);
+    const rect = menu.getBoundingClientRect();
+    const anchor = event || itemEl.getBoundingClientRect();
+    const clientX = event ? event.clientX : anchor.left;
+    const clientY = event ? event.clientY : anchor.bottom;
+    const x = Math.min(clientX, window.innerWidth - rect.width - 8);
+    const y = Math.min(clientY, window.innerHeight - rect.height - 8);
+    menu.style.left = `${Math.max(8, x)}px`;
+    menu.style.top = `${Math.max(8, y)}px`;
+    this.contextMenu = menu;
+  }
 
+  renameSession(filePath, session, itemEl) {
+    const targetItem =
+      itemEl ||
+      Array.from(this.container.querySelectorAll(".session-item")).find(
+        (item) => item.dataset.filePath === filePath,
+      );
+    if (targetItem) this.startRename(targetItem, { ...session, filePath });
+  }
+
+  startRename(itemEl, session = null) {
+    const titleEl = itemEl.querySelector(".session-title");
+    if (!titleEl || itemEl.querySelector(".session-rename-input")) return;
+    const target = session ||
+      this.projects
+        .flatMap((project) => project.sessions || [])
+        .find((candidate) => candidate.filePath === itemEl.dataset.filePath) || {
+        filePath: itemEl.dataset.filePath,
+        name: itemEl.dataset.name || "",
+        firstMessage: itemEl.dataset.firstMessage || "",
+      };
+    const currentName = target.name || "";
     const input = document.createElement("input");
     input.className = "session-rename-input";
     input.value = currentName;
+    input.placeholder = target.firstMessage || t("sidebar.renameInputPlaceholder");
+    input.setAttribute("aria-label", t("sidebar.renameSessionAriaLabel"));
     titleEl.replaceWith(input);
     input.focus();
     input.select();
 
-    const commit = async () => {
-      const newName = input.value.trim();
-      if (newName && newName !== currentName) {
-        try {
-          await fetch("/api/rpc", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ type: "set_session_name", name: newName }),
-          });
-        } catch {
-          /* silent */
-        }
+    let finished = false;
+    let submitting = false;
+    const showError = (message) => {
+      let error = itemEl.querySelector(".session-rename-error");
+      if (!error) {
+        error = document.createElement("div");
+        error.className = "session-rename-error";
+        input.parentElement?.appendChild(error);
       }
-      const newTitle = document.createElement("div");
-      newTitle.className = "session-title";
-      newTitle.title = newName || currentName;
-      newTitle.textContent = newName || currentName;
-      input.replaceWith(newTitle);
+      error.textContent = message;
     };
-
-    input.addEventListener("blur", commit);
-    input.addEventListener("keydown", (ke) => {
-      if (ke.key === "Enter") {
-        ke.preventDefault();
-        input.blur();
+    const restore = () => {
+      if (finished) return;
+      finished = true;
+      const replacement = document.createElement("div");
+      replacement.className = "session-title";
+      replacement.title = getSessionDisplayTitle(target);
+      replacement.textContent = getSessionDisplayTitle(target);
+      input.replaceWith(replacement);
+      itemEl.querySelector(".session-rename-error")?.remove();
+    };
+    let canRetry = false;
+    const commit = async () => {
+      if (submitting || finished) return;
+      const newName = input.value.trim();
+      if (!newName) {
+        showError(t("sidebar.renameErrorInvalid"));
+        input.focus();
+        return;
       }
-      if (ke.key === "Escape") {
-        input.value = currentName;
-        input.blur();
+      if (newName === currentName) {
+        restore();
+        return;
+      }
+      submitting = true;
+      input.disabled = true;
+      input.classList.add("busy");
+      try {
+        const response = await fetch("/api/sessions/rename", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ filePath: target.filePath, name: newName }),
+        });
+        if (!response.ok) {
+          canRetry = response.status === 500;
+          const key =
+            response.status === 400
+              ? "sidebar.renameErrorInvalid"
+              : response.status === 404
+                ? "sidebar.renameErrorNotFound"
+                : response.status === 413
+                  ? "sidebar.renameErrorTooLarge"
+                  : "sidebar.renameErrorServer";
+          throw new Error(t(key));
+        }
+        this.invalidateSessionLoads();
+        target.name = newName;
+        for (const project of this.projects) {
+          for (const candidate of project.sessions || []) {
+            if (candidate.filePath === target.filePath) candidate.name = newName;
+          }
+        }
+        this.container.querySelectorAll(".session-item").forEach((row) => {
+          if (row.dataset.filePath !== target.filePath) return;
+          row.dataset.name = newName.toLowerCase();
+          const title = row.querySelector(".session-title");
+          if (title) {
+            title.textContent = newName;
+            title.title = newName;
+          }
+        });
+        restore();
+        await this.loadSessions({ quiet: true });
+      } catch (error) {
+        submitting = false;
+        input.disabled = false;
+        input.classList.remove("busy");
+        const message = error instanceof Error ? error.message : t("sidebar.renameErrorServer");
+        showError(message);
+        if (
+          canRetry &&
+          !itemEl.querySelector(".session-rename-retry") &&
+          input.disabled === false
+        ) {
+          const retry = document.createElement("button");
+          retry.type = "button";
+          retry.className = "session-rename-retry";
+          retry.textContent = t("sidebar.renameRetry");
+          const keepEditorFocused = (event) => event.preventDefault();
+          retry.addEventListener("pointerdown", keepEditorFocused);
+          retry.addEventListener("mousedown", keepEditorFocused);
+          retry.addEventListener("click", () => commit());
+          itemEl.querySelector(".session-rename-error")?.append(" ", retry);
+        }
+        input.focus();
+      }
+    };
+    input.addEventListener("blur", () => {
+      if (!submitting) restore();
+    });
+    input.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        commit();
+      } else if (event.key === "Escape") {
+        event.preventDefault();
+        restore();
       }
     });
   }
@@ -840,6 +1003,8 @@ export class SessionSidebar {
       },
       onArchiveToggle: (filePath) => this.toggleArchived(filePath),
       onDelete,
+      onRename: (filePath, session, item) => this.renameSession(filePath, session, item),
+      onContextMenu: (event, item, session) => this.showSessionContextMenu(event, item, session),
       createIcon: createSvgIcon,
     });
   }

@@ -829,8 +829,8 @@ impl PiManager {
         }
         // Ephemeral markers (kind, instance id, generation) are the only extra
         // environment the host may inject; they never include a capability or
-        // owner token.
-        for (key, value) in &spec.environment {
+        // owner token. The Pi agent root is host-owned and injected below.
+        for (key, value) in build_spawn_environment(spec)? {
             child.env(key, value);
         }
         child
@@ -1503,6 +1503,64 @@ fn parse_package_sources(output: &str) -> Vec<String> {
     sources
 }
 
+/// Resolve the directory used by Pi for its agent state and extensions.
+///
+/// An explicit non-empty `PI_CODING_AGENT_DIR` takes precedence. Otherwise the
+/// user's home directory is used as the parent of `.pi/agent`. The directory
+/// is created before canonicalization so the child always receives a stable,
+/// existing absolute path.
+fn resolve_pi_agent_root() -> Result<PathBuf, String> {
+    let root = match std::env::var("PI_CODING_AGENT_DIR") {
+        Ok(path) if !path.trim().is_empty() => PathBuf::from(path),
+        _ => {
+            let home = std::env::var("HOME")
+                .ok()
+                .filter(|path| !path.is_empty())
+                .or_else(|| {
+                    std::env::var("USERPROFILE")
+                        .ok()
+                        .filter(|path| !path.is_empty())
+                })
+                .ok_or_else(|| {
+                    "cannot resolve Pi agent root: HOME and USERPROFILE are unset".to_string()
+                })?;
+            PathBuf::from(home).join(".pi").join("agent")
+        }
+    };
+
+    std::fs::create_dir_all(&root)
+        .map_err(|error| format!("failed to create Pi agent root {}: {error}", root.display()))?;
+    root.canonicalize().map_err(|error| {
+        format!(
+            "failed to canonicalize Pi agent root {}: {error}",
+            root.display()
+        )
+    })
+}
+
+/// Copy caller-provided environment markers while keeping the agent root under
+/// host control. The canonical root is appended last so it cannot be replaced
+/// by an inherited or caller-provided value.
+fn build_spawn_environment(spec: &PiSpawnSpec) -> Result<Vec<(String, String)>, String> {
+    if spec
+        .environment
+        .iter()
+        .any(|(key, _)| key == "PI_CODING_AGENT_DIR")
+    {
+        return Err(
+            "PI_CODING_AGENT_DIR is reserved and cannot be supplied in spawn environment"
+                .to_string(),
+        );
+    }
+
+    let mut environment = spec.environment.clone();
+    environment.push((
+        "PI_CODING_AGENT_DIR".to_string(),
+        resolve_pi_agent_root()?.to_string_lossy().into_owned(),
+    ));
+    Ok(environment)
+}
+
 /// Build the pi CLI argument vector for a spawn spec. Pure and separately
 /// tested so the side-chat / quick-chat flag combinations are locked down
 /// without spawning a real process.
@@ -1878,6 +1936,110 @@ No packages installed.";
             no_session,
             no_tools,
             environment: vec![],
+        }
+    }
+
+    fn with_env_lock() -> std::sync::MutexGuard<'static, ()> {
+        static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        ENV_LOCK.get_or_init(|| Mutex::new(())).lock().unwrap()
+    }
+
+    #[test]
+    fn resolve_pi_agent_root_creates_home_agent_when_env_unset() {
+        let _lock = with_env_lock();
+        let temp = tempfile::tempdir().expect("create temp home");
+        let old_agent = std::env::var_os("PI_CODING_AGENT_DIR");
+        let old_home = std::env::var_os("HOME");
+        std::env::remove_var("PI_CODING_AGENT_DIR");
+        std::env::set_var("HOME", temp.path());
+
+        let root = resolve_pi_agent_root().expect("resolve default agent root");
+
+        assert!(root.ends_with(Path::new(".pi").join("agent")));
+        assert!(root.is_dir());
+        std::env::remove_var("PI_CODING_AGENT_DIR");
+        std::env::remove_var("HOME");
+        if let Some(value) = old_agent {
+            std::env::set_var("PI_CODING_AGENT_DIR", value);
+        }
+        if let Some(value) = old_home {
+            std::env::set_var("HOME", value);
+        }
+    }
+
+    #[test]
+    fn resolve_pi_agent_root_prefers_explicit_non_empty_env() {
+        let _lock = with_env_lock();
+        let temp = tempfile::tempdir().expect("create temp root");
+        let explicit = temp.path().join("custom-agent");
+        let old_agent = std::env::var_os("PI_CODING_AGENT_DIR");
+        std::env::set_var("PI_CODING_AGENT_DIR", &explicit);
+
+        let root = resolve_pi_agent_root().expect("resolve explicit agent root");
+
+        assert_eq!(root, explicit.canonicalize().unwrap());
+        assert!(root.is_dir());
+        std::env::remove_var("PI_CODING_AGENT_DIR");
+        if let Some(value) = old_agent {
+            std::env::set_var("PI_CODING_AGENT_DIR", value);
+        }
+    }
+
+    #[test]
+    fn resolve_pi_agent_root_uses_home_for_empty_explicit_env() {
+        let _lock = with_env_lock();
+        let temp = tempfile::tempdir().expect("create temp home");
+        let old_agent = std::env::var_os("PI_CODING_AGENT_DIR");
+        let old_home = std::env::var_os("HOME");
+        std::env::set_var("PI_CODING_AGENT_DIR", "");
+        std::env::set_var("HOME", temp.path());
+
+        let root = resolve_pi_agent_root().expect("resolve fallback agent root");
+
+        assert!(root.ends_with(Path::new(".pi").join("agent")));
+        std::env::remove_var("PI_CODING_AGENT_DIR");
+        std::env::remove_var("HOME");
+        if let Some(value) = old_agent {
+            std::env::set_var("PI_CODING_AGENT_DIR", value);
+        }
+        if let Some(value) = old_home {
+            std::env::set_var("HOME", value);
+        }
+    }
+
+    #[test]
+    fn spawn_environment_rejects_explicit_pi_coding_agent_dir_and_injects_root() {
+        let _lock = with_env_lock();
+        let temp = tempfile::tempdir().expect("create temp home");
+        let old_agent = std::env::var_os("PI_CODING_AGENT_DIR");
+        let old_home = std::env::var_os("HOME");
+        std::env::remove_var("PI_CODING_AGENT_DIR");
+        std::env::set_var("HOME", temp.path());
+
+        let mut rejected = spec(false, false, None);
+        rejected.environment = vec![("PI_CODING_AGENT_DIR".into(), "/forbidden".into())];
+        let error = build_spawn_environment(&rejected).unwrap_err();
+        assert!(error.contains("PI_CODING_AGENT_DIR"));
+
+        let mut accepted = spec(false, false, None);
+        accepted.environment = vec![("PI_STUDIO_TEST".into(), "kept".into())];
+        let environment = build_spawn_environment(&accepted).expect("build spawn environment");
+        assert!(environment.contains(&("PI_STUDIO_TEST".into(), "kept".into())));
+        assert_eq!(
+            environment
+                .iter()
+                .find(|(key, _)| key == "PI_CODING_AGENT_DIR")
+                .map(|(_, value)| PathBuf::from(value)),
+            Some(resolve_pi_agent_root().unwrap())
+        );
+
+        std::env::remove_var("PI_CODING_AGENT_DIR");
+        std::env::remove_var("HOME");
+        if let Some(value) = old_agent {
+            std::env::set_var("PI_CODING_AGENT_DIR", value);
+        }
+        if let Some(value) = old_home {
+            std::env::set_var("HOME", value);
         }
     }
 

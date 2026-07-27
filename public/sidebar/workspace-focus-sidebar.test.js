@@ -3,11 +3,16 @@
 import { JSDOM } from "jsdom";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { initI18n } from "../i18n.js";
+import { buildSessionItem } from "./build-session-item.js";
+import { SessionSidebar } from "./index.js";
 import { WorkspaceFocusSidebar } from "./workspace-focus-sidebar.js";
 
 function setupDom() {
   const dom = new JSDOM('<div id="root"></div>', { url: "http://localhost:3001" });
   globalThis.document = dom.window.document;
+  globalThis.window = dom.window;
+  globalThis.localStorage = dom.window.localStorage;
+  globalThis.CSS = dom.window.CSS;
 }
 
 function fakeBuilder() {
@@ -36,7 +41,20 @@ beforeEach(async () => {
         status: 200,
         json: async () => ({
           workspace: { back: "Back", newTask: "New Task", showMore: "Show more" },
-          sidebar: { emptySession: "Empty", showLess: "Show less" },
+          sidebar: {
+            emptySession: "Empty",
+            showLess: "Show less",
+            pinSession: "Pin session",
+            archiveSession: "Archive session",
+            rename: "Rename",
+            renameSessionAriaLabel: "Rename session",
+            deleteSession: "Delete session",
+            pinned: "Pinned",
+            projects: "Projects",
+            workspaceActions: "Workspace actions",
+            newChat: "New chat",
+            archived: "Archived",
+          },
         }),
       };
     }
@@ -60,6 +78,7 @@ function makeSidebar(overrides = {}) {
     onNewTask: overrides.onNewTask,
     onSessionSelect: overrides.onSessionSelect,
     onDelete: overrides.onDelete,
+    onRename: overrides.onRename,
   });
 }
 
@@ -134,6 +153,63 @@ describe("WorkspaceFocusSidebar", () => {
     expect(opts.showArchiveButton).toBe(false);
     expect(opts.showDeleteButton).toBe(true);
     expect(opts.isActive).toBe(true);
+  });
+
+  test("focus rows forward rename actions with the target session", () => {
+    const onRename = vi.fn();
+    const sidebar = makeSidebar({ onRename, sessions: makeSessions(1) });
+    sidebar.render();
+
+    const opts = sidebar.buildSessionItem.mock.calls[0][0];
+    expect(opts.onRename).toBeTypeOf("function");
+    opts.onRename("/s/0.jsonl", makeSessions(1)[0]);
+    expect(onRename).toHaveBeenCalledWith(
+      "/s/0.jsonl",
+      expect.objectContaining({ filePath: "/s/0.jsonl" }),
+      undefined,
+    );
+  });
+
+  test("focus rename uses the normal sidebar rename path and updates the row", async () => {
+    const session = { filePath: "/sessions/0.jsonl", name: "", firstMessage: "Original" };
+    const project = { path: "/work/alpha", sessions: [session] };
+    const requests = [];
+    global.fetch = vi.fn(async (url, options = {}) => {
+      requests.push({ url: String(url), options });
+      if (String(url) === "/api/sessions/rename") return { ok: true, status: 200 };
+      if (String(url) === "/api/sessions")
+        return { ok: true, json: async () => ({ projects: [] }) };
+      if (String(url) === "/api/instances")
+        return { ok: true, json: async () => ({ instances: [] }) };
+      return { ok: false, status: 404, json: async () => ({}) };
+    });
+
+    const normalSidebar = new SessionSidebar(document.getElementById("root"), vi.fn(), vi.fn());
+    normalSidebar.projects = [project];
+    normalSidebar.loadSessions = vi.fn(async () => normalSidebar.projects);
+    const focusSidebar = new WorkspaceFocusSidebar(document.getElementById("root"), {
+      project,
+      buildSessionItem,
+      onRename: (filePath, targetSession, item) =>
+        normalSidebar.renameSession(filePath, targetSession, item),
+    });
+    focusSidebar.render();
+
+    const item = document.querySelector('.session-item[data-file-path="/sessions/0.jsonl"]');
+    item.querySelector(".session-rename-btn").click();
+    const input = item.querySelector(".session-rename-input");
+    input.value = "Focus renamed";
+    input.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+
+    await vi.waitFor(() => expect(requests).toHaveLength(1));
+    expect(requests[0].url).toBe("/api/sessions/rename");
+    expect(JSON.parse(requests[0].options.body)).toEqual({
+      filePath: "/sessions/0.jsonl",
+      name: "Focus renamed",
+    });
+    expect(normalSidebar.projects[0].sessions[0].name).toBe("Focus renamed");
+    expect(item.dataset.name).toBe("focus renamed");
+    expect(item.querySelector(".session-title").textContent).toBe("Focus renamed");
   });
 
   test("delete button fires onDelete with the filePath", () => {
