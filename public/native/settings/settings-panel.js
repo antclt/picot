@@ -1,4 +1,4 @@
-import { applyTheme, getCurrentTheme, themes } from "../themes.js";
+import { applyTheme, getCurrentTheme, themes } from "../../themes.js";
 import { loadCostDashboard } from "./cost-dashboard.js";
 import { setupPackageBrowse } from "./package-browse.js";
 import { setupSettingsConfig } from "./settings-config.js";

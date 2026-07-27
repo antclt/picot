@@ -7,6 +7,7 @@ const catalog = buildCommandCatalog({
     { name: "review", description: "Review", source: "extension", path: "/global/review.ts" },
     { name: "fix", description: "Fix", source: "prompt", location: "project" },
     { name: "skill:test", description: "Test", source: "skill", location: "global" },
+    { name: "todos", description: "Show todos", source: "extension", location: "global" },
   ],
 });
 
@@ -37,6 +38,10 @@ describe("slash commands", () => {
     expect(resolveComposerInput("/review files", catalog, { working: true })).toEqual({
       kind: "runtime",
       command: { type: "prompt", message: "/review files" },
+    });
+    expect(resolveComposerInput("/todo", catalog, { working: false })).toEqual({
+      kind: "runtime",
+      command: { type: "prompt", message: "/todos" },
     });
     expect(resolveComposerInput("hello", catalog, { working: true, altKey: false })).toEqual({
       kind: "runtime",

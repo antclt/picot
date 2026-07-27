@@ -9,8 +9,11 @@ use crate::runtime_coordinator::{RuntimeStatus, RuntimeTarget};
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::Query;
 use axum::extract::{DefaultBodyLimit, Json, State};
+#[cfg(debug_assertions)]
 use axum::http::header::{CACHE_CONTROL, PRAGMA};
-use axum::http::{HeaderValue, StatusCode};
+#[cfg(debug_assertions)]
+use axum::http::HeaderValue;
+use axum::http::StatusCode;
 use axum::response::Response;
 use axum::routing::{get, post};
 use axum::Router;
@@ -24,6 +27,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::sync::oneshot;
+#[cfg(debug_assertions)]
 use tower::ServiceBuilder;
 use tower_http::services::{ServeDir, ServeFile};
 #[cfg(debug_assertions)]

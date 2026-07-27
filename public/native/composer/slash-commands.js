@@ -38,7 +38,8 @@ export function resolveComposerInput(input, catalog, options = {}) {
     const match = /^\/([^\s]+)(?:\s+(.*))?$/s.exec(message);
     const name = match?.[1] ?? "";
     const args = match?.[2] ?? "";
-    const command = catalog.get(name);
+    const resolvedName = name === "todo" && catalog.has("todos") ? "todos" : name;
+    const command = catalog.get(resolvedName);
     if (!command) return { kind: "rejected", reason: `Unknown command: /${name}` };
     if (command.capabilityState !== "enabled") {
       return { kind: "rejected", reason: `Command unavailable: /${name}` };
@@ -52,7 +53,9 @@ export function resolveComposerInput(input, catalog, options = {}) {
     if (command.type === "builtin") {
       return { kind: "builtin", action: command.action, arguments: args };
     }
-    return runtimeIntent("prompt", message, options.images);
+    const runtimeMessage =
+      resolvedName === name ? message : `/${resolvedName}${args ? ` ${args}` : ""}`;
+    return runtimeIntent("prompt", runtimeMessage, options.images);
   }
   if (!options.working) return runtimeIntent("prompt", message, options.images);
   return runtimeIntent(options.altKey ? "follow_up" : "steer", message, options.images);

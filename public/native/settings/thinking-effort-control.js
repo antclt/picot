@@ -2,7 +2,7 @@
 // the thinking level via runtime.request({type: "set_thinking_level"}) and
 // syncs the UI (radio aria-checked, thumb position, level name display).
 
-import { randomId } from "./random-id.js";
+import { randomId } from "../utils/random-id.js";
 
 export function setupThinkingEffortControl({ runtime, getTarget, onError }) {
   const radioGroup = document.getElementById("thinking-effort");

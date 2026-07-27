@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { setSuperAgentEnabled } from "../super-agent/settings.js";
+import { setSuperAgentEnabled } from "../../super-agent/settings.js";
 import { formatSessionTime, SessionSidebar } from "./session-sidebar.js";
 
 function makeSidebar(sessions, overrides = {}) {

@@ -6,7 +6,7 @@ const pendingCustomAnswers = [];
 
 export function showInlineExtensionPrompt(
   request,
-  { container = document.getElementById("messages") } = {},
+  { container = document.getElementById("messages"), dismissSignal } = {},
 ) {
   if (!container || !isInlineAskUserQuestionRequest(request)) return null;
   const content = parseDialogContent(request);
@@ -19,6 +19,7 @@ export function showInlineExtensionPrompt(
   }
   removeWelcome(container);
   return new Promise((resolve) => {
+    dismissSignal?.then(() => resolve({ cancelled: true }));
     const card = document.createElement("div");
     card.className = "inline-prompt-card";
     card.setAttribute("role", "group");

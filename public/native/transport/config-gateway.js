@@ -13,7 +13,7 @@
 // returns true when the notification was a config response (and should NOT be
 // rendered as a chat message), false otherwise.
 
-import { randomId } from "./random-id.js";
+import { randomId } from "../utils/random-id.js";
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 

@@ -1,4 +1,8 @@
-export function showNativeDialog(request, container = document.getElementById("dialog-container")) {
+export function showNativeDialog(
+  request,
+  container = document.getElementById("dialog-container"),
+  { dismissSignal } = {},
+) {
   return new Promise((resolve) => {
     const content = parseDialogContent(request);
     const dialog = document.createElement("div");
@@ -76,6 +80,7 @@ export function showNativeDialog(request, container = document.getElementById("d
     container.classList.remove("hidden");
     input?.focus();
 
+    dismissSignal?.then(() => finish({ cancelled: true }));
     let timeout = null;
     if (request.timeout) timeout = setTimeout(() => finish({ cancelled: true }), request.timeout);
     const keyHandler = (event) => {

@@ -19,7 +19,7 @@
 /* ── Rail — no background, just floating ticks on the right edge ── */
 .conv-nav {
   position: absolute;
-  right: 16px;
+  right: 4px;
   top: 50%;
   transform: translateY(-50%);
   z-index: 30;

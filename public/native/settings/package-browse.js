@@ -1,4 +1,4 @@
-import { renderPackageInstallFailure } from "../packages/install-status.js";
+import { renderPackageInstallFailure } from "../../packages/install-status.js";
 
 // Community package browser for the Settings → Extensions tab.
 //

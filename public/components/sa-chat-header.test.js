@@ -131,7 +131,9 @@ describe("sa-chat-header", () => {
   });
 
   it("keeps the base header measurable while super agent mode is active", () => {
-    const css = fs.readFileSync(path.join(__dirname, "../style.css"), "utf8");
+    const css = ["../style.css", "../components/super-agent-runtime.css"]
+      .map((p) => fs.readFileSync(path.join(__dirname, p), "utf8"))
+      .join("\n");
 
     expect(css).not.toMatch(/body\.super-agent-active\s+\.header\s*\{[^}]*display:\s*none/i);
     expect(css).toMatch(
@@ -140,7 +142,9 @@ describe("sa-chat-header", () => {
   });
 
   it("keeps the files panel out of the Super Agent right rail", () => {
-    const css = fs.readFileSync(path.join(__dirname, "../style.css"), "utf8");
+    const css = ["../style.css", "../components/super-agent-runtime.css"]
+      .map((p) => fs.readFileSync(path.join(__dirname, p), "utf8"))
+      .join("\n");
 
     expect(css).toMatch(/body\.super-agent-active\s+\.file-sidebar\s*\{[^}]*display:\s*none/i);
   });

@@ -8,6 +8,7 @@ export class ExtensionUiHost {
   #foregroundSessionId = null;
   #hooks;
   #queues = new Map();
+  #inFlight = new Map(); // sessionId → abort()
   #runtime;
   #showDialog;
   #showInlinePrompt;
@@ -29,7 +30,17 @@ export class ExtensionUiHost {
   }
 
   async setForegroundSession(sessionId) {
+    const oldId = this.#foregroundSessionId;
     this.#foregroundSessionId = sessionId;
+    // Abort any in-flight dialog for the previous session so it gets re-queued
+    // and shown again when the user returns to that session.
+    if (oldId && oldId !== sessionId) {
+      const abort = this.#inFlight.get(oldId);
+      if (abort) abort();
+    }
+    // Yield so any abort-triggered re-queues can complete before we drain
+    // the new session's queue.
+    await Promise.resolve();
     const queue = this.#queues.get(sessionId) ?? [];
     this.#queues.delete(sessionId);
     for (const pending of queue) await this.#showAndRespond(pending.target, pending.request);
@@ -88,12 +99,33 @@ export class ExtensionUiHost {
   }
 
   async #showAndRespond(target, request) {
+    // Create a dismiss signal so an external abort can resolve the dialog.
+    let triggerDismiss;
+    const dismissSignal = new Promise((resolve) => {
+      triggerDismiss = resolve;
+    });
+    // Track whether this dialog was aborted (session switched away).
+    let requeued = false;
+    this.#inFlight.set(target.sessionId, () => {
+      requeued = true;
+      triggerDismiss();
+    });
     let result;
     try {
-      const inlineResult = this.#showInlinePrompt(structuredClone(request));
-      result = inlineResult ? await inlineResult : await this.#showDialog(structuredClone(request));
+      const inlineResult = this.#showInlinePrompt(structuredClone(request), { dismissSignal });
+      result = inlineResult
+        ? await inlineResult
+        : await this.#showDialog(structuredClone(request), { dismissSignal });
     } catch {
       result = { cancelled: true };
+    }
+    this.#inFlight.delete(target.sessionId);
+    if (requeued) {
+      // Re-queue the request; it will be shown when the session regains focus.
+      const queue = this.#queues.get(target.sessionId) ?? [];
+      queue.unshift({ target: structuredClone(target), request: structuredClone(request) });
+      this.#queues.set(target.sessionId, queue);
+      return;
     }
     const response = {
       type: "extension_ui_response",

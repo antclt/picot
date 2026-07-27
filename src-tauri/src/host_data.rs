@@ -655,8 +655,10 @@ impl HostDataPlane {
     }
 
     pub fn cost_dashboard(&self, workspace_id: &str) -> Result<CostDashboard, HostDataError> {
-        let workspace = self.workspace_root(workspace_id)?;
-        let workspace = workspace.as_path();
+        // Validate the workspace id (keeps the RPC contract), but the dashboard
+        // aggregates usage across ALL projects under the session root — the UI
+        // is designed to rank projects globally, not scope to one workspace.
+        let _ = self.workspace_root(workspace_id)?;
         let Some(session_root) = &self.session_root else {
             return Ok(CostDashboard::default());
         };
@@ -679,7 +681,7 @@ impl HostDataPlane {
                 if path.extension().and_then(|value| value.to_str()) != Some("jsonl") {
                     continue;
                 }
-                if let Some(metrics) = parse_session_metrics(&path, workspace)? {
+                if let Some(metrics) = parse_session_metrics(&path, None)? {
                     sessions.push(metrics);
                 }
             }
@@ -799,7 +801,7 @@ fn search_session_file(
 
 fn parse_session_metrics(
     path: &Path,
-    workspace: &Path,
+    workspace: Option<&Path>,
 ) -> Result<Option<SessionMetrics>, HostDataError> {
     let file = std::fs::File::open(path).map_err(|error| HostDataError::Io(error.to_string()))?;
     let mut metrics = SessionMetrics {
@@ -916,11 +918,13 @@ fn parse_session_metrics(
     if metrics.id.is_empty() {
         return Ok(None);
     }
-    let Some(cwd) = metrics.cwd.as_ref().and_then(|cwd| cwd.canonicalize().ok()) else {
-        return Ok(None);
-    };
-    if cwd != workspace {
-        return Ok(None);
+    if let Some(workspace) = workspace {
+        let Some(cwd) = metrics.cwd.as_ref() else {
+            return Ok(None);
+        };
+        if !same_dir(cwd, workspace) {
+            return Ok(None);
+        }
     }
     if metrics.title.is_empty() {
         metrics.title = "Untitled".to_owned();
@@ -1592,7 +1596,7 @@ mod tests {
     }
 
     #[test]
-    fn builds_cost_dashboard_scoped_to_the_registered_workspace() {
+    fn builds_cost_dashboard_across_all_projects() {
         let nonce = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
@@ -1625,12 +1629,14 @@ mod tests {
             .with_session_root(temp.join("sessions"));
 
         let dashboard = data.cost_dashboard("workspace-a").unwrap();
-        assert_eq!(dashboard.summary.session_count, 1);
-        assert_eq!(dashboard.summary.total_cost, 0.5);
+        // Both projects are aggregated, not just the registered workspace.
+        assert_eq!(dashboard.summary.session_count, 2);
+        assert_eq!(dashboard.summary.total_cost, 99.5);
         assert_eq!(dashboard.summary.total_tokens, 30);
         assert_eq!(dashboard.by_model[0].name, "gpt-5");
         assert_eq!(dashboard.by_tool[0].name, "bash");
-        assert_eq!(dashboard.top_sessions[0].id, "session-a");
+        // The most expensive session sorts first.
+        assert_eq!(dashboard.top_sessions[0].id, "session-b");
         fs::remove_dir_all(temp).unwrap();
     }
 }

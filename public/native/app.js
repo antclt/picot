@@ -10,39 +10,44 @@ import { ConvNav } from "../ui/conv-nav.js";
 import { setupMessagesInsets } from "../ui/layout-insets.js";
 import { MessageRenderer } from "../ui/message-renderer.js";
 import { ToolCardRenderer } from "../ui/tool-card.js";
-import { setupAppUpdater } from "./app-updater.js";
-import { setupCommandPalette } from "./command-palette.js";
-import { setupComposerImageAttachments } from "./composer-images.js";
-import { setupComposerSlashMenu } from "./composer-slash-menu.js";
-import { setupComposerSubmitHandling } from "./composer-submit.js";
-import { ConfigGateway } from "./config-gateway.js";
+import { setupComposerImageAttachments } from "./composer/composer-images.js";
+import { setupComposerSlashMenu } from "./composer/composer-slash-menu.js";
+import { setupComposerSubmitHandling } from "./composer/composer-submit.js";
+import { renderQueuedMessages } from "./composer/queued-messages.js";
+import { buildCommandCatalog, resolveComposerInput } from "./composer/slash-commands.js";
+import { setupCommandPalette } from "./extensions/command-palette.js";
+import { showNativeDialog } from "./extensions/dialog.js";
+import { ExtensionUiHost } from "./extensions/extension-ui-host.js";
+import { showInlineExtensionPrompt } from "./extensions/inline-extension-prompt.js";
+import { setupAppUpdater } from "./features/app-updater.js";
+import { refreshLanQrButton, setupLanQr } from "./features/lan-qr.js";
+import { resolveRemoteAuth } from "./features/remote-auth.js";
+import {
+  isRpivTodoCommandNotify,
+  isRpivTodoWidgetRequest,
+  RpivTodoMirrorPanel,
+} from "./features/rpiv-todo-mirror.js";
+import { createSessionSelectionHandler } from "./session/session-navigation.js";
+import { setupSessionSearchDialog } from "./session/session-search-dialog.js";
+import { SessionSidebar } from "./session/session-sidebar.js";
+import { createSessionStore, reduceSessionState } from "./session/session-store.js";
+import { setupSettingsPanel } from "./settings/settings-panel.js";
+import { ConfigGateway } from "./transport/config-gateway.js";
 import {
   setupConfigGatewayConnectionListener,
   signalConfigGatewayReady,
-} from "./config-gateway-readiness.js";
-import { findLatestAssistantUsage, setupContextUsage } from "./context-usage.js";
-import { HostControlGateway } from "./control-gateway.js";
-import { HostDataGateway } from "./data-gateway.js";
-import { showNativeDialog } from "./dialog.js";
-import { ExtensionUiHost } from "./extension-ui-host.js";
-import { NativeFileBrowser } from "./file-browser.js";
-import { setupHeaderOpenApp } from "./header-open-app.js";
-import { showInlineExtensionPrompt } from "./inline-extension-prompt.js";
-import { setupAppKeyboardShortcuts } from "./keyboard-shortcuts.js";
-import { refreshLanQrButton, setupLanQr } from "./lan-qr.js";
-import { setupProjectHeader } from "./project-header.js";
-import { renderQueuedMessages } from "./queued-messages.js";
-import { randomId } from "./random-id.js";
-import { resolveRemoteAuth } from "./remote-auth.js";
-import { appRoutePath, parseAppRoute, replaceTemporarySessionRoute } from "./router.js";
-import { HostRuntimeAdapter, resolveHostWebSocketUrl } from "./runtime-adapter.js";
-import { RuntimeGateway } from "./runtime-gateway.js";
-import { createSessionSelectionHandler } from "./session-navigation.js";
-import { setupSessionSearchDialog } from "./session-search-dialog.js";
-import { SessionSidebar } from "./session-sidebar.js";
-import { createSessionStore, reduceSessionState } from "./session-store.js";
-import { setupSettingsPanel } from "./settings-panel.js";
-import { buildCommandCatalog, resolveComposerInput } from "./slash-commands.js";
+} from "./transport/config-gateway-readiness.js";
+import { HostControlGateway } from "./transport/control-gateway.js";
+import { HostDataGateway } from "./transport/data-gateway.js";
+import { HostRuntimeAdapter, resolveHostWebSocketUrl } from "./transport/runtime-adapter.js";
+import { RuntimeGateway } from "./transport/runtime-gateway.js";
+import { setupAppKeyboardShortcuts } from "./utils/keyboard-shortcuts.js";
+import { randomId } from "./utils/random-id.js";
+import { appRoutePath, parseAppRoute, replaceTemporarySessionRoute } from "./utils/router.js";
+import { findLatestAssistantUsage, setupContextUsage } from "./workspace/context-usage.js";
+import { NativeFileBrowser } from "./workspace/file-browser.js";
+import { setupHeaderOpenApp } from "./workspace/header-open-app.js";
+import { setupProjectHeader } from "./workspace/project-header.js";
 import {
   createSessionViaHost,
   openSessionInProjectViaHost,
@@ -50,7 +55,7 @@ import {
   setupNewSessionButton,
   setupOpenFolderButton,
   spawnSessionViaHost,
-} from "./workspace-actions.js";
+} from "./workspace/workspace-actions.js";
 
 const route = parseAppRoute(window.location.pathname);
 if (route.name !== "session") throw new Error("Native Picot requires a session route");
@@ -90,6 +95,9 @@ const imageInput = document.getElementById("image-input");
 const imagePreviews = document.getElementById("image-previews");
 const skillSlashMenu = document.getElementById("skill-slash-menu");
 const queuedMessages = document.getElementById("queued-messages");
+const todoMirrorPanel = new RpivTodoMirrorPanel({
+  container: document.querySelector(".input-area"),
+});
 
 // ── Composer model dropdown & thinking button ─────────────────────────────────
 const modelDropdown = document.getElementById("model-dropdown");
@@ -152,15 +160,47 @@ const control = new HostControlGateway(adapter);
 const config = new ConfigGateway({ runtime, getTarget: () => target });
 window.__picotConfigCall = (op, params, options) => config.call(op, params, options);
 const contextUsage = setupContextUsage();
+const sessionCostEl = document.getElementById("session-cost");
+let sessionTotalCost = 0;
+
+function computeTotalCostFromMessages(messages) {
+  if (!Array.isArray(messages)) return 0;
+  let total = 0;
+  for (const msg of messages) {
+    if (msg?.usage?.cost?.total) total += Number(msg.usage.cost.total) || 0;
+  }
+  return total;
+}
+
+function setSessionCost(cost) {
+  sessionTotalCost = cost;
+  if (!sessionCostEl) return;
+  if (!cost || cost <= 0) {
+    sessionCostEl.classList.remove("visible");
+    sessionCostEl.textContent = "";
+    return;
+  }
+  sessionCostEl.classList.add("visible");
+  sessionCostEl.textContent = `$${cost.toFixed(4)}`;
+  sessionCostEl.title = `Session cost: $${cost.toFixed(6)}`;
+}
 const extensionUi = new ExtensionUiHost({
   runtime,
-  showDialog: showNativeDialog,
-  showInlinePrompt: (request) => showInlineExtensionPrompt(request, { container: messagesElement }),
+  showDialog: (request, opts) => showNativeDialog(request, undefined, opts),
+  showInlinePrompt: (request, opts) =>
+    showInlineExtensionPrompt(request, { container: messagesElement, ...opts }),
   hooks: {
     notify: (request) => {
       // Configuration data-plane responses arrive as notify events; swallow
       // them so they don't render as chat messages.
       if (config.consumeNotify(request)) return;
+      // rpiv-todo's /todos command emits a centered notify transcript. Picot
+      // already mirrors the same state natively, so expand the panel instead
+      // of rendering a duplicate system message.
+      if (isRpivTodoCommandNotify(request.message)) {
+        todoMirrorPanel.expand();
+        return;
+      }
       messageRenderer.renderSystemMessage(request.message || "");
     },
     status: (request) => setStatus(request.statusText || "Connected"),
@@ -171,6 +211,11 @@ const extensionUi = new ExtensionUiHost({
       input.value = request.text || "";
       input.focus();
     },
+    widget: (request) => {
+      // rpiv-todo owns the tool/reducer; Picot renders a native mirror from
+      // the persisted todo tool-result snapshots instead of the TUI widget.
+      if (isRpivTodoWidgetRequest(request)) return;
+    },
   },
 });
 await extensionUi.setForegroundSession(target.sessionId);
@@ -179,6 +224,7 @@ const hydrateFromSnapshot = async (snapshot) => {
   await adoptTarget(reconcileSnapshotTarget(target, snapshot.target));
   store = reduceSessionState(store, snapshot);
   renderHistory(snapshot.state.messages ?? []);
+  todoMirrorPanel.hydrateFromMessages(snapshot.state.messages ?? []);
   renderQueuedMessages(queuedMessages, store.queue);
   convNav.rebuild();
   const pi = snapshot.state.pi ?? {};
@@ -189,11 +235,15 @@ const hydrateFromSnapshot = async (snapshot) => {
     findLatestAssistantUsage(snapshot.state.messages),
     currentModelContextWindow,
   );
+  setSessionCost(computeTotalCostFromMessages(snapshot.state.messages ?? []));
 };
 
 runtime.subscribe((frame) => {
   if (frame.type !== "runtime_event") return;
-  if (frame.target.instanceId !== target.instanceId) {
+  if (
+    frame.target.instanceId !== target.instanceId ||
+    (frame.target.sessionId && frame.target.sessionId !== target.sessionId)
+  ) {
     handleBackgroundRuntimeEvent(frame).catch(showError);
     return;
   }
@@ -396,7 +446,9 @@ async function loadBootstrapTarget(currentRoute) {
 }
 
 async function hydrateSnapshot() {
-  const snapshot = await runtime.snapshot(target.sessionId);
+  const expectedSessionId = target.sessionId;
+  const snapshot = await runtime.snapshot(expectedSessionId);
+  if (target.sessionId !== expectedSessionId) return; // stale: session switched while snapshot was in-flight
   await hydrateFromSnapshot(snapshot);
   configGatewayTargetReady = true;
   signalConfigGatewayReady();
@@ -561,6 +613,9 @@ document.addEventListener("sa-view-session", (event) => {
   if (projectPath) {
     openSessionInProject({ id: childSessionId, projectPath }).catch(showError);
   } else {
+    // Leaving the Agent Inbox session in-window: close its task panel so it
+    // doesn't stay pinned over the session we're navigating to.
+    updateSuperAgentActiveState(null);
     switchSession(childSessionId).catch(showError);
   }
 });
@@ -781,6 +836,7 @@ async function handleRuntimeEvent(event) {
         messageRenderer.updateStreamingMessage(streamingElement, event.message.content ?? []);
         messageRenderer.finalizeStreamingMessage(streamingElement, event.message.usage ?? null);
         contextUsage.setUsage(event.message.usage ?? null, currentModelContextWindow);
+        setSessionCost(sessionTotalCost + (event.message.usage?.cost?.total ?? 0));
         streamingElement = null;
         convNav.notifyNewMessage();
       }
@@ -797,6 +853,8 @@ async function handleRuntimeEvent(event) {
       break;
     case "tool_execution_end":
       toolRenderer.finalizeToolCard(event.toolCallId, event.result, event.isError);
+      if (event.toolName === "todo" && !event.isError)
+        todoMirrorPanel.applyToolResult(event.result);
       break;
     case "extension_ui_request":
       await extensionUi.handle(target, event);
@@ -852,6 +910,7 @@ async function adoptTarget(nextTarget, { updateRoute = true } = {}) {
   target = nextTarget;
   store = createSessionStore(target);
   renderQueuedMessages(queuedMessages, store.queue);
+  todoMirrorPanel.clear();
   streamingElement = null;
   adapter.subscribeTarget(target);
   sidebar?.setActive(target.sessionId);

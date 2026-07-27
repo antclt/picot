@@ -1,4 +1,4 @@
-import { randomId } from "./random-id.js";
+import { randomId } from "../utils/random-id.js";
 
 const DEVICE_ID_KEY = "picot-remote-device-id";
 const DEVICE_TOKEN_KEY = "picot-remote-device-token";

@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
-const styleCss = ["public/style.css", "public/native/session-sidebar.css"]
+const styleCss = ["public/style.css", "public/native/session/session-sidebar.css"]
   .map((path) => readFileSync(resolve(path), "utf8"))
   .join("\n");
 

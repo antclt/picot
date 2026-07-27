@@ -1,4 +1,4 @@
-import { formatTokens, setupContextViz } from "../ui/context-viz.js";
+import { formatTokens, setupContextViz } from "../../ui/context-viz.js";
 
 export function setupContextUsage({
   tokenUsageEl = document.getElementById("token-usage"),

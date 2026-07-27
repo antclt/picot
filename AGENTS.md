@@ -125,7 +125,7 @@ The frontend (`public/`) is vanilla JS with **no framework**. Keep it modular. S
 
 - **One concern per file.** Each module owns a single responsibility (e.g. WebSocket client, session sidebar, file browser, theme switching). Do not add unrelated logic to an existing file just because it is convenient.
 - **Avoid growing orchestration files.** `public/native/app.js` and `src-tauri/src/main.rs` are composition roots / entrypoints. New feature logic belongs in dedicated modules that are imported and wired there, not implemented inline.
-- **New file threshold.** If a feature adds more than ~50 lines of logic, extract it into its own module (e.g. `public/native/my-feature.js`) and import it from the appropriate entry point.
+- **New file threshold.** If a feature adds more than ~50 lines of logic, extract it into its own module in the appropriate `public/native/<subdir>/` (e.g. `public/native/features/my-feature.js`) and import it from the appropriate entry point.
 - **Large-file guardrail.** Before adding code to any file over 500 lines, first prefer extracting a focused module. If adding to the large file is still the smallest safe change, keep the addition minimal and mention the exception in the final response.
 - **CSS by feature.** Do not keep adding feature styles to `public/style.css`. Put component/feature styles in a nearby stylesheet and import it from `style.css`; keep `style.css` for imports, reset, and global shell rules.
 - **HTML by owner.** Avoid growing `public/index.html` with large feature markup. Prefer feature-owned DOM construction/templates in the module that owns the behavior, while preserving accessibility and focus management.
@@ -152,27 +152,31 @@ Picot is a Tauri v2 app. The three main layers:
 
 **2. Frontend (`public/`)** — vanilla JS, no framework.
 - `bootstrap-entry.js` + `native/app.js` — native host protocol entry point, wires up all native modules
-- `native/runtime-adapter.js` — WebSocket transport adapter to the native host runtime
-- `native/runtime-gateway.js` — mutation-capable RPC gateway for session runtime actions
-- `native/data-gateway.js` — read-only host RPC gateway for file/session/workspace queries
-- `native/config-gateway.js` — Picot Configuration data-plane client over picot-bridge RPC
-- `native/control-gateway.js` — write-capable host RPC gateway for package mgmt and opening links
-- `native/router.js` — parses/validates app route paths (workspace/session ids)
-- `native/session-store.js`, `native/session-tree.js` — client-side session state and conversation-tree navigation
-- `native/session-sidebar.js`, `native/session-navigation.js` — sidebar session list and selection dispatch
-- `native/project-header.js`, `native/header-open-app.js` — header workspace/git-branch info and "open in external app"
-- `native/file-browser.js` — right-sidebar file tree
-- `native/settings-panel.js`, `native/settings-config.js`, `native/settings-toggles.js`, `native/settings-save-status.js` — Settings overlay (tabs, config editors, toggles, save-status UI)
-- `native/workspace-actions.js` — bridges UI buttons to native Tauri workspace-window commands
-- `native/package-browse.js` — community package browser/installer for Settings → Extensions
-- `native/cost-dashboard.js`, `native/context-usage.js` — Usage tab cost dashboard and context-window usage pill
-- `native/dialog.js`, `native/extension-ui-host.js` — native modal dialogs driven by host/extension RPC requests
-- `native/slash-commands.js`, `native/composer-slash-menu.js`, `native/composer-images.js` — composer input (slash commands, pasted images)
-- `native/thinking-effort-control.js` — thinking-effort radio control
-- `native/lan-qr.js` — LAN QR-code modal for opening Picot on mobile
+
+`public/native/` is organized into domain subdirectories. Each directory owns its JS, CSS, and test files:
+
+| Subdir | Responsibility |
+|---|---|
+| `transport/` | RPC adapters & gateways: `runtime-adapter`, `runtime-gateway`, `data-gateway`, `config-gateway`, `config-gateway-readiness`, `control-gateway` |
+| `session/` | Session state, sidebar, navigation, search: `session-store`, `session-tree`, `session-sidebar`, `session-navigation`, `session-search-dialog` |
+| `composer/` | Message input controls: `composer-images`, `composer-slash-menu`, `composer-submit`, `slash-commands`, `queued-messages` |
+| `settings/` | Settings panel and all sub-panels: `settings-panel`, `settings-config`, `settings-toggles`, `settings-save-status`, `package-browse`, `cost-dashboard`, `thinking-effort-control` |
+| `workspace/` | Header, project info, file browser: `project-header`, `header-open-app`, `workspace-actions`, `context-usage`, `file-browser` |
+| `extensions/` | Extension UI, dialogs, command palette: `dialog`, `extension-ui-host`, `inline-extension-prompt`, `command-palette` |
+| `features/` | Independent self-contained features: `app-updater`, `lan-qr`, `remote-auth`, `rpiv-todo-mirror` |
+| `utils/` | Pure utilities (no DOM, no side-effects): `random-id`, `router`, `keyboard-shortcuts` |
+
+CSS-only files without a JS pair (`sidebar.css`, `header.css`, `messages.css`, `composer.css`, `instance-swap.css`) stay at the `native/` root and are imported from `public/style.css`.
+
+Cross-subdir import conventions:
+- Files within the same subdir use `./foo.js`.
+- Files importing from another subdir use `../other-dir/foo.js`.
+- Files in a subdir importing from sibling `public/` folders use `../../ui/foo.js`, `../../themes.js`, etc. (one extra `../` vs the root-level `native/` equivalent).
 - `ui/message-renderer.js`, `ui/markdown.js`, `ui/tool-card.js` — chat message rendering (dependency-free markdown, collapsible tool cards)
 - `ui/context-viz.js`, `ui/conv-nav.js`, `ui/image-lightbox.js`, `ui/layout-insets.js`, `ui/resizable-panel.js` — chat layout/nav helpers (context bar, turn navigator, image zoom, scroll insets, resizable panels)
 - `themes.js` — theme switching (6 built-in themes)
+
+**Where to put a new `native/` module:** place it in the subdir whose responsibility best matches it. If a module is purely algorithmic/pure-function with no DOM, prefer `utils/`. If it spans two subdirs equally, prefer the subdir of its primary consumer.
 
 **3. Pi bridge extensions (`extensions/`)** — TypeScript compiled into `extensions/dist/`.
 - `picot-bridge.ts` runs inside Pi and exposes Picot-specific commands.
@@ -180,8 +184,8 @@ Picot is a Tauri v2 app. The three main layers:
 
 ## Key data flows
 
-- User action → `native/runtime-gateway.js` → `/v2/ws` → `HostServer` → `NativePiManager` → Pi stdio RPC.
-- Extension UI requests → Pi stdio RPC event → `HostServer` → native WebView dialog host → response over `/v2/ws`.
+- User action → `native/transport/runtime-gateway.js` → `/v2/ws` → `HostServer` → `NativePiManager` → Pi stdio RPC.
+- Extension UI requests → Pi stdio RPC event → `HostServer` → `native/extensions/extension-ui-host.js` dialog host → response over `/v2/ws`.
 
 ## Bumping the embedded pi version
 

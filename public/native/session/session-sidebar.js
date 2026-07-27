@@ -1,6 +1,6 @@
-import { isSuperAgentProjectPath } from "../super-agent/session.js";
-import { isSuperAgentEnabled } from "../super-agent/settings.js";
-import { randomId } from "./random-id.js";
+import { isSuperAgentProjectPath } from "../../super-agent/session.js";
+import { isSuperAgentEnabled } from "../../super-agent/settings.js";
+import { randomId } from "../utils/random-id.js";
 
 // Rich session sidebar for the native host runtime.
 //
