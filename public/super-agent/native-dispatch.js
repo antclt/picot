@@ -15,13 +15,19 @@
 // importantly, makes the dispatched run show up as a real session inside the
 // target project.
 
-import { buildProjectAgentPrompt, markTaskDispatchTarget, markTaskFinished } from "./task-state.js";
+import {
+  buildProjectAgentPrompt,
+  markTaskChildSessionBound,
+  markTaskDispatchTarget,
+  markTaskFinished,
+} from "./task-state.js";
 
 export async function dispatchSuperAgentTaskNative({
   task,
   resolveWorkspace,
   spawnSession,
   sendPrompt,
+  resolveBoundTarget = null,
   updateTask,
   registerDispatchTarget = null,
   idempotencyKey = null,
@@ -53,6 +59,19 @@ export async function dispatchSuperAgentTaskNative({
     registerDispatchTarget?.(target, task.id);
 
     await sendPrompt(target, buildProjectAgentPrompt(dispatched), { idempotencyKey });
+
+    // A fresh Pi runtime only upgrades its temporary id when the host serves a
+    // snapshot. Resolve that binding before returning so the persisted task
+    // always points at a resumable session, even after the child runtime exits.
+    if (resolveBoundTarget) {
+      const boundTarget = await resolveBoundTarget(target);
+      if (boundTarget?.sessionId && boundTarget.sessionId !== target.sessionId) {
+        target = { ...target, ...boundTarget };
+        await updateTask(task.id, (current) =>
+          markTaskChildSessionBound(current, { childSessionId: target.sessionId }),
+        );
+      }
+    }
     return { task: dispatched, target };
   } catch (error) {
     logger?.error?.("[SuperAgent] native dispatch failed:", error);

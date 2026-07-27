@@ -581,6 +581,10 @@ document.addEventListener("sa-dispatch", (event) => {
       runtime.request({ type: "prompt", message }, dispatchTarget, {
         idempotencyKey: randomId(),
       }),
+    resolveBoundTarget: async (dispatchTarget) => {
+      const snapshot = await runtime.snapshot(dispatchTarget.sessionId);
+      return snapshot.target;
+    },
     updateTask: (taskId, updater) =>
       updateSuperAgentTask(window.__picotConfigCall, taskId, updater),
     registerDispatchTarget: (dispatchTarget, taskId) => {

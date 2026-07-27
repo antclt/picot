@@ -22,11 +22,17 @@ describe("dispatchSuperAgentTaskNative", () => {
       instanceId: "instance-a",
     });
     const sendPrompt = vi.fn().mockResolvedValue(undefined);
+    const resolveBoundTarget = vi.fn().mockResolvedValue({
+      workspaceId: "workspace-a",
+      sessionId: "session-formal",
+      instanceId: "instance-a",
+    });
     const updates = [];
+    let currentTask = makeTask();
     const updateTask = vi.fn(async (_taskId, updater) => {
-      const next = updater(makeTask());
-      updates.push(next);
-      return next;
+      currentTask = updater(currentTask);
+      updates.push(currentTask);
+      return currentTask;
     });
     const registerDispatchTarget = vi.fn();
 
@@ -35,6 +41,7 @@ describe("dispatchSuperAgentTaskNative", () => {
       resolveWorkspace,
       spawnSession,
       sendPrompt,
+      resolveBoundTarget,
       updateTask,
       registerDispatchTarget,
       logger: { error: vi.fn(), warn: vi.fn() },
@@ -51,12 +58,18 @@ describe("dispatchSuperAgentTaskNative", () => {
       expect.stringContaining("Task ID: task-1"),
       expect.any(Object),
     );
+    expect(resolveBoundTarget).toHaveBeenCalledWith(
+      expect.objectContaining({ sessionId: "temporary-abc" }),
+    );
     expect(updates.at(-1).dispatch).toMatchObject({
       childWorkspaceId: "workspace-a",
       childInstanceId: "instance-a",
-      childSessionId: "temporary-abc",
+      childSessionId: "session-formal",
     });
-    expect(result?.target?.instanceId).toBe("instance-a");
+    expect(result?.target).toMatchObject({
+      instanceId: "instance-a",
+      sessionId: "session-formal",
+    });
   });
 
   it("skips tasks without a target project", async () => {
