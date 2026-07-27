@@ -172,7 +172,7 @@ Picot does not re-implement agent logic — it embeds Pi and exposes its runtime
 - **Session lifecycle APIs** — create, switch, and resume sessions; full per-project history
 - **WebSocket broker** — multiple UI clients can connect to the same pi process simultaneously
 - **Extension compatibility** — user extensions from `~/.pi/agent/extensions/` and `.pi/extensions/` are auto-loaded
-- **Credential reuse** — reads Pi's existing `~/.pi/agent/auth.json`; no separate login needed
+- **Credential reuse and setup** — reuses Pi's `~/.pi/agent/auth.json`, imports shell-exported provider variables for GUI launches, and can persist API keys from Settings
 
 ---
 
@@ -210,7 +210,7 @@ The embedded pi process loads `embedded-server.mjs` at startup. That extension o
 2. Click a project bubble or pick a folder
 3. Start chatting — the embedded pi agent starts automatically
 
-Provide your model credentials via `pi /login` inside any workspace, or by writing `~/.pi/agent/auth.json` directly. Picot doesn't manage credentials itself.
+Provide credentials with `pi /login`, shell-exported provider variables, or Settings → Configuration. API keys saved in Settings use Pi's existing `~/.pi/agent/auth.json` format.
 
 ---
 

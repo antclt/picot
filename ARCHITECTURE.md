@@ -202,7 +202,7 @@ HTTP+WS server。该 server 是**进程作用域**的 —— 它在 `new_session
   `/api/files`（读取；workspace scope 支持条件写入，`scope=picker` 仅限
   loopback）、`/api/files/raw`（图片 / PDF）、`/api/search`、
   `/api/cost-dashboard`、`/api/lan-qr`、`/api/instances`、
-  `/api/workspace-info`、`/api/open`、`/api/agent-config`、
+  `/api/workspace-info`、`/api/sessions/rename`（loopback-only）、`/api/open`、`/api/agent-config`、
   `/api/models-config`、`/api/git-branch`、`/api/file-mentions`（`@` 文件提及
   自动补全，仅 loopback、且仅由窗口主会话 Pi 提供服务），加 `POST /api/rpc` 透传。
   `public/` 下的静态资源在 `/` 下分发。网络策略集中在
@@ -545,6 +545,12 @@ Tauri command handler（`new_session_core`、`switch_session_core`、
 - **Tauri v2 capabilities 必须与命令表面对应。** 这条不变量由
   `scripts/check-tauri-permissions.js` 在 `bun run test` 中强制。
 - **Rust 进程只派生内嵌 pi binary。** 绝不调用 `$PATH` 上的 `pi`。
+- **Pi agent root 必须唯一且 canonical。** `PiManager::spawn_with_spec_inner()` 创建并 canonicalize agent root，拒绝 `PiSpawnSpec.environment` 覆盖保留变量 `PI_CODING_AGENT_DIR`，并将该值注入每个 Pi 子进程；embedded server 优先读取同一变量。这样无参 `SessionManager.listAll()` 与 Picot 的 `sessions/<project>/*.jsonl` 使用同一树。
+- **Provider 凭证遵循 Pi 的来源优先级。** Picot 启动时通过 `fix_path_env::fix_all_vars()` 将 login shell 环境传给嵌入的 Pi，因此 `models.json` 中引用的 provider 环境变量在 Finder/Dock 启动时也可用；设置页写入/删除 API key 必须委托 Pi 0.82 的 runtime credential store，不能直接改写 `auth.json`，也不能把密钥返回或写入日志。
+- **Session name 由 Pi 管理。** `/api/sessions` 使用无参 `SessionManager.listAll()` 的 `SessionInfo.name`，Picot 只保留 120 字首条消息截断、空 session 本地化标题和短 pipe session 过滤；rename 只能通过 `SessionManager.setSessionName()` 或 `SessionManager.open(path).appendSessionInfo()` 写入。
+- **Session rename 是 loopback-only。** `POST /api/sessions/rename` 必须登记在 `extensions/request-access.ts`，Node 与 Bun adapter 共用 peer-address 策略；LAN surface 仍只读。
+- **Rename 的路径检查不是同用户 TOCTOU 防护。** 服务端对 root、realpath、`.jsonl` 和 managed `SessionInfo.path` 做 containment 校验，阻止浏览器/LAN 的静态路径逃逸，但不声称能阻止同一 OS 用户在校验后替换文件。
+- **Sidebar rename 必须设置 mutation barrier。** 成功 rename 在乐观更新前推进 `loadInvalidatedThrough`；`loadCommitted` 只记录实际渲染的最高序列，任何 barrier 之前发出的 catalog 响应不得覆盖新名称。
 - **LAN surface 只读。** LAN/mobile 客户端可以加载静态资源并访问明确的
   只读 REST（health、sessions、workspace files、search、cost、instances、
   git-branch、lan-qr、workspace-info），但不能直达控制面。`/ws`、

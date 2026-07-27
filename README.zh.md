@@ -172,7 +172,7 @@ Picot 不重新实现 Agent 逻辑——它内嵌 Pi 并通过原生 UI 暴露�
 - **会话生命周期 API** — 创建、切换、恢复会话，完整的按项目历史
 - **WebSocket Broker** — 多个 UI 客户端可同时连接同一个 pi 进程
 - **扩展兼容** — 自动加载 `~/.pi/agent/extensions/` 和 `.pi/extensions/` 中的用户扩展
-- **凭证复用** — 读取 Pi 已有的 `~/.pi/agent/auth.json`，无需单独登录
+- **凭证复用与设置** — 复用 Pi 的 `~/.pi/agent/auth.json`，GUI 启动时导入 shell 中导出的 provider 变量，也可在设置页保存 API 密钥
 
 ---
 
@@ -210,7 +210,7 @@ Picot 不重新实现 Agent 逻辑——它内嵌 Pi 并通过原生 UI 暴露�
 2. 点击项目气泡或选择一个文件夹
 3. 开始对话 — 嵌入的 pi Agent 会自动在该工作区启动
 
-通过任意工作区内的 `pi /login` 提供模型凭证，或直接写入 `~/.pi/agent/auth.json`。Picot 本身不管理凭证。
+可以通过任意工作区内的 `pi /login`、shell 导出的 provider 变量，或“设置 → 配置”提供凭证。设置页保存的 API 密钥使用 Pi 的 `~/.pi/agent/auth.json` 格式。
 
 ---
 
