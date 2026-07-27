@@ -146,6 +146,20 @@ function markSuperAgentLaunched() {
   }
 }
 let pendingBoundSessionFirstMessage = null;
+
+// Maps a dispatched child runtime instanceId -> Agent Inbox task id, so
+// `session_bound` events from the background child can upgrade the task's
+// temporary child session id to the persisted one.
+//
+// Declared before the first `await` below: once `adapter.connect()` runs,
+// background runtime events can arrive and call `bindDispatchedChildSession`
+// (which reads this map) any time later top-level `await`s yield control
+// back to the event loop — before the rest of this module's top-level code
+// has finished executing. Declaring it late (as a later top-level `const`)
+// caused a "Cannot access 'dispatchedInstances' before initialization" TDZ
+// crash that could abort session creation on fresh installs.
+const dispatchedInstances = new Map();
+
 const remoteAuth = await resolveRemoteAuth();
 
 const adapter = new HostRuntimeAdapter({
@@ -619,11 +633,6 @@ document.addEventListener("sa-view-session", (event) => {
     switchSession(childSessionId).catch(showError);
   }
 });
-
-// Maps a dispatched child runtime instanceId -> Agent Inbox task id, so
-// `session_bound` events from the background child can upgrade the task's
-// temporary child session id to the persisted one.
-const dispatchedInstances = new Map();
 
 document.addEventListener("sa-dispatch", (event) => {
   const task = event.detail;
