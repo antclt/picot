@@ -232,7 +232,8 @@ const extensionUi = new ExtensionUiHost({
     },
   },
 });
-await extensionUi.setForegroundSession(target.sessionId);
+await extensionUi.setForegroundSession(target.sessionId, { flush: false });
+await extensionUi.flushForegroundQueue();
 
 const hydrateFromSnapshot = async (snapshot) => {
   await adoptTarget(reconcileSnapshotTarget(target, snapshot.target));
@@ -250,6 +251,9 @@ const hydrateFromSnapshot = async (snapshot) => {
     currentModelContextWindow,
   );
   setSessionCost(computeTotalCostFromMessages(snapshot.state.messages ?? []));
+  // Flush queued extension prompts after rendering is settled so inline cards
+  // are not immediately destroyed by a subsequent renderHistory() clear.
+  await extensionUi.flushForegroundQueue();
 };
 
 runtime.subscribe((frame) => {
@@ -544,6 +548,15 @@ async function switchSession(sessionId) {
     "",
     appRoutePath({ name: "session", workspaceId: target.workspaceId, sessionId: target.sessionId }),
   );
+  // Authoritative re-check: whatever the caller passed to
+  // updateSuperAgentActiveState() before invoking switchSession() may be
+  // stale or skipped entirely (new sessions, sa-view-session routing, etc).
+  // Recompute from the now-adopted target so a leftover `super-agent-active`
+  // class can never survive a navigation and silently disable the header's
+  // drag region (-webkit-app-region: drag) for the rest of the session.
+  const adoptedSession =
+    sidebar?.sessions?.find((session) => session.id === target.sessionId) ?? null;
+  updateSuperAgentActiveState(adoptedSession);
 
   // Phase 2: render history from disk immediately — user sees messages right
   // away without waiting for the Pi process to warm up.
@@ -565,6 +578,8 @@ async function switchSession(sessionId) {
     // gracefully rather than surfacing an error over a readable history.
     console.warn("[switchSession] Pi snapshot failed, showing disk history:", error);
     setStatus("Connected");
+    // Still flush any queued extension prompts even when snapshot fails.
+    await extensionUi.flushForegroundQueue();
   }
 }
 
@@ -923,7 +938,7 @@ async function adoptTarget(nextTarget, { updateRoute = true } = {}) {
   streamingElement = null;
   adapter.subscribeTarget(target);
   sidebar?.setActive(target.sessionId);
-  await extensionUi.setForegroundSession(target.sessionId);
+  await extensionUi.setForegroundSession(target.sessionId, { flush: false });
 }
 
 function renderHistory(messages) {

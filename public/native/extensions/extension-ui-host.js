@@ -29,7 +29,18 @@ export class ExtensionUiHost {
     return this.#queues.get(sessionId)?.length ?? 0;
   }
 
-  async setForegroundSession(sessionId) {
+  /**
+   * Switch the foreground session and abort any in-flight dialog for the
+   * previous session (re-queuing it).
+   *
+   * @param {string} sessionId
+   * @param {{ flush?: boolean }} [options]
+   *   flush (default true) — drain the new session’s queue immediately.
+   *   Pass { flush: false } from adoptTarget() so that renderHistory() can
+   *   clear the messages container before the inline card is inserted; then
+   *   call flushForegroundQueue() after the final render pass.
+   */
+  async setForegroundSession(sessionId, { flush = true } = {}) {
     const oldId = this.#foregroundSessionId;
     this.#foregroundSessionId = sessionId;
     // Abort any in-flight dialog for the previous session so it gets re-queued
@@ -38,9 +49,19 @@ export class ExtensionUiHost {
       const abort = this.#inFlight.get(oldId);
       if (abort) abort();
     }
-    // Yield so any abort-triggered re-queues can complete before we drain
-    // the new session's queue.
+    if (flush) await this.flushForegroundQueue();
+  }
+
+  /**
+   * Drain queued prompts for the current foreground session.
+   * Call this AFTER the final renderHistory() so inline cards are not
+   * immediately destroyed by a subsequent clear().
+   */
+  async flushForegroundQueue() {
+    // Yield a microtask so any abort-triggered re-queues can land first.
     await Promise.resolve();
+    const sessionId = this.#foregroundSessionId;
+    if (!sessionId) return;
     const queue = this.#queues.get(sessionId) ?? [];
     this.#queues.delete(sessionId);
     for (const pending of queue) await this.#showAndRespond(pending.target, pending.request);

@@ -25,7 +25,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use tauri::image::Image;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
-use tauri::{AppHandle, Manager, TitleBarStyle, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
+use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_dialog::MessageDialogKind;
 use tauri_plugin_updater::UpdaterExt;
@@ -330,12 +330,12 @@ fn open_native_workspace_window(
         .icon(icon)
         .map_err(|error| error.to_string())?;
 
-    #[cfg(target_os = "macos")]
-    let builder = builder
-        .decorations(true)
-        .title_bar_style(TitleBarStyle::Overlay)
-        .hidden_title(true);
-    #[cfg(not(target_os = "macos"))]
+    // Plain native title bar on every platform. The overlay title bar
+    // (`TitleBarStyle::Overlay` + `hidden_title(true)`) extended the WebView
+    // under the traffic lights so the custom header/sidebar could render
+    // there, but it also made three-finger/click-drag window moves
+    // unreliable — reverted in favor of the guaranteed-to-work native title
+    // bar drag behavior.
     let builder = builder.decorations(true);
     let window = builder.build().map_err(|error| error.to_string())?;
     set_window_workspace(app, window.label(), &target.workspace_id);
@@ -477,12 +477,7 @@ fn open_bootstrap_window(app: &AppHandle, startup_error: &str) -> Result<(), Str
         .icon(icon)
         .map_err(|error| error.to_string())?;
 
-    #[cfg(target_os = "macos")]
-    let builder = builder
-        .decorations(true)
-        .title_bar_style(TitleBarStyle::Overlay)
-        .hidden_title(true);
-    #[cfg(not(target_os = "macos"))]
+    // See open_native_workspace_window() — plain native title bar, no overlay.
     let builder = builder.decorations(true);
     builder.build().map_err(|error| error.to_string())?;
     Ok(())

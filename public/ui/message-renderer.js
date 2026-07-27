@@ -228,6 +228,7 @@ export class MessageRenderer {
     let contentHtml = "";
     let usageHtml = "";
     let rawStreamingText = "";
+    let hasThinking = false;
 
     if (typeof message.content === "string") {
       rawStreamingText = message.content;
@@ -242,7 +243,8 @@ export class MessageRenderer {
             ? renderStreamingMarkdown(block.text)
             : renderMarkdown(block.text);
         } else if (block.type === "thinking") {
-          contentHtml += this.renderThinkingBlock(block.thinking);
+          hasThinking = true;
+          contentHtml += this.renderThinkingBlock(block.thinking, message.usage?.cost?.total);
         }
       }
     }
@@ -252,8 +254,11 @@ export class MessageRenderer {
       div._streamingRawText = rawStreamingText;
     }
 
-    // Usage/cost info
-    if (message.usage?.cost) {
+    const hasText = rawStreamingText.trim().length > 0;
+
+    // Usage/cost info — suppressed here when a thinking block is present,
+    // since the thinking header already surfaces the same total cost inline.
+    if (message.usage?.cost && !hasThinking) {
       const cost = message.usage.cost.total;
       if (cost > 0) {
         usageHtml = `<span class="message-usage">$${cost.toFixed(4)}</span>`;
@@ -267,24 +272,39 @@ export class MessageRenderer {
     // already rendered by ToolCardRenderer).
     if (!isStreaming && isHistory && !contentHtml) return null;
 
+    // Only render a footer when there's something meaningful in it: real
+    // copyable text (not just a thinking block, which has nothing to copy)
+    // or a non-thinking usage badge.
+    const showFooter = !isStreaming && (hasText || usageHtml);
+    const footerHtml = showFooter
+      ? `<div class="message-footer">${hasText ? '<button class="message-copy-btn" aria-label="Copy message"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>' : ""}${usageHtml}</div>`
+      : "";
+
     div.innerHTML = `
       <div class="message-content${streamingClass}">${contentHtml}</div>
-      ${!isStreaming ? `<div class="message-footer"><button class="message-copy-btn" aria-label="Copy message"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>${usageHtml}</div>` : ""}
+      ${footerHtml}
     `;
 
-    if (!isStreaming) this._setupCopyBtn(div);
+    if (!isStreaming && hasText) this._setupCopyBtn(div);
     this.container.appendChild(div);
     if (!isHistory) this.scrollToBottom();
 
     return div;
   }
 
-  renderThinkingBlock(thinking) {
+  renderThinkingBlock(thinking, cost) {
     // Returns an HTML string — callers concatenate it into contentHtml.
     // Click handling is wired via event delegation in initThinkingToggleDelegation.
     const chevronSvg = `<svg width="8" height="8" viewBox="0 0 8 8" fill="currentColor" aria-hidden="true"><path d="M2 1l4 3-4 3z"/></svg>`;
     const brainSvg = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px" aria-hidden="true"><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/><path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/><path d="M12 5v13"/><path d="M6.5 9h11"/><path d="M7 13h10"/></svg>`;
-    return `<div class="thinking-block"><div class="thinking-toggle" data-thinking-toggle><span class="chevron">${chevronSvg}</span><span class="thinking-label">${brainSvg} Thinking</span></div><div class="thinking-content">${this.escapeHtml(thinking)}</div></div>`;
+    const costHtml = this._thinkingCostHtml(cost);
+    return `<div class="thinking-block"><div class="thinking-toggle" data-thinking-toggle><span class="chevron">${chevronSvg}</span><span class="thinking-label">${brainSvg} Thinking</span>${costHtml}</div><div class="thinking-content">${this.escapeHtml(thinking)}</div></div>`;
+  }
+
+  /** Small inline cost badge appended to the thinking header row (no extra line). */
+  _thinkingCostHtml(cost) {
+    if (!(cost > 0)) return "";
+    return `<span class="thinking-usage" title="Total cost for this response">$${cost.toFixed(4)}</span>`;
   }
 
   updateStreamingThinking(messageElement, thinking) {
@@ -357,6 +377,7 @@ export class MessageRenderer {
 
   finalizeStreamingMessage(messageElement, usage = null, thinking = "") {
     const contentDiv = messageElement.querySelector(".message-content");
+    let finalThinking = "";
     if (contentDiv) {
       contentDiv.classList.remove("streaming");
       // Prefer the raw text stashed during streaming — the DOM now holds
@@ -371,7 +392,7 @@ export class MessageRenderer {
 
       // Fall back to the thinking text accumulated during streaming (via
       // updateStreamingThinking) if the caller didn't pass one explicitly.
-      const finalThinking =
+      finalThinking =
         thinking ||
         contentDiv.querySelector(".streaming-thinking .thinking-content")?.textContent ||
         "";
@@ -379,7 +400,7 @@ export class MessageRenderer {
       // Rebuild with thinking block (if any) + markdown text
       let html = "";
       if (finalThinking) {
-        html += this.renderThinkingBlock(finalThinking);
+        html += this.renderThinkingBlock(finalThinking, usage?.cost?.total);
       }
       html += renderMarkdown(rawText);
       contentDiv.innerHTML = html;
@@ -388,7 +409,9 @@ export class MessageRenderer {
     // Add footer (usage + copy button) after streaming finishes
     if (!messageElement.querySelector(".message-footer")) {
       const copyableText = this.getCopyableText(messageElement);
-      const hasUsage = Boolean(usage?.cost && usage.cost.total > 0);
+      // Suppress the footer usage badge when a thinking block is present —
+      // its header already surfaces the same total cost inline.
+      const hasUsage = Boolean(usage?.cost && usage.cost.total > 0 && !finalThinking);
       if (!copyableText && !hasUsage) {
         messageElement.remove();
         return;

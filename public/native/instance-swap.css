@@ -79,32 +79,9 @@ html.swapping-instance-pending body .instance-swap-overlay {
   transition: none;
 }
 
-/* ─── macOS overlay title bar ─────────────────────────────────────────────────
-   When TitleBarStyle::Overlay is active (macOS only), the WebView extends into
-   the native title bar area. We push the header content down by 28 px (the
-   macOS title bar height) so nothing is hidden behind it, and push the sidebar
-   header left-content past the traffic-light buttons (~75 px wide).
-   The -webkit-app-region: drag on .header / .sidebar-header already makes those
-   areas draggable, so the title bar stays functional.
-──────────────────────────────────────────────────────────────────────────── */
-html.macos-overlay .header {
-  padding-top: calc(var(--space-2) + var(--control-height-sm));
-  min-height: calc(44px + 28px);
-}
-
-html.macos-overlay .sidebar-header {
-  padding-top: calc(var(--space-3) + var(--control-height-sm));
-}
-
-/* Settings panel also occupies the full window and needs the same macOS
-   overlay safe area, otherwise the first row sits under traffic lights. */
-html.macos-overlay .settings-nav {
-  padding-top: calc(var(--space-2) + var(--control-height-sm));
-}
-
-html.macos-overlay .settings-content {
-  padding-top: calc(var(--space-3) + var(--control-height-sm));
-}
+/* macOS overlay title bar padding was removed along with
+   TitleBarStyle::Overlay in src-tauri/src/main.rs — windows now use a plain
+   native title bar, so the WebView no longer needs to clear traffic lights. */
 
 .super-agent-sidebar-entry:hover {
   background: color-mix(in srgb, #a855f7 20%, transparent);

@@ -276,6 +276,19 @@
 
 .thinking-label {
   font-size: var(--font-size-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.thinking-usage {
+  margin-left: auto;
+  padding-left: var(--space-2);
+  font-size: var(--font-size-sm);
+  color: var(--text-dim);
+  opacity: 0.7;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .thinking-toggle .chevron {
