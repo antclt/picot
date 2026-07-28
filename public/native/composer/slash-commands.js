@@ -1,3 +1,5 @@
+const HIDDEN_NATIVE_COMMANDS = new Set(["picot-config"]);
+
 function normalizeNativeCommand(command) {
   const scope =
     command.location ??
@@ -24,6 +26,7 @@ export function buildCommandCatalog({ builtIns = [], nativeCommands = [] } = {})
     });
   }
   for (const command of nativeCommands) {
+    if (HIDDEN_NATIVE_COMMANDS.has(command.name)) continue;
     if (!catalog.has(command.name)) catalog.set(command.name, normalizeNativeCommand(command));
   }
   return catalog;

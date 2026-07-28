@@ -23,7 +23,7 @@ describe("extensions browse layout", () => {
     expect(descriptionRule).toContain("overflow: hidden");
   });
 
-  test("lets any visible status (installing/removing/error) expand beyond the card clamp", () => {
+  test("lets visible progress status expand beyond the card clamp", () => {
     const statusRule = ruleBody(".pkg-browse-row:has(.settings-extension-status:not([hidden]))");
 
     expect(statusRule).toContain("height: auto");

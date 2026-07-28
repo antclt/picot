@@ -27,6 +27,7 @@ import {
   isRpivTodoWidgetRequest,
   RpivTodoMirrorPanel,
 } from "./features/rpiv-todo-mirror.js";
+import { createNotificationCenter } from "./notifications/notification-center.js";
 import { createSessionSelectionHandler } from "./session/session-navigation.js";
 import { setupSessionSearchDialog } from "./session/session-search-dialog.js";
 import { SessionSidebar } from "./session/session-sidebar.js";
@@ -72,6 +73,8 @@ const convNav = new ConvNav({
   headerEl: headerElement,
   badgeEl: scrollBottomBadge,
 });
+const notifications = createNotificationCenter();
+
 setupMessagesInsets({
   main: document.querySelector(".main"),
   messages: messagesElement,
@@ -378,6 +381,7 @@ const settingsPanel = setupSettingsPanel({
   runtime,
   getTarget: () => target,
   onError: showError,
+  notify: notifications.notify,
 });
 setupAppUpdater({ settingsPanel });
 setupNewSessionButton({ data, workspaceId: target.workspaceId, onError: showError });

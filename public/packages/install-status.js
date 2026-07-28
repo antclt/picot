@@ -6,10 +6,21 @@ export function summarizePackageError(err) {
   return raw;
 }
 
-export function renderPackageInstallFailure(status, err, operation = "install") {
-  if (!status) return;
+export function getPackageInstallFailure(err, operation = "install") {
   const fullMessage = String(err?.message || err || "unknown error");
   const isUninstall = operation === "uninstall";
+  return {
+    title: isUninstall ? "Uninstall failed" : "Install failed",
+    note: isUninstall
+      ? "Picot could not remove this extension package. Check the error details, then try again."
+      : "This extension requires npm. Make sure npm is installed and available to Picot, then try again.",
+    detail: summarizePackageError(fullMessage),
+  };
+}
+
+export function renderPackageInstallFailure(status, err, operation = "install") {
+  if (!status) return;
+  const failure = getPackageInstallFailure(err, operation);
   status.hidden = false;
   status.classList.add("is-error");
   status.title = "";
@@ -17,18 +28,16 @@ export function renderPackageInstallFailure(status, err, operation = "install") 
 
   const title = document.createElement("div");
   title.className = "settings-extension-status-title";
-  title.textContent = isUninstall ? "Uninstall failed" : "Install failed";
+  title.textContent = failure.title;
   status.appendChild(title);
 
   const npmNote = document.createElement("div");
   npmNote.className = "settings-extension-status-note";
-  npmNote.textContent = isUninstall
-    ? "Picot could not remove this extension package. Check the error details, then try again."
-    : "This extension requires npm. Make sure npm is installed and available to Picot, then try again.";
+  npmNote.textContent = failure.note;
   status.appendChild(npmNote);
 
   const detail = document.createElement("div");
   detail.className = "settings-extension-status-detail";
-  detail.textContent = summarizePackageError(fullMessage);
+  detail.textContent = failure.detail;
   status.appendChild(detail);
 }

@@ -217,10 +217,6 @@
   box-shadow: var(--shadow-sm), var(--shadow-inset);
 }
 
-.rpiv-todo-panel.is-complete .rpiv-todo-panel__list {
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-}
-
 .rpiv-todo-panel.is-complete .rpiv-todo-panel__task {
   grid-template-columns: auto minmax(0, 1fr);
 }

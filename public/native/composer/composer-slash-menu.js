@@ -201,31 +201,35 @@ export function setupComposerSlashMenu({ input, container, commandButton = null,
 
   input.addEventListener("input", update);
   input.addEventListener("click", update);
-  input.addEventListener("keydown", (event) => {
-    const isImeComposing = event.isComposing || event.keyCode === 229;
-    if (isImeComposing) return;
-    if (event.key === "Escape" && (open || activeSlashQuery(input))) {
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      close();
-      return;
-    }
-    if (!open) return;
-    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      if (matches.length === 0) return;
-      const delta = event.key === "ArrowDown" ? 1 : -1;
-      selectedIndex = (selectedIndex + delta + matches.length) % matches.length;
-      updateSelection();
-      return;
-    }
-    if ((event.key === "Enter" || event.key === "Tab") && matches.length > 0) {
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      select(selectedIndex);
-    }
-  });
+  input.addEventListener(
+    "keydown",
+    (event) => {
+      const isImeComposing = event.isComposing || event.keyCode === 229;
+      if (isImeComposing) return;
+      if (event.key === "Escape" && (open || activeSlashQuery(input))) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        close();
+        return;
+      }
+      if (!open) return;
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        if (matches.length === 0) return;
+        const delta = event.key === "ArrowDown" ? 1 : -1;
+        selectedIndex = (selectedIndex + delta + matches.length) % matches.length;
+        updateSelection();
+        return;
+      }
+      if ((event.key === "Enter" || event.key === "Tab") && matches.length > 0) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        select(selectedIndex);
+      }
+    },
+    { capture: true },
+  );
   input.addEventListener("blur", () => queueMicrotask(close));
   commandButton?.addEventListener("click", () => openAll());
 

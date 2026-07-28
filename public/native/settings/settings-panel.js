@@ -24,6 +24,7 @@ export function setupSettingsPanel({
   runtime,
   getTarget,
   onError,
+  notify,
 } = {}) {
   const panel = document.getElementById("settings-panel");
   const openBtn = document.getElementById("settings-btn");
@@ -38,7 +39,7 @@ export function setupSettingsPanel({
   const piVersionValue = document.getElementById("setting-pi-version-value");
   const appVersionValue = document.getElementById("setting-app-version-value");
   const costDashboard = document.getElementById("settings-cost-dashboard");
-  const packageBrowse = setupPackageBrowse(control);
+  const packageBrowse = setupPackageBrowse(control, { notify });
   const config = configGateway
     ? setupSettingsConfig({ configGateway, onModelConfigurationChanged })
     : null;

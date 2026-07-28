@@ -23,6 +23,7 @@
 @import url("native/composer/composer-slash-menu.css");
 @import url("native/composer/queued-messages.css");
 @import url("native/features/rpiv-todo-mirror.css");
+@import url("native/notifications/notification-center.css");
 @import url("native/extensions/dialog.css");
 @import url("native/extensions/inline-extension-prompt.css");
 @import url("native/settings/thinking-effort-control.css");

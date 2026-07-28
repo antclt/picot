@@ -1,4 +1,4 @@
-import { renderPackageInstallFailure } from "../../packages/install-status.js";
+import { getPackageInstallFailure } from "../../packages/install-status.js";
 
 // Community package browser for the Settings → Extensions tab.
 //
@@ -57,7 +57,7 @@ function browseUpdatedTime(pkg) {
 // Wires the Settings → Extensions package browser. `control` is a
 // HostControlGateway (or null when host operations are unavailable). Returns
 // `{ load }`; call `load()` when the tab is opened to fetch/render the catalog.
-export function setupPackageBrowse(control) {
+export function setupPackageBrowse(control, { notify } = {}) {
   const listEl = document.getElementById("pkg-browse-list");
   if (!listEl) return { load() {} };
   const searchEl = document.getElementById("pkg-browse-search");
@@ -151,14 +151,18 @@ export function setupPackageBrowse(control) {
     return all;
   }
 
-  async function fetchInstalled() {
-    if (!control) return new Set();
+  async function refreshInstalled() {
+    if (!control) {
+      installedSet = new Set();
+      return installedSet;
+    }
     try {
       const configured = await control.listPiPackages();
-      return new Set(Array.isArray(configured) ? configured : []);
+      installedSet = new Set(Array.isArray(configured) ? configured : []);
     } catch {
-      return new Set();
+      installedSet = new Set();
     }
+    return installedSet;
   }
 
   function sortPackages(packages) {
@@ -272,7 +276,18 @@ export function setupPackageBrowse(control) {
           }
           render();
         } catch (err) {
-          renderPackageInstallFailure(status, err, installed ? "uninstall" : "install");
+          const operation = installed ? "uninstall" : "install";
+          const failure = getPackageInstallFailure(err, operation);
+          status.hidden = true;
+          status.classList.remove("is-error");
+          status.textContent = "";
+          status.title = "";
+          notify?.({
+            type: "error",
+            title: failure.title,
+            message: failure.note,
+            detail: failure.detail,
+          });
           button.disabled = false;
           button.classList.remove("loading");
           setExtensionActionButton(button, previous);
@@ -372,9 +387,8 @@ export function setupPackageBrowse(control) {
     listEl.innerHTML =
       '<div class="settings-api-keys-loading pkg-browse-full-row">Loading packages...</div>';
     try {
-      const [packages, installed] = await Promise.all([fetchCatalog(), fetchInstalled()]);
+      const [packages] = await Promise.all([fetchCatalog(), refreshInstalled()]);
       allPackages = packages;
-      installedSet = installed;
       loaded = true;
       render();
     } catch (err) {
@@ -406,9 +420,10 @@ export function setupPackageBrowse(control) {
     }, 180);
   });
 
-  installedOnlyEl?.addEventListener("change", () => {
+  installedOnlyEl?.addEventListener("change", async () => {
     installedOnly = installedOnlyEl.checked;
     page = 1;
+    if (installedOnly) await refreshInstalled();
     render();
   });
 

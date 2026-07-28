@@ -5,6 +5,7 @@ import {
   setupComposerSlashMenu,
   titleCaseCommandName,
 } from "./composer-slash-menu.js";
+import { setupComposerSubmitHandling } from "./composer-submit.js";
 
 describe("composer slash menu", () => {
   let dom;
@@ -13,7 +14,9 @@ describe("composer slash menu", () => {
 
   beforeEach(() => {
     dom = new JSDOM(`
-      <textarea id="message-input"></textarea>
+      <form id="composer-form">
+        <textarea id="message-input"></textarea>
+      </form>
       <button id="command-btn" type="button"></button>
       <div id="skill-slash-menu" class="hidden"></div>
     `);
@@ -73,6 +76,25 @@ describe("composer slash menu", () => {
     expect(input.value).toBe("/skill:research ");
     expect(menu.classList.contains("hidden")).toBe(true);
     expect(formSubmit).not.toHaveBeenCalled();
+  });
+
+  it("selects a slash command instead of submitting when submit handling was registered first", async () => {
+    const onSubmit = vi.fn();
+    setupComposerSubmitHandling({ input, form: input.form, onSubmit });
+    const controller = setupComposerSlashMenu({
+      input,
+      container: menu,
+      getCommands: () => [{ name: "btw", description: "Append message", type: "extension" }],
+    });
+
+    input.value = "/bt";
+    input.setSelectionRange(input.value.length, input.value.length);
+    await controller.update();
+    const event = new KeyboardEvent("keydown", { key: "Enter", cancelable: true });
+    input.dispatchEvent(event);
+
+    expect(input.value).toBe("/btw ");
+    expect(onSubmit).not.toHaveBeenCalled();
   });
 
   it("filters skills while typing a slash query", async () => {

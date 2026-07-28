@@ -8,6 +8,12 @@ const catalog = buildCommandCatalog({
     { name: "fix", description: "Fix", source: "prompt", location: "project" },
     { name: "skill:test", description: "Test", source: "skill", location: "global" },
     { name: "todos", description: "Show todos", source: "extension", location: "global" },
+    {
+      name: "picot-config",
+      description: "Picot Settings → Configuration data plane",
+      source: "extension",
+      location: "global",
+    },
   ],
 });
 
@@ -16,6 +22,10 @@ describe("slash commands", () => {
     expect(catalog.get("settings")).toMatchObject({ type: "builtin", scope: "picot" });
     expect(catalog.get("review")).toMatchObject({ type: "extension", scope: "global" });
     expect(catalog.get("fix")).toMatchObject({ type: "prompt", scope: "project" });
+  });
+
+  it("hides internal native commands from the user-facing catalog", () => {
+    expect(catalog.has("picot-config")).toBe(false);
   });
 
   it("treats // as a literal slash and rejects unknown commands", () => {
