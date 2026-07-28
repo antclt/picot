@@ -757,6 +757,20 @@ canonical regular file descriptor 读取或写入，拒绝符号链接与路径�
 CSP 与 `nosniff`。不要把 `scope=picker`、`/api/open` 的宽松路径语义
 复制到预览或写入端点。
 
+`/api/files/content` 也可将批准的 Office / email 后缀分类为转换候选，
+但只在 workspace containment 和 canonical regular-file descriptor 校验之后，
+把 descriptor 的有界字节流入可选的本机 MarkItDown stdin；源路径不会传给
+Python，也不会扩大 raw 或 picker 访问。转换服务限制输入 32 MiB、stdout 2 MiB、
+stderr 256 KiB、20 秒超时和每个 embedded server 两个并发任务。Node 的
+`req.aborted` / 未完成响应关闭以及 Bun 的 `AbortSignal` 都会终止子进程并释放
+并发槽；Windows 使用固定参数的 process-tree termination。MarkItDown 依赖发现
+阶段只对固定的 Python 候选使用净化后的搜索环境：过滤空项和包含 NUL 的
+PATH 项，PATH 最长 4096 字节；Windows 额外保留同样有界的 `PATHEXT`。实际
+转换不继承 PATH，而是直接调用探测得到的绝对 Python 解释器，并只传递最小
+白名单环境，明确隔离 `PYTHONPATH`、HTTP 代理和云凭据等变量。转换结果复用
+Markdown sanitizer，但在 converted-document 模式下阻止远程、协议相对和相对
+图片，仅保留 `data:image/*`。
+
 **`@` 文件提及补全的唯一例外：** `GET /api/file-mentions` 是 loopback-only
 端点，由 `extensions/file-mention-search.ts` 提供有界递归枚举（10 000 条目 /
 500 ms / 20 候选）与打分。与预览/写入路由不同，它**刻意允许 workspace 之外
