@@ -4,8 +4,8 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import type { ResolvedConversation } from "./pi-chat-src/core/config-types.ts";
-import { ConversationRuntime } from "./pi-chat-src/runtime.ts";
+import type { ResolvedConversation } from "./chat-inbox/core/config-types.ts";
+import { ConversationRuntime } from "./chat-inbox/runtime.ts";
 
 const tempRoots: string[] = [];
 

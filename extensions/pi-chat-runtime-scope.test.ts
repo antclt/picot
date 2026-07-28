@@ -12,7 +12,7 @@ async function readProjectFile(path: string): Promise<string> {
 
 describe("pi-chat runtime scope", () => {
   it("does not ship tmux or Gondolin sandbox runtime paths", async () => {
-    const extensionEntry = await readProjectFile("extensions/pi-chat-src/extension-entry.ts");
+    const extensionEntry = await readProjectFile("extensions/chat-inbox/extension-entry.ts");
     const buildScript = await readProjectFile("scripts/build-extensions.js");
 
     expect(extensionEntry).not.toContain("@earendil-works/gondolin");
@@ -26,9 +26,9 @@ describe("pi-chat runtime scope", () => {
   });
 
   it("does not expose channel or server chat worker setup paths", async () => {
-    const chatConfig = await readProjectFile("extensions/pi-chat-src/tui/chat-config.ts");
-    const telegramSetup = await readProjectFile("extensions/pi-chat-src/tui/telegram-setup.ts");
-    const liveIndex = await readProjectFile("extensions/pi-chat-src/live/index.ts");
+    const chatConfig = await readProjectFile("extensions/chat-inbox/tui/chat-config.ts");
+    const telegramSetup = await readProjectFile("extensions/chat-inbox/tui/telegram-setup.ts");
+    const liveIndex = await readProjectFile("extensions/chat-inbox/live/index.ts");
 
     expect(chatConfig).not.toContain("add-group");
     expect(chatConfig).not.toContain("Create a Telegram or Discord account");

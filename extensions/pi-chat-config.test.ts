@@ -1,8 +1,8 @@
 // @vitest-environment node
 
 import { describe, expect, it } from "vitest";
-import { listConfiguredConversations } from "./pi-chat-src/config.ts";
-import type { ChatConfig } from "./pi-chat-src/core/config-types.ts";
+import { listConfiguredConversations } from "./chat-inbox/config.ts";
+import type { ChatConfig } from "./chat-inbox/core/config-types.ts";
 
 describe("pi-chat configured conversations", () => {
   it("only exposes DM conversations", () => {

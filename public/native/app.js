@@ -805,8 +805,8 @@ function setupFileBrowser() {
 
 async function sendComposerInput({ altKey }) {
   const value = input.value;
-  if (!value.trim()) return;
   const images = imageAttachments.getImages();
+  if (!value.trim() && images.length === 0) return;
   const intent = resolveComposerInput(value, commandCatalog, {
     working: store.lifecycle === "working",
     altKey,

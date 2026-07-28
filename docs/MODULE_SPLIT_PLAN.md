@@ -12,7 +12,7 @@ Generated with source-only paths, excluding generated/dependency/worktree artifa
 | 1636 | `src-tauri/src/host_data.rs` | Host data API, filesystem/session/workspace queries |
 | 1435 | `src-tauri/src/host_server.rs` | HTTP/WebSocket server, routing, protocol dispatch |
 | 1430 | `public/index.html` | App shell plus all modal/settings/composer markup |
-| 1195 | `extensions/pi-chat-src/extension-entry.ts` | Pi chat extension command/event implementation |
+| 1195 | `extensions/chat-inbox/extension-entry.ts` | Pi chat extension command/event implementation |
 | 1089 | `public/native/app.js` | Native app bootstrap and orchestration |
 | 976 | `public/native/session-sidebar.js` | Session grouping, persistence, rendering, interactions |
 | 836 | `src-tauri/src/main.rs` | Tauri setup, commands, lifecycle wiring |

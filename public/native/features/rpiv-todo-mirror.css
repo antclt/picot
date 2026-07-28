@@ -148,7 +148,7 @@
 }
 
 .rpiv-todo-panel.is-collapsed {
-  width: 76px;
+  width: 116px;
   min-width: 0;
   padding: var(--space-1) var(--space-2);
   border-radius: var(--radius-pill);
@@ -173,8 +173,8 @@
 }
 
 .rpiv-todo-panel.is-collapsed .rpiv-todo-panel__title {
-  max-width: 0;
-  opacity: 0;
+  max-width: 52px;
+  opacity: 1;
 }
 
 .rpiv-todo-panel.is-collapsed:hover .rpiv-todo-panel__title,

@@ -141,30 +141,6 @@ export function markTaskChildSessionBound(task, { childSessionId, now } = {}) {
   };
 }
 
-export function markTaskEdited(task, updates = {}, { now } = {}) {
-  const timestamp = now || new Date().toISOString();
-  const normalized = normalizeSuperAgentTask(task);
-  const targetProject = updates.targetProject ?? normalized.targetProject;
-  return {
-    ...normalized,
-    ...updates,
-    targetProject,
-    dispatch: {
-      ...normalized.dispatch,
-      targetProject,
-    },
-    events: [
-      ...normalized.events,
-      {
-        at: timestamp,
-        type: "edited",
-        status: normalized.status,
-        message: "Task draft edited in Picot Runtime panel.",
-      },
-    ],
-  };
-}
-
 export function markTaskNeedsInput(task, { question, now } = {}) {
   const timestamp = now || new Date().toISOString();
   const normalized = normalizeSuperAgentTask(task);

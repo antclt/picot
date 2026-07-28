@@ -49,7 +49,7 @@ fn resolve_bundled_extension(static_dir: &Path, extension_name: &str) -> Result<
                 PathBuf::from(env!("CARGO_MANIFEST_DIR"))
                     .join("..")
                     .join("extensions")
-                    .join("pi-chat-src")
+                    .join("chat-inbox")
                     .join("extension-entry.ts"),
             );
         }

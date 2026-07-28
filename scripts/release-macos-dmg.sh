@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-BUNDLE_DIR="$ROOT_DIR/src-tauri/target/release/bundle/dmg"
+BUNDLE_DIR="$ROOT_DIR/target/release/bundle/dmg"
 INSTALLED_APP="/Applications/Picot.app"
 INSTALLED_EXECUTABLE="$INSTALLED_APP/Contents/MacOS/picot"
 INSTALL_TEMP_DIR=""
