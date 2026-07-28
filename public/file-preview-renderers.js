@@ -21,8 +21,19 @@ export function createFileRenderer({
   onChange,
   onModeChange,
   onError,
+  renderAs,
 } = {}) {
   const classification = classifyFilePath(filePath || "");
+  if (renderAs === "markdown" && classification.contentType === "convertible") {
+    return createMarkdownRenderer({
+      filePath,
+      content,
+      mode: "preview",
+      readOnly: true,
+      onError,
+      convertedDocument: true,
+    });
+  }
 
   switch (classification.contentType) {
     case "markdown":
@@ -35,6 +46,16 @@ export function createFileRenderer({
         onChange,
         onModeChange,
         onError,
+      });
+
+    case "convertible":
+      return createMarkdownRenderer({
+        filePath,
+        content,
+        mode: "preview",
+        readOnly: true,
+        onError,
+        convertedDocument: true,
       });
 
     case "image":
@@ -75,6 +96,7 @@ function createMarkdownRenderer({
   onChange,
   onModeChange,
   onError,
+  convertedDocument = false,
 }) {
   let editor = null;
   let cleanupCopy = null;
@@ -131,6 +153,7 @@ function createMarkdownRenderer({
     },
 
     setMode(newMode, container) {
+      if (convertedDocument) return;
       if (currentMode === newMode) return;
       currentMode = newMode;
 
@@ -173,8 +196,8 @@ function createMarkdownRenderer({
     if (!container) return;
 
     if (currentMode === "preview") {
-      container.innerHTML = "";
-      const frag = renderFileMarkdown(currentContent);
+      container.replaceChildren();
+      const frag = renderFileMarkdown(currentContent, { convertedDocument });
       const mdDiv = document.createElement("div");
       mdDiv.className = "file-markdown-preview";
       mdDiv.appendChild(frag);
@@ -182,7 +205,7 @@ function createMarkdownRenderer({
       cleanupCopy = attachCopyButtonDelegation(mdDiv);
     } else {
       // Edit mode: use CodeMirror.
-      container.innerHTML = "";
+      container.replaceChildren();
       const editorDiv = document.createElement("div");
       editorDiv.className = "file-code-editor";
       container.appendChild(editorDiv);
@@ -214,14 +237,12 @@ function createTextRenderer({
   onError,
 }) {
   let editor = null;
-  let _containerRef = null;
   let currentReadOnly = readOnly;
   let currentWrap = wrapLines;
 
   return {
     mount(container) {
-      _containerRef = container;
-      container.innerHTML = "";
+      container.replaceChildren();
       const editorDiv = document.createElement("div");
       editorDiv.className = "file-code-editor";
       container.appendChild(editorDiv);
@@ -253,7 +274,6 @@ function createTextRenderer({
         editor.destroy();
         editor = null;
       }
-      _containerRef = null;
     },
 
     getValue() {
@@ -292,7 +312,7 @@ function createImageRenderer({ filePath, fileName }) {
 
   return {
     mount(container) {
-      container.innerHTML = "";
+      container.replaceChildren();
       containerEl = document.createElement("div");
       containerEl.className = "file-image-preview";
 

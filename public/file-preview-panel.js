@@ -116,6 +116,7 @@ export class FilePreviewPanel {
     this.currentRenderer = null;
     this.workspaceRoot = "";
     this.loadTokens = new Map();
+    this.loadAbortControllers = new Map();
     this.savePromises = new Map();
     this.autoSaveTimers = new Map();
     this.autoSaveEnabled = true;
@@ -159,6 +160,7 @@ export class FilePreviewPanel {
       if (!settled) return false;
     }
 
+    this._abortAllTabLoads();
     this._destroyRenderer();
     this.workspaceRoot = normalized;
     this.state.load(normalized);
@@ -198,20 +200,27 @@ export class FilePreviewPanel {
 
     if (existing) {
       if (currentTab?.id !== existing.id) {
+        if (this._isConversionTab(currentTab)) this._abortTabLoad(currentTab?.id);
         this._captureActiveRenderer();
         this.state.selectTab(existing.id);
+        if (existing.content === null && existing.loading) {
+          this._abortTabLoad(existing.id);
+          this.state.updateTab(existing.id, { loading: false, error: null, errorDetail: null });
+        }
       }
       this._openPanel();
       this._renderTabBar();
-      if (existing.content === null && !existing.loading) {
-        await this._loadTabContent(existing);
+      const freshExisting = this.state.getTab(existing.id);
+      if (freshExisting?.content === null && !freshExisting.loading) {
+        await this._loadTabContent(freshExisting);
       } else if (currentTab?.id !== existing.id || !this.currentRenderer) {
-        await this._mountRenderer(this.state.getTab(existing.id));
+        await this._mountRenderer(freshExisting);
       }
       this.activeContent = { kind: "file", id: existing.id };
       return existing;
     }
 
+    if (this._isConversionTab(currentTab)) this._abortTabLoad(currentTab?.id);
     this._captureActiveRenderer();
     const defaultMode =
       metadata.mode ??
@@ -256,6 +265,7 @@ export class FilePreviewPanel {
   destroy() {
     for (const timer of this.autoSaveTimers.values()) clearTimeout(timer);
     this.autoSaveTimers.clear();
+    this._abortAllTabLoads();
     this.loadTokens.clear();
     this._destroyRenderer();
     this.activeDialogCancel?.();
@@ -718,6 +728,7 @@ export class FilePreviewPanel {
       return true;
     }
     if (this.activeContent?.kind === "transient") this._deactivateCurrent();
+    if (this._isConversionTab(currentTab)) this._abortTabLoad(currentTab?.id);
     this._captureActiveRenderer();
     if (!this.state.selectTab(tabId)) return false;
 
@@ -744,6 +755,7 @@ export class FilePreviewPanel {
     }
 
     this._clearAutoSave(tabId);
+    this._abortTabLoad(tabId);
     this.loadTokens.delete(tabId);
     const wasActive = this.state.activeTabId === tabId;
     if (wasActive) this._destroyRenderer();
@@ -785,12 +797,18 @@ export class FilePreviewPanel {
   }
 
   async _loadTabContent(tab) {
+    this._abortTabLoad(tab.id);
     const token = (this.loadTokens.get(tab.id) || 0) + 1;
     this.loadTokens.set(tab.id, token);
     this.state.updateTab(tab.id, { loading: true, error: null, errorDetail: null });
 
+    const controller = new AbortController();
+    this.loadAbortControllers.set(tab.id, controller);
+
     try {
-      const res = await fetch(`/api/files/content?path=${encodeURIComponent(tab.filePath)}`);
+      const res = await fetch(`/api/files/content?path=${encodeURIComponent(tab.filePath)}`, {
+        signal: controller.signal,
+      });
       if (this.loadTokens.get(tab.id) !== token || !this.state.getTab(tab.id)) return false;
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
@@ -806,7 +824,55 @@ export class FilePreviewPanel {
       const data = await res.json();
       if (this.loadTokens.get(tab.id) !== token || !this.state.getTab(tab.id)) return false;
       const classification = classifyFilePath(tab.filePath);
-      if (data.isBinary && classification.contentType === "text") {
+      if (data.previewStatus === "dependencyUnavailable") {
+        const reason = data.dependencyReason;
+        const version = typeof data.pythonVersion === "string" ? data.pythonVersion : "";
+        const messageKey = `files.preview.markitdown.${reason}`;
+        const message = t(messageKey, version ? { version } : undefined);
+        const needsInstallCommand =
+          reason === "markitdownMissing" || reason === "markitdownIncompatible";
+        const displayCommand =
+          typeof data.displayCommand === "string" && /^[a-z0-9 ._-]+$/i.test(data.displayCommand)
+            ? data.displayCommand
+            : /win/i.test(globalThis.navigator?.platform || "")
+              ? "py -3"
+              : "python3";
+        const installKey = /win/i.test(displayCommand)
+          ? "files.preview.markitdown.installWindows"
+          : "files.preview.markitdown.installPosix";
+        const installCommand = t(installKey).replace(/^(python3|py -3)/, displayCommand);
+        const guidance = needsInstallCommand ? `${message}\n${installCommand}` : message;
+        this.state.updateTab(tab.id, {
+          loading: false,
+          content: null,
+          originalContent: null,
+          editable: false,
+          mode: "preview",
+          error: guidance,
+          errorDetail: null,
+          isBinary: false,
+        });
+        await this._mountIfActive(tab.id);
+        return false;
+      }
+      if (data.previewStatus === "conversionFailed") {
+        this.state.updateTab(tab.id, {
+          loading: false,
+          content: null,
+          originalContent: null,
+          editable: false,
+          mode: "preview",
+          error: t("files.preview.unsupportedBinary"),
+          errorDetail: null,
+          isBinary: false,
+        });
+        await this._mountIfActive(tab.id);
+        return false;
+      }
+      if (
+        data.isBinary &&
+        (classification.contentType === "text" || classification.contentType === "binary")
+      ) {
         this.state.updateTab(tab.id, {
           loading: false,
           error: t("files.preview.unsupportedBinary"),
@@ -824,6 +890,7 @@ export class FilePreviewPanel {
         loading: false,
         content: data.content ?? "",
         originalContent: data.content ?? "",
+        renderAs: data.renderAs,
         mtimeMs: data.mtimeMs,
         mimeType: data.mimeType,
         size: data.size,
@@ -841,6 +908,12 @@ export class FilePreviewPanel {
       await this._mountIfActive(tab.id);
       return true;
     } catch (error) {
+      if (error?.name === "AbortError" || controller.signal.aborted) {
+        if (this.loadTokens.get(tab.id) === token && this.state.getTab(tab.id)) {
+          this.state.updateTab(tab.id, { loading: false, error: null, errorDetail: null });
+        }
+        return false;
+      }
       if (this.loadTokens.get(tab.id) !== token || !this.state.getTab(tab.id)) return false;
       this.state.updateTab(tab.id, {
         loading: false,
@@ -849,7 +922,32 @@ export class FilePreviewPanel {
       });
       await this._mountIfActive(tab.id);
       return false;
+    } finally {
+      if (this.loadAbortControllers.get(tab.id) === controller) {
+        this.loadAbortControllers.delete(tab.id);
+      }
     }
+  }
+
+  _isConversionTab(tab) {
+    return Boolean(tab && classifyFilePath(tab.filePath).contentType === "convertible");
+  }
+
+  _abortTabLoad(tabId) {
+    if (!tabId) return;
+    this.loadTokens.set(tabId, (this.loadTokens.get(tabId) || 0) + 1);
+    const tab = this.state.getTab(tabId);
+    if (tab?.content === null && tab.loading) {
+      this.state.updateTab(tabId, { loading: false, error: null, errorDetail: null });
+    }
+    const controller = this.loadAbortControllers.get(tabId);
+    if (!controller) return;
+    this.loadAbortControllers.delete(tabId);
+    controller.abort();
+  }
+
+  _abortAllTabLoads() {
+    for (const tabId of this.loadAbortControllers.keys()) this._abortTabLoad(tabId);
   }
 
   async _mountIfActive(tabId) {
@@ -885,6 +983,7 @@ export class FilePreviewPanel {
       fileName: tab.fileName,
       content: tab.content || "",
       mimeType: tab.mimeType,
+      renderAs: tab.renderAs,
       mode: tab.mode || "preview",
       readOnly: tab.mode !== "edit" || !this._isEditable(tab),
       wrapLines: this.wrapLines,
@@ -917,7 +1016,14 @@ export class FilePreviewPanel {
   }
 
   _isEditable(tab) {
-    if (!tab || tab.content === null || tab.editable === false || tab.truncated || tab.isBinary) {
+    if (
+      !tab ||
+      tab.content === null ||
+      tab.editable === false ||
+      tab.truncated ||
+      tab.isBinary ||
+      (tab.renderAs === "markdown" && classifyFilePath(tab.filePath).contentType === "convertible")
+    ) {
       return false;
     }
     return classifyFilePath(tab.filePath).editable;
@@ -1220,6 +1326,7 @@ export class FilePreviewPanel {
       hasText &&
       contentType !== "image" &&
       contentType !== "pdf" &&
+      contentType !== "convertible" &&
       (contentType !== "markdown" || tab.mode === "edit");
 
     if (controls.preview) {

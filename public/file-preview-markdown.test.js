@@ -22,7 +22,12 @@ beforeEach(async () => {
           },
           files: {
             loading: isChinese ? "加载中..." : "Loading...",
-            preview: { copyFailed: isChinese ? "复制失败" : "Copy failed" },
+            preview: {
+              copyFailed: isChinese ? "复制失败" : "Copy failed",
+              markitdown: {
+                remoteImageHidden: isChinese ? "已隐藏远程图片" : "Remote image hidden",
+              },
+            },
           },
         }),
     });
@@ -149,6 +154,23 @@ describe("renderFileMarkdown", () => {
     const img = container.querySelector("img");
     expect(img).not.toBeNull();
     expect(img.getAttribute("src")).toBe("data:image/png;base64,iVBORw0KGgo=");
+  });
+
+  test("keeps an inline data image in converted-document mode", () => {
+    container.append(
+      renderFileMarkdown("![chart](data:image/png;base64,AAA)", { convertedDocument: true }),
+    );
+    expect(container.querySelector("img")?.getAttribute("src")).toContain("data:image/png");
+  });
+
+  test.each([
+    "https://tracker.test/pixel.gif",
+    "//tracker.test/pixel.gif",
+    "images/logo.png",
+  ])("replaces converted image source %s with a localized placeholder", (src) => {
+    container.append(renderFileMarkdown(`![mail](${src})`, { convertedDocument: true }));
+    expect(container.querySelector("img")).toBeNull();
+    expect(container.textContent).toContain("Remote image hidden");
   });
 
   test("removes inline event-handler attributes", () => {

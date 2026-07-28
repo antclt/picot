@@ -106,7 +106,7 @@ function isSafeTextAlign(value) {
  * Sanitize a DOM node in-place: remove non-allowlisted elements and
  * dangerous attributes, validate URLs and styles.
  */
-function sanitizeNode(node) {
+function sanitizeNode(node, { convertedDocument = false, remoteImageHiddenText } = {}) {
   const children = [...node.childNodes];
   for (const child of children) {
     if (child.nodeType !== Node.ELEMENT_NODE) continue;
@@ -151,9 +151,22 @@ function sanitizeNode(node) {
         child.removeAttribute("href");
         continue;
       }
-      if (tagName === "img" && attrName === "src" && !isSafeImageSrc(attr.value)) {
-        child.removeAttribute("src");
-        continue;
+      if (tagName === "img" && attrName === "src") {
+        const allowed = convertedDocument
+          ? attr.value.trim().toLowerCase().startsWith("data:image/")
+          : isSafeImageSrc(attr.value);
+        if (!allowed) {
+          if (convertedDocument) {
+            const replacement = document.createElement("span");
+            replacement.className = "file-markdown-remote-image-hidden";
+            replacement.textContent =
+              remoteImageHiddenText || t("files.preview.markitdown.remoteImageHidden");
+            child.replaceWith(replacement);
+          } else {
+            child.removeAttribute("src");
+          }
+          continue;
+        }
       }
       if (
         attrName === "style" &&
@@ -179,19 +192,19 @@ function sanitizeNode(node) {
       }
     }
 
-    sanitizeNode(child);
+    sanitizeNode(child, { convertedDocument, remoteImageHiddenText });
   }
 }
 
 /**
  * Render Markdown text into a sanitized DocumentFragment.
  */
-export function renderFileMarkdown(markdownText) {
+export function renderFileMarkdown(markdownText, options = {}) {
   const rawHtml = renderMarkdown(markdownText || "");
   const template = document.createElement("template");
   template.innerHTML = rawHtml;
   const fragment = template.content.cloneNode(true);
-  sanitizeNode(fragment);
+  sanitizeNode(fragment, options);
   return fragment;
 }
 

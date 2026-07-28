@@ -26,6 +26,22 @@ const IMAGE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "gif", "webp", "svg", "i
 
 const MARKDOWN_EXTENSIONS = new Set(["md", "markdown", "mdown", "mkd"]);
 
+export const CONVERTIBLE_SUFFIXES_MIRROR = new Set([
+  "doc",
+  "docx",
+  "rtf",
+  "odt",
+  "ppt",
+  "pptx",
+  "odp",
+  "xls",
+  "xlsx",
+  "ods",
+  "eml",
+  "msg",
+]);
+const NON_PREVIEWABLE_SUFFIXES = new Set(["mbox"]);
+
 /**
  * Classify a file path into a content type.
  */
@@ -42,6 +58,14 @@ export function classifyFilePath(filePath) {
 
   if (MARKDOWN_EXTENSIONS.has(ext)) {
     return { contentType: "markdown", editable: true, languageId: "markdown" };
+  }
+
+  if (NON_PREVIEWABLE_SUFFIXES.has(ext)) {
+    return { contentType: "binary", editable: false, languageId: null };
+  }
+
+  if (CONVERTIBLE_SUFFIXES_MIRROR.has(ext)) {
+    return { contentType: "convertible", editable: false, languageId: null };
   }
 
   // Text/code files

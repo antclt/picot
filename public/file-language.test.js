@@ -79,6 +79,33 @@ describe("classifyFilePath", () => {
     expect(result.editable).toBe(false);
   });
 
+  test.each([
+    "doc",
+    "docx",
+    "rtf",
+    "odt",
+    "ppt",
+    "pptx",
+    "odp",
+    "xls",
+    "xlsx",
+    "ods",
+    "eml",
+    "msg",
+  ])("classifies .%s as non-editable convertible", (extension) => {
+    expect(classifyFilePath(`sample.${extension}`)).toEqual({
+      contentType: "convertible",
+      editable: false,
+      languageId: null,
+    });
+  });
+
+  test("keeps CSV editable text and MBOX non-previewable", () => {
+    expect(classifyFilePath("table.csv").editable).toBe(true);
+    expect(classifyFilePath("inbox.mbox").contentType).toBe("binary");
+    expect(classifyFilePath("inbox.mbox").editable).toBe(false);
+  });
+
   test("classifies unknown text as editable with null language", () => {
     const result = classifyFilePath("data.xyz");
     expect(result.contentType).toBe("text");

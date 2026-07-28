@@ -28,6 +28,15 @@ beforeEach(async () => {
               saved: "Saved",
               saving: "Saving…",
               unsupportedBinary: "Unsupported binary",
+              markitdown: {
+                pythonMissing: "Install Python 3.10 or later to preview this file.",
+                pythonTooOld: "Python {version} is too old. Install Python 3.10 or later.",
+                markitdownMissing: "Install MarkItDown to preview this file.",
+                markitdownIncompatible:
+                  "Update MarkItDown to a version that supports stdin conversion.",
+                installPosix: "python3 -m pip install markitdown",
+                installWindows: "py -3 -m pip install markitdown",
+              },
             },
             unsaved: { title: "Unsaved changes" },
           },
@@ -43,7 +52,7 @@ beforeEach(async () => {
   await initI18n();
 
   // Build DOM
-  document.body.innerHTML = "";
+  document.body.replaceChildren();
   mainContainer = document.createElement("div");
   mainContainer.className = "main";
   mainContainer.style.width = "800px";
@@ -108,7 +117,7 @@ beforeEach(async () => {
 
 afterEach(() => {
   vi.restoreAllMocks();
-  document.body.innerHTML = "";
+  document.body.replaceChildren();
 });
 
 function createPanel(options = {}) {
@@ -130,6 +139,48 @@ function createPanel(options = {}) {
 }
 
 describe("FilePreviewPanel", () => {
+  test("renders converted responses as read-only Markdown", async () => {
+    global.fetch = vi.fn(() =>
+      Promise.resolve({
+        ok: true,
+        json: async () => ({
+          previewStatus: "ready",
+          renderAs: "markdown",
+          content: "# Converted",
+          editable: false,
+        }),
+      }),
+    );
+    const p = createPanel();
+    await p.openFile("/test/workspace/mail.eml");
+    expect(p.state.getActiveTab()).toMatchObject({
+      editable: false,
+      mode: "preview",
+      renderAs: "markdown",
+    });
+    expect(content.querySelector(".file-markdown-preview")).not.toBeNull();
+    expect(document.getElementById("file-preview-mode-edit").disabled).toBe(true);
+    p.destroy();
+  });
+
+  test("maps an old Python dependency response to localized guidance", async () => {
+    global.fetch = vi.fn(() =>
+      Promise.resolve({
+        ok: true,
+        json: async () => ({
+          previewStatus: "dependencyUnavailable",
+          dependencyReason: "pythonTooOld",
+          pythonVersion: "3.9.7",
+          editable: false,
+        }),
+      }),
+    );
+    const p = createPanel();
+    await p.openFile("/test/workspace/report.docx");
+    expect(content.textContent).toContain("Python 3.9.7 is too old");
+    expect(content.textContent).not.toContain("stderr");
+    p.destroy();
+  });
   test("starts collapsed", () => {
     const p = createPanel();
     expect(panel.classList.contains("collapsed")).toBe(true);
@@ -205,6 +256,56 @@ describe("FilePreviewPanel", () => {
     await p.openFile("/test/workspace/a.js");
     await p.openFile("/test/workspace/b.js");
     expect(tabBar.children.length).toBe(2);
+    p.destroy();
+  });
+
+  test("uses the server-discovered Python command in dependency guidance", async () => {
+    global.fetch = vi.fn(() =>
+      Promise.resolve({
+        ok: true,
+        json: async () => ({
+          previewStatus: "dependencyUnavailable",
+          dependencyReason: "markitdownMissing",
+          displayCommand: "python",
+          editable: false,
+        }),
+      }),
+    );
+    const p = createPanel();
+    await p.openFile("/test/workspace/report.docx");
+    expect(content.textContent).toContain("python -m pip install");
+    expect(content.textContent).not.toContain("python3 -m pip install");
+    p.destroy();
+  });
+
+  test("aborts the old load when switching tabs and reloads it when selected again", async () => {
+    const pending = new Map();
+    global.fetch = vi.fn((url, options) => {
+      const entry = { options, resolve: null };
+      const promise = new Promise((resolve) => {
+        entry.resolve = resolve;
+      });
+      pending.set(String(url), entry);
+      return promise;
+    });
+    const p = createPanel();
+    const first = p.openFile("/test/workspace/a.docx");
+    const firstRequest = pending.get("/api/files/content?path=%2Ftest%2Fworkspace%2Fa.docx");
+    const second = p.openFile("/test/workspace/b.docx");
+    expect(firstRequest.options.signal.aborted).toBe(true);
+    firstRequest.resolve({ ok: true, json: async () => ({ content: "stale" }) });
+    pending.get("/api/files/content?path=%2Ftest%2Fworkspace%2Fb.docx").resolve({
+      ok: true,
+      json: async () => ({ content: "b" }),
+    });
+    await second;
+    await first;
+    const aTab = p.state.getTab("file:/test/workspace/a.docx");
+    expect(aTab.content).toBeNull();
+    const select = tabBar.querySelector('[data-tab-id="file:/test/workspace/a.docx"]');
+    select.click();
+    await Promise.resolve();
+    expect(global.fetch).toHaveBeenCalledTimes(3);
     p.destroy();
   });
 
