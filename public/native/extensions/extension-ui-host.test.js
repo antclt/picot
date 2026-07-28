@@ -83,6 +83,64 @@ describe("ExtensionUiHost", () => {
     );
   });
 
+  it("cancelForeground() finalizes the shown dialog as cancelled instead of re-queuing it", async () => {
+    const runtime = { request: vi.fn().mockResolvedValue({}) };
+    const host = new ExtensionUiHost({
+      runtime,
+      showInlinePrompt: (_request, { dismissSignal }) =>
+        new Promise((resolve) => {
+          dismissSignal.then(() => resolve({ cancelled: true }));
+        }),
+    });
+    host.setForegroundSession("a");
+
+    const handled = host.handle(targetA, {
+      type: "extension_ui_request",
+      id: "dialog-a",
+      method: "select",
+      title: "Pick one",
+      options: ["chosen"],
+    });
+    expect(host.hasPending("a")).toBe(true);
+
+    host.cancelForeground();
+    await handled;
+
+    expect(runtime.request).toHaveBeenCalledWith(
+      { type: "extension_ui_response", id: "dialog-a", cancelled: true },
+      targetA,
+    );
+    expect(host.pendingCount("a")).toBe(0);
+    expect(host.hasPending("a")).toBe(false);
+  });
+
+  it("switching sessions away re-queues the in-flight dialog instead of finalizing it", async () => {
+    const runtime = { request: vi.fn().mockResolvedValue({}) };
+    const host = new ExtensionUiHost({
+      runtime,
+      showInlinePrompt: (_request, { dismissSignal }) =>
+        new Promise((resolve) => {
+          dismissSignal.then(() => resolve({ cancelled: true }));
+        }),
+    });
+    host.setForegroundSession("a");
+
+    const handled = host.handle(targetA, {
+      type: "extension_ui_request",
+      id: "dialog-a",
+      method: "select",
+      title: "Pick one",
+      options: ["chosen"],
+    });
+
+    await host.setForegroundSession("b", { flush: false });
+    await handled;
+
+    expect(runtime.request).not.toHaveBeenCalled();
+    expect(host.pendingCount("a")).toBe(1);
+    expect(host.hasPending("a")).toBe(true);
+  });
+
   it("uses inline prompts before falling back to modal dialogs", async () => {
     const runtime = { request: vi.fn().mockResolvedValue({}) };
     const showDialog = vi.fn();

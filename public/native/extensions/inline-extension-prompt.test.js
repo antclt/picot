@@ -109,6 +109,34 @@ describe("inline extension prompt", () => {
     expect(container.querySelectorAll(".inline-prompt-card")).toHaveLength(1);
   });
 
+  it("resolves as cancelled when dismissed and marks the card so a stale click is a no-op", async () => {
+    document.body.innerHTML = '<div id="messages"></div>';
+    const container = document.getElementById("messages");
+    let triggerDismiss;
+    const dismissSignal = new Promise((resolve) => {
+      triggerDismiss = resolve;
+    });
+    const promise = showInlineExtensionPrompt(
+      {
+        type: "extension_ui_request",
+        id: "q4",
+        method: "select",
+        title: "[Scope] Pick one",
+        options: ["1. Bug fix — Repair behavior", "2. Feature — Add behavior"],
+      },
+      { container, dismissSignal },
+    );
+
+    triggerDismiss();
+    await expect(promise).resolves.toEqual({ cancelled: true });
+    const card = container.querySelector(".inline-prompt-card");
+    expect(card.classList.contains("answered")).toBe(true);
+
+    // A stale click after dismissal must not throw or re-mark the card twice.
+    card.querySelector(".inline-prompt-option")?.click();
+    expect(container.querySelectorAll(".inline-prompt-status")).toHaveLength(1);
+  });
+
   it("returns null for unrelated input dialogs", () => {
     document.body.innerHTML = '<div id="messages"></div>';
     expect(

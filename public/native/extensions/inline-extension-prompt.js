@@ -19,11 +19,23 @@ export function showInlineExtensionPrompt(
   }
   removeWelcome(container);
   return new Promise((resolve) => {
-    dismissSignal?.then(() => resolve({ cancelled: true }));
     const card = document.createElement("div");
     card.className = "inline-prompt-card";
     card.setAttribute("role", "group");
     card.setAttribute("aria-label", "Extension question");
+
+    // Guard against double-settling: a dismissSignal (session switched away,
+    // or the user hit Stop/Abort) and a user click can otherwise both try to
+    // resolve/markAnswered the same card. Once settled, later calls are
+    // no-ops so a stale card never looks clickable while doing nothing.
+    let settled = false;
+    const settle = (result) => {
+      if (settled) return;
+      settled = true;
+      markAnswered(card, result);
+      resolve(result);
+    };
+    dismissSignal?.then(() => settle({ cancelled: true }));
 
     const header = document.createElement("div");
     header.className = "inline-prompt-header";
@@ -36,17 +48,14 @@ export function showInlineExtensionPrompt(
     header.append(eyebrow, title);
     card.appendChild(header);
 
-    let finish;
     if (request.method === "select") {
-      finish = renderSelectPrompt(card, request, content, resolve);
+      renderSelectPrompt(card, request, content, settle);
     } else {
-      finish = renderInputPrompt(card, request, content, resolve);
+      renderInputPrompt(card, request, content, settle);
     }
 
     container.appendChild(card);
     scrollTimeline(container);
-
-    return finish;
   });
 }
 
@@ -107,7 +116,6 @@ function renderSelectPrompt(card, request, content, resolve) {
   card.appendChild(actions);
 
   function finish(result) {
-    markAnswered(card, result);
     resolve(result);
   }
 }
@@ -132,7 +140,6 @@ function renderInputPrompt(card, request, content, resolve) {
   input.focus();
 
   function finish(result) {
-    markAnswered(card, result);
     resolve(result);
   }
 }
@@ -218,7 +225,6 @@ function renderMultiSelectInput(card, options, resolve) {
   card.appendChild(actions);
 
   function finish(result) {
-    markAnswered(card, result);
     resolve(result);
   }
 }

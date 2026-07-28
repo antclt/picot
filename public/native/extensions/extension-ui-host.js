@@ -30,6 +30,30 @@ export class ExtensionUiHost {
   }
 
   /**
+   * True when there is a blocking dialog either queued (background session)
+   * or actively shown (foreground session) for the given session id. Used to
+   * keep the Stop/Abort control visible even if a status frame lags behind
+   * an open extension question.
+   *
+   * @param {string} sessionId
+   */
+  hasPending(sessionId) {
+    return this.pendingCount(sessionId) > 0 || this.#inFlight.has(sessionId);
+  }
+
+  /**
+   * Force-resolve the currently shown foreground dialog as cancelled — used
+   * when the user hits Stop/Abort so a blocked tool call actually receives a
+   * response instead of hanging forever. Unlike setForegroundSession()'s
+   * abort (which re-queues the dialog for later), this finalizes it.
+   */
+  cancelForeground() {
+    const sessionId = this.#foregroundSessionId;
+    const abort = this.#inFlight.get(sessionId);
+    if (abort) abort({ cancel: true });
+  }
+
+  /**
    * Switch the foreground session and abort any in-flight dialog for the
    * previous session (re-queuing it).
    *
@@ -47,7 +71,7 @@ export class ExtensionUiHost {
     // and shown again when the user returns to that session.
     if (oldId && oldId !== sessionId) {
       const abort = this.#inFlight.get(oldId);
-      if (abort) abort();
+      if (abort) abort({ cancel: false });
     }
     if (flush) await this.flushForegroundQueue();
   }
@@ -125,10 +149,12 @@ export class ExtensionUiHost {
     const dismissSignal = new Promise((resolve) => {
       triggerDismiss = resolve;
     });
-    // Track whether this dialog was aborted (session switched away).
+    // Track whether this dialog was aborted because the session switched
+    // away (re-queue for later) or explicitly cancelled (finalize now — e.g.
+    // the user hit Stop/Abort).
     let requeued = false;
-    this.#inFlight.set(target.sessionId, () => {
-      requeued = true;
+    this.#inFlight.set(target.sessionId, ({ cancel = false } = {}) => {
+      requeued = !cancel;
       triggerDismiss();
     });
     let result;

@@ -3,6 +3,9 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 BUNDLE_DIR="$ROOT_DIR/src-tauri/target/release/bundle/dmg"
+INSTALLED_APP="/Applications/Picot.app"
+INSTALLED_EXECUTABLE="$INSTALLED_APP/Contents/MacOS/picot"
+INSTALL_TEMP_DIR=""
 
 if [[ "$(uname -s)" != "Darwin" ]]; then
   echo "This script must run on macOS."
@@ -36,6 +39,9 @@ MOUNT_POINT="$(printf '%s\n' "$MOUNT_OUTPUT" | rg '/Volumes/' | awk '{print $NF}
 cleanup() {
   if [[ -n "${MOUNT_POINT:-}" ]] && mount | rg -q "$MOUNT_POINT"; then
     hdiutil detach "$MOUNT_POINT" >/dev/null
+  fi
+  if [[ -n "$INSTALL_TEMP_DIR" ]] && [[ -d "$INSTALL_TEMP_DIR" ]]; then
+    rm -rf "$INSTALL_TEMP_DIR"
   fi
 }
 trap cleanup EXIT
@@ -71,5 +77,48 @@ fi
 
 echo "Gatekeeper assessment indicates a blocked but not damaged app."
 echo "$SPCTL_OUTPUT"
+echo
+echo "Installing Picot into /Applications..."
+INSTALL_TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/picot-install.XXXXXX")"
+STAGED_APP="$INSTALL_TEMP_DIR/Picot.app"
+ditto "$APP_PATH" "$STAGED_APP"
+
+INSTALLED_PIDS=()
+while IFS= read -r pid; do
+  INSTALLED_PIDS+=("$pid")
+done < <(pgrep -f "^${INSTALLED_EXECUTABLE}$" || true)
+if (( ${#INSTALLED_PIDS[@]} > 0 )); then
+  echo "Closing the installed Picot (${INSTALLED_PIDS[*]})..."
+  kill -TERM "${INSTALLED_PIDS[@]}"
+
+  for _ in {1..50}; do
+    if ! pgrep -f "^${INSTALLED_EXECUTABLE}$" >/dev/null; then
+      break
+    fi
+    sleep 0.1
+  done
+
+  if pgrep -f "^${INSTALLED_EXECUTABLE}$" >/dev/null; then
+    echo "ERROR: Picot did not exit. Quit it manually and run the command again."
+    exit 1
+  fi
+fi
+
+BACKUP_APP="$INSTALL_TEMP_DIR/Picot.previous.app"
+if [[ -e "$INSTALLED_APP" ]]; then
+  mv "$INSTALLED_APP" "$BACKUP_APP"
+fi
+
+if ! mv "$STAGED_APP" "$INSTALLED_APP"; then
+  if [[ -e "$BACKUP_APP" ]] && [[ ! -e "$INSTALLED_APP" ]]; then
+    mv "$BACKUP_APP" "$INSTALLED_APP"
+  fi
+  echo "ERROR: Failed to install Picot into /Applications."
+  exit 1
+fi
+
+echo "Launching the newly installed Picot..."
+open -n "$INSTALLED_APP"
+echo "Installed and launched $INSTALLED_APP"
 echo
 echo "Publish this DMG directly. Do not modify the .app after bundling."

@@ -32,6 +32,7 @@ import { setupSessionSearchDialog } from "./session/session-search-dialog.js";
 import { SessionSidebar } from "./session/session-sidebar.js";
 import { createSessionStore, reduceSessionState } from "./session/session-store.js";
 import { setupSettingsPanel } from "./settings/settings-panel.js";
+import { resolveBootstrapTarget } from "./transport/bootstrap-target.js";
 import { ConfigGateway } from "./transport/config-gateway.js";
 import {
   setupConfigGatewayConnectionListener,
@@ -114,13 +115,7 @@ let target = provisionalTargetFromRoute(route);
 let configGatewayTargetReady = false;
 let store = createSessionStore(target);
 let navigationGeneration = 0;
-let commandCatalog = buildCommandCatalog({
-  builtIns: [
-    { name: "settings", description: "Open settings", action: "open_settings" },
-    { name: "tree", description: "Open session tree", action: "open_tree" },
-    { name: "help", description: "Show Picot help", action: "show_help" },
-  ],
-});
+let commandCatalog = buildCommandCatalog({});
 let streamingElement = null;
 let sidebar = null;
 let activeSearchQuery = "";
@@ -398,6 +393,9 @@ convNav.mount();
 try {
   const bootstrappedTarget = await loadBootstrapTarget(route);
   await adoptTarget(bootstrappedTarget, { updateRoute: false });
+  if (route.sessionId.startsWith("temporary-") && target.sessionId !== route.sessionId) {
+    replaceTemporarySessionRoute(history, route.workspaceId, route.sessionId, target.sessionId);
+  }
   await adapter.ready();
 
   // Two-phase load: render session history from disk immediately while Pi
@@ -454,12 +452,24 @@ function provisionalTargetFromRoute(currentRoute) {
 }
 
 async function loadBootstrapTarget(currentRoute) {
+  return resolveBootstrapTarget({
+    route: currentRoute,
+    requestTarget: requestBootstrapTarget,
+    spawnTemporarySession: spawnSessionViaHost,
+  });
+}
+
+async function requestBootstrapTarget(currentRoute) {
   const query = new URLSearchParams({
     workspaceId: currentRoute.workspaceId,
     sessionId: currentRoute.sessionId,
   });
   const response = await fetch(`/v2/bootstrap?${query}`);
-  if (!response.ok) throw new Error("This Picot runtime is stopped or unavailable");
+  if (!response.ok) {
+    const error = new Error("This Picot runtime is stopped or unavailable");
+    error.status = response.status;
+    throw error;
+  }
   return response.json();
 }
 
@@ -475,7 +485,6 @@ async function hydrateSnapshot() {
 async function loadCommands() {
   const result = await runtime.request({ type: "get_commands" }, target);
   commandCatalog = buildCommandCatalog({
-    builtIns: [...commandCatalog.values()].filter((command) => command.type === "builtin"),
     nativeCommands: result.response?.data?.commands ?? [],
   });
 }
@@ -1017,19 +1026,30 @@ function textFromMessageContent(content) {
 function setStatus(text) {
   statusText.textContent = text;
   const isWorking = text === "Working…";
+  // Keep Stop visible while an extension question is open/queued for this
+  // session even if a stale status frame briefly reports "Connected" (e.g.
+  // right after a session switch) — otherwise the only way to unblock a
+  // wedged tool call becomes unreachable.
+  const showAbort = isWorking || extensionUi.hasPending(target.sessionId);
   statusIndicator?.classList.toggle("streaming", isWorking);
   composerCard?.classList.toggle("streaming", isWorking);
-  abortButton?.classList.toggle("hidden", !isWorking);
-  sendButton?.classList.toggle("hidden", isWorking);
+  abortButton?.classList.toggle("hidden", !showAbort);
+  sendButton?.classList.toggle("hidden", showAbort);
   statusIndicator?.classList.toggle("disconnected", text === "Disconnected");
   statusIndicator?.classList.toggle("connected", !isWorking && text !== "Disconnected");
 }
 
 function abortCurrentRun() {
   runtime.request({ type: "abort" }, target).catch(showError);
+  // A tool call blocked on ctx.ui.select/confirm/input/editor won't be
+  // unblocked by "abort" alone — pi is waiting on an extension_ui_response
+  // that only the UI can send. Without this, an unanswered/cancelled prompt
+  // leaves the run wedged forever with Stop appearing to do nothing.
+  extensionUi.cancelForeground();
 }
 
 function showError(error) {
+  setStatus("Disconnected");
   messageRenderer.renderError(error?.message || String(error));
 }
 
