@@ -63,13 +63,18 @@ import {
   classifyFile,
   isEditableBySize,
   openCanonicalFileForRead,
-  readTextFileForPreview,
+  readTextFromDescriptor,
   resolveScopedFilePath,
   resolveWorkspaceRoot,
   sendJsonError,
   sendJsonOk,
   writeTextFileIfUnchanged,
 } from "./file-routes.ts";
+import {
+  bridgeConversionCancellation,
+  createMarkItDownPreviewService,
+  serializeConversionOutcome,
+} from "./markitdown-preview.ts";
 import { getOpenCommand, resolveHomePath } from "./open-path.ts";
 import { isPathWithinRoot } from "./path-safety.ts";
 import {
@@ -890,6 +895,7 @@ type EmbeddedServerGlobal = {
   // bubble in chat. Routing through `getApi()` guarantees we always hit
   // the current session's `pi`.
   getApi: (() => ExtensionAPI | null) | null;
+  markitdownPreviewService: ReturnType<typeof createMarkItDownPreviewService> | null;
   // Process-scoped parse caches. Live across extension reloads (which would
   // otherwise wipe per-extension `Map`s on every new_session). Without these,
   // `/api/sessions` re-reads + re-parses the JSONL header of every session
@@ -1361,6 +1367,7 @@ function getOrCreateGlobalState(): EmbeddedServerGlobal {
       buildStateSnapshot: null,
       getLatestCtx: null,
       getApi: null,
+      markitdownPreviewService: null,
       sessionHeaderCache: new Map<string, SessionFileCacheEntry<unknown>>(),
       sessionMetricsCache: new Map<string, SessionFileCacheEntry<unknown>>(),
       lastSessionProjects: [],
@@ -3028,56 +3035,87 @@ export default function (pi: ExtensionAPI) {
         let bytesRead = 0;
         try {
           bytesRead = fs.readSync(fd, prefixBuf, 0, prefixBuf.length, 0);
+          const classification = classifyFile(resolved.path, prefixBuf.subarray(0, bytesRead));
+
+          if (classification.kind === "convertible") {
+            let service = globalState.markitdownPreviewService;
+            if (!service) {
+              service = createMarkItDownPreviewService();
+              globalState.markitdownPreviewService = service;
+            }
+            const cancellation = bridgeConversionCancellation(req, res);
+            try {
+              const suffix = path.extname(resolved.path).slice(1).toLowerCase() as Parameters<
+                typeof service.convertFromDescriptor
+              >[0]["suffix"];
+              const outcome = await service.convertFromDescriptor({
+                fd,
+                size: stat.size,
+                suffix,
+                signal: cancellation.signal,
+              });
+              sendJsonOk(res, {
+                path: resolved.path,
+                size: stat.size,
+                mtimeMs: stat.mtimeMs,
+                mimeType: classification.mimeType,
+                isBinary: false,
+                truncated: false,
+                ...serializeConversionOutcome(outcome),
+              });
+            } finally {
+              cancellation.cleanup();
+            }
+            return;
+          }
+
+          if (classification.kind === "binary") {
+            sendJsonOk(res, {
+              path: resolved.path,
+              content: "",
+              size: stat.size,
+              mtimeMs: stat.mtimeMs,
+              mimeType: classification.mimeType,
+              isBinary: true,
+              truncated: false,
+              editable: false,
+            });
+            return;
+          }
+
+          if (classification.kind === "image" || classification.kind === "pdf") {
+            // Non-text files are loaded via /api/files/raw instead.
+            sendJsonOk(res, {
+              path: resolved.path,
+              content: "",
+              size: stat.size,
+              mtimeMs: stat.mtimeMs,
+              mimeType: classification.mimeType,
+              isBinary: false,
+              truncated: false,
+              editable: false,
+            });
+            return;
+          }
+
+          const result = readTextFromDescriptor(resolved.path, fd, stat);
+          sendJsonOk(res, {
+            path: resolved.path,
+            content: result.content,
+            size: result.size,
+            mtimeMs: result.mtimeMs,
+            mimeType: result.mimeType,
+            isBinary: result.isBinary,
+            truncated: result.truncated,
+            editable:
+              classification.editable &&
+              isEditableBySize(result.size) &&
+              !result.truncated &&
+              !result.isBinary,
+          });
         } finally {
           fs.closeSync(fd);
         }
-
-        const classification = classifyFile(resolved.path, prefixBuf.subarray(0, bytesRead));
-
-        if (classification.kind === "binary") {
-          sendJsonOk(res, {
-            path: resolved.path,
-            content: "",
-            size: stat.size,
-            mtimeMs: stat.mtimeMs,
-            mimeType: classification.mimeType,
-            isBinary: true,
-            truncated: false,
-            editable: false,
-          });
-          return;
-        }
-
-        if (classification.kind === "image" || classification.kind === "pdf") {
-          // Non-text files are loaded via /api/files/raw instead.
-          sendJsonOk(res, {
-            path: resolved.path,
-            content: "",
-            size: stat.size,
-            mtimeMs: stat.mtimeMs,
-            mimeType: classification.mimeType,
-            isBinary: false,
-            truncated: false,
-            editable: false,
-          });
-          return;
-        }
-
-        const result = readTextFileForPreview(resolved.path);
-        sendJsonOk(res, {
-          path: resolved.path,
-          content: result.content,
-          size: result.size,
-          mtimeMs: result.mtimeMs,
-          mimeType: result.mimeType,
-          isBinary: result.isBinary,
-          truncated: result.truncated,
-          editable:
-            classification.editable &&
-            isEditableBySize(result.size) &&
-            !result.truncated &&
-            !result.isBinary,
-        });
       } catch (err: unknown) {
         sendJsonError(res, 500, errMessage(err));
       }
@@ -4685,6 +4723,7 @@ export default function (pi: ExtensionAPI) {
   // the new session. This is what keeps the WebView's URL alive across
   // session changes.
   function startServer(ctx: ExtensionContext) {
+    globalState.markitdownPreviewService ??= createMarkItDownPreviewService();
     const binding = publishActiveSessionBinding(
       globalState,
       pi,
@@ -5148,13 +5187,54 @@ export default function (pi: ExtensionAPI) {
           else if (event === "end") endListeners.push(fn as () => void);
           return reqLike;
         },
+        removeListener(event: string, fn: (chunk?: unknown) => void) {
+          if (event === "data") {
+            const index = dataListeners.indexOf(fn);
+            if (index >= 0) dataListeners.splice(index, 1);
+          } else if (event === "end") {
+            const index = endListeners.indexOf(fn as () => void);
+            if (index >= 0) endListeners.splice(index, 1);
+          }
+          return reqLike;
+        },
       };
 
       let resolved = false;
       let statusCode = 200;
       const resHeaders: Record<string, string> = {};
       const bodyChunks: Array<Buffer> = [];
+      let responseEnded = false;
+      const responseListeners = new Map<string, Set<(...args: unknown[]) => void>>();
+      const addResponseListener = (
+        event: string,
+        listener: (...args: unknown[]) => void,
+        once = false,
+      ) => {
+        const wrapped = once
+          ? (...args: unknown[]) => {
+              removeResponseListener(event, wrapped);
+              listener(...args);
+            }
+          : listener;
+        const listeners = responseListeners.get(event) ?? new Set();
+        listeners.add(wrapped);
+        responseListeners.set(event, listeners);
+        return resLike;
+      };
+      const removeResponseListener = (event: string, listener: (...args: unknown[]) => void) => {
+        const listeners = responseListeners.get(event);
+        listeners?.delete(listener);
+        if (listeners?.size === 0) responseListeners.delete(event);
+        return resLike;
+      };
+      const emitResponse = (event: string, ...args: unknown[]) => {
+        for (const listener of [...(responseListeners.get(event) ?? [])]) listener(...args);
+        return responseListeners.has(event);
+      };
       const resLike: Record<string, unknown> = {
+        get writableEnded() {
+          return responseEnded;
+        },
         setHeader(name: string, value: string) {
           resHeaders[name] = value;
         },
@@ -5167,11 +5247,14 @@ export default function (pi: ExtensionAPI) {
           }
         },
         write(chunk: unknown) {
-          if (chunk == null) return;
-          bodyChunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk)));
+          if (chunk != null) {
+            bodyChunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk)));
+          }
+          return true;
         },
         end(chunk?: unknown) {
           if (resolved) return;
+          responseEnded = true;
           resolved = true;
           if (chunk != null) {
             bodyChunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk)));
@@ -5181,12 +5264,22 @@ export default function (pi: ExtensionAPI) {
         },
       };
 
-      // Special case: session JSONL streaming. `serveSessionFile` uses
-      // `fs.createReadStream(...).pipe(res)`. Our adapter doesn't
-      // implement pipe, so emulate it with `on("data")`+`on("end")`.
-      // We attach the pipe shim only when the handler tries to use it.
-      resLike.pipe = undefined;
-      resLike.on = (_event: string, _fn: unknown) => resLike;
+      // `fs.createReadStream(...).pipe(res)` is used by raw image/PDF and
+      // session-file routes. The Bun adapter must provide the writable-side
+      // EventEmitter methods that Node's Readable.pipe() requires.
+      resLike.on = (event: string, fn: unknown) =>
+        typeof fn === "function"
+          ? addResponseListener(event, fn as (...args: unknown[]) => void)
+          : resLike;
+      resLike.once = (event: string, fn: unknown) =>
+        typeof fn === "function"
+          ? addResponseListener(event, fn as (...args: unknown[]) => void, true)
+          : resLike;
+      resLike.removeListener = (event: string, fn: unknown) =>
+        typeof fn === "function"
+          ? removeResponseListener(event, fn as (...args: unknown[]) => void)
+          : resLike;
+      resLike.emit = (event: string, ...args: unknown[]) => emitResponse(event, ...args);
 
       try {
         serveStaticFile(

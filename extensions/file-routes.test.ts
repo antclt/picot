@@ -3,6 +3,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import {
+  CONVERTIBLE_SUFFIXES,
   classifyFile,
   readTextFileForPreview,
   resolveScopedFilePath,
@@ -188,6 +189,47 @@ describe("classifyFile", () => {
   test("treats unknown extension binary content as binary", () => {
     const result = classifyFile("data.dat", Buffer.from([0x00, 0x01, 0x02]));
     expect(result.kind).toBe("binary");
+  });
+
+  test.each([
+    "doc",
+    "docx",
+    "rtf",
+    "odt",
+    "ppt",
+    "pptx",
+    "odp",
+    "xls",
+    "xlsx",
+    "ods",
+    "eml",
+    "msg",
+  ])("classifies .%s as convertible and read-only", (extension) => {
+    expect(classifyFile(`sample.${extension}`, Buffer.from([0, 1]))).toMatchObject({
+      kind: "convertible",
+      editable: false,
+    });
+  });
+
+  test("keeps CSV as editable text", () => {
+    expect(classifyFile("table.csv", Buffer.from("a,b\\n1,2\\n"))).toMatchObject({
+      kind: "text",
+      editable: true,
+    });
+  });
+
+  test("classifies MBOX as binary before text fallback", () => {
+    expect(classifyFile("inbox.mbox", Buffer.from("From sender@example.test"))).toMatchObject({
+      kind: "binary",
+      editable: false,
+    });
+  });
+});
+
+describe("server/frontend suffix parity", () => {
+  test("keeps the frontend mirror aligned with the server allowlist", async () => {
+    const { CONVERTIBLE_SUFFIXES_MIRROR } = await import("../public/file-language.js");
+    expect([...CONVERTIBLE_SUFFIXES_MIRROR].sort()).toEqual([...CONVERTIBLE_SUFFIXES].sort());
   });
 });
 

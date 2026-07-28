@@ -21,7 +21,7 @@ export type ResolveResult =
 
 export type FileClassification = {
   mimeType: string;
-  kind: "text" | "image" | "pdf" | "binary";
+  kind: "text" | "image" | "pdf" | "convertible" | "binary";
   editable: boolean;
 };
 
@@ -43,6 +43,24 @@ export type WriteResult =
 const TEXT_READ_LIMIT = 2 * 1024 * 1024; // 2 MiB
 const EDIT_SIZE_LIMIT = 1 * 1024 * 1024; // 1 MiB
 const BINARY_PREFIX_BYTES = 512;
+
+export const CONVERTIBLE_SUFFIXES = new Set([
+  "doc",
+  "docx",
+  "rtf",
+  "odt",
+  "ppt",
+  "pptx",
+  "odp",
+  "xls",
+  "xlsx",
+  "ods",
+  "eml",
+  "msg",
+] as const);
+export type ConvertibleSuffix = (typeof CONVERTIBLE_SUFFIXES extends Set<infer T> ? T : never) &
+  string;
+const NON_PREVIEWABLE_SUFFIXES = new Set(["mbox"]);
 
 const IMAGE_EXTENSIONS: Record<string, string> = {
   png: "image/png",
@@ -191,6 +209,12 @@ function isBinaryByPrefix(prefix: Buffer): boolean {
   return false;
 }
 
+export function isConvertibleSuffix(
+  filePath: string,
+): filePath is `${string}.${ConvertibleSuffix}` {
+  return CONVERTIBLE_SUFFIXES.has(getExtension(filePath) as ConvertibleSuffix);
+}
+
 export function classifyFile(filePath: string, prefix: Buffer): FileClassification {
   const ext = getExtension(filePath).toLowerCase();
 
@@ -202,6 +226,16 @@ export function classifyFile(filePath: string, prefix: Buffer): FileClassificati
   // Image: check by extension.
   if (ext && IMAGE_EXTENSIONS[ext]) {
     return { mimeType: IMAGE_EXTENSIONS[ext], kind: "image", editable: false };
+  }
+
+  // Explicitly excluded mailboxes are binary, even when their contents look like text.
+  if (NON_PREVIEWABLE_SUFFIXES.has(ext)) {
+    return { mimeType: "application/octet-stream", kind: "binary", editable: false };
+  }
+
+  // Conversion is attempted only for the server-owned suffix allowlist.
+  if (CONVERTIBLE_SUFFIXES.has(ext as ConvertibleSuffix)) {
+    return { mimeType: "application/octet-stream", kind: "convertible", editable: false };
   }
 
   // Binary detection by NUL byte.
@@ -257,28 +291,25 @@ export function openCanonicalFileForRead(filePath: string): OpenedCanonicalFile 
 
 // ─── Text file reading ──────────────────────────────────────────────────
 
+export function readTextFromDescriptor(filePath: string, fd: number, stat: fs.Stats): ReadResult {
+  const size = stat.size;
+  const readLen = Math.min(size, TEXT_READ_LIMIT);
+  const buf = Buffer.alloc(readLen);
+  const bytesRead = fs.readSync(fd, buf, 0, readLen, 0);
+  const actualBuf = buf.subarray(0, bytesRead);
+  const truncated = size > TEXT_READ_LIMIT;
+  const content = actualBuf.toString("utf-8");
+  const isBinary = isBinaryByPrefix(actualBuf);
+  const ext = getExtension(filePath).toLowerCase();
+  const mimeType = TEXT_MIME_BY_EXT[ext] || "text/plain";
+
+  return { content, size, mtimeMs: stat.mtimeMs, truncated, isBinary, mimeType };
+}
+
 export function readTextFileForPreview(filePath: string): ReadResult {
   const { fd, stat } = openCanonicalFileForRead(filePath);
   try {
-    const size = stat.size;
-    const readLen = Math.min(size, TEXT_READ_LIMIT);
-    const buf = Buffer.alloc(readLen);
-    const bytesRead = fs.readSync(fd, buf, 0, readLen, 0);
-    const actualBuf = buf.subarray(0, bytesRead);
-    const truncated = size > TEXT_READ_LIMIT;
-    const content = actualBuf.toString("utf-8");
-    const isBinary = isBinaryByPrefix(actualBuf);
-    const ext = getExtension(filePath).toLowerCase();
-    const mimeType = TEXT_MIME_BY_EXT[ext] || "text/plain";
-
-    return {
-      content,
-      size,
-      mtimeMs: stat.mtimeMs,
-      truncated,
-      isBinary,
-      mimeType,
-    };
+    return readTextFromDescriptor(filePath, fd, stat);
   } finally {
     fs.closeSync(fd);
   }
