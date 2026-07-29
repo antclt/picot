@@ -160,6 +160,7 @@ async fn ensure_agent_inbox_session(app: AppHandle) -> Result<(), String> {
     let cwd = agent_inbox_path()?;
     fs::create_dir_all(&cwd)
         .map_err(|error| format!("Cannot create Agent Inbox folder: {error}"))?;
+    ensure_agent_inbox_tasks_file(&cwd)?;
     ensure_agent_inbox_placeholder_session(&cwd)?;
 
     let launcher = app
@@ -594,6 +595,22 @@ fn now_iso_timestamp() -> String {
     let seconds = millis / 1000;
     let sub_millis = millis % 1000;
     format!("{seconds}.{sub_millis:03}Z")
+}
+
+/// Create `tasks.json` in the Agent Inbox workspace if it does not already
+/// exist. The file is the authoritative task store for the Runtime panel,
+/// persisted through the picot-config bridge (`read_super_agent_tasks` /
+/// `write_super_agent_tasks`). Creating it eagerly on first open guarantees
+/// the inbox context is bootstrapped before any task reads arrive.
+fn ensure_agent_inbox_tasks_file(cwd: &Path) -> Result<(), String> {
+    let tasks_path = cwd.join("tasks.json");
+    if tasks_path.exists() {
+        return Ok(());
+    }
+    let default = r#"{"tasks":[]}"#;
+    fs::write(&tasks_path, default)
+        .map_err(|error| format!("Cannot create Agent Inbox tasks.json: {error}"))?;
+    Ok(())
 }
 
 fn ensure_agent_inbox_placeholder_session(cwd: &Path) -> Result<(), String> {
