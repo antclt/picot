@@ -5,7 +5,7 @@ function betaUpdatesEnabled() {
   return localStorage.getItem(BETA_SETTINGS_KEY) === "true";
 }
 
-export function setupAppUpdater({ settingsPanel, logger = console } = {}) {
+export function setupAppUpdater({ logger = console } = {}) {
   const relaunch = globalThis.__TAURI__?.process?.relaunch;
   const check = globalThis.__TAURI__?.updater?.check;
   const invoke = globalThis.__TAURI__?.core?.invoke;
@@ -148,7 +148,7 @@ export function setupAppUpdater({ settingsPanel, logger = console } = {}) {
   });
 
   sidebarBtn?.addEventListener("click", () => {
-    settingsPanel?.openSettings?.("general");
+    void installUpdate();
   });
 
   window.addEventListener("picot-update-channel-changed", () => {

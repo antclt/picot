@@ -20,7 +20,7 @@ use runtime_coordinator::RuntimeTarget;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::fs::{self, File};
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use tauri::image::Image;
@@ -149,6 +149,48 @@ async fn open_session_in_project(
         Some(session.to_string())
     };
     open_workspace_at_path(&app, Some(&window), &cwd, resume.as_deref())
+}
+
+/// Ensure the fixed Agent Inbox workspace exists, has a sidebar-visible saved
+/// session, and has a background runtime running. Unlike normal project opens,
+/// this command intentionally keeps the current window in place; the frontend
+/// decides whether to navigate after the refreshed session list is available.
+#[tauri::command]
+async fn ensure_agent_inbox_session(app: AppHandle) -> Result<(), String> {
+    let cwd = agent_inbox_path()?;
+    fs::create_dir_all(&cwd)
+        .map_err(|error| format!("Cannot create Agent Inbox folder: {error}"))?;
+    ensure_agent_inbox_placeholder_session(&cwd)?;
+
+    let launcher = app
+        .try_state::<WorkspaceLauncher>()
+        .ok_or_else(|| "Workspace launcher is not ready".to_string())?;
+    let host = app
+        .try_state::<HostServer>()
+        .ok_or_else(|| "Host server is not ready".to_string())?;
+    let runtimes = app
+        .try_state::<NativePiManagerState>()
+        .ok_or_else(|| "Native runtime manager is not ready".to_string())?;
+    let workspace_id = launcher
+        .metadata
+        .lock()
+        .map_err(|_| "Picot metadata store is unavailable".to_string())?
+        .workspace_id_for_path(&cwd)?;
+
+    host.register_workspace(&workspace_id, cwd.clone())?;
+    if runtimes
+        .statuses()
+        .map(|statuses| {
+            statuses
+                .iter()
+                .any(|status| status.target.workspace_id == workspace_id)
+        })
+        .unwrap_or(false)
+    {
+        return Ok(());
+    }
+    let _ = spawn_fresh_runtime(&runtimes, &launcher.launch, &cwd, workspace_id)?;
+    Ok(())
 }
 
 fn spawn_fresh_runtime(
@@ -530,6 +572,87 @@ fn find_static_dir(app: &tauri::App) -> PathBuf {
     )
 }
 
+fn agent_inbox_path() -> Result<PathBuf, String> {
+    dirs::home_dir()
+        .map(|home| home.join(".pi").join("agent").join("super-agent"))
+        .ok_or_else(|| "Cannot resolve home directory for Agent Inbox".to_string())
+}
+
+fn session_dir_name(cwd: &Path) -> String {
+    format!("--{}--", cwd.to_string_lossy().replace(['/', '\\'], "-"))
+}
+
+fn now_unix_millis() -> u128 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis()
+}
+
+fn now_iso_timestamp() -> String {
+    let millis = now_unix_millis();
+    let seconds = millis / 1000;
+    let sub_millis = millis % 1000;
+    format!("{seconds}.{sub_millis:03}Z")
+}
+
+fn ensure_agent_inbox_placeholder_session(cwd: &Path) -> Result<(), String> {
+    if find_latest_session_for_cwd(cwd).is_some() {
+        return Ok(());
+    }
+    let sessions_root = dirs::home_dir()
+        .ok_or_else(|| "Cannot resolve home directory for Agent Inbox sessions".to_string())?
+        .join(".pi")
+        .join("agent")
+        .join("sessions")
+        .join(session_dir_name(cwd));
+    fs::create_dir_all(&sessions_root)
+        .map_err(|error| format!("Cannot create Agent Inbox session folder: {error}"))?;
+    let id = uuid::Uuid::new_v4().to_string();
+    let path = sessions_root.join(format!("{}_{}.jsonl", now_unix_millis(), id));
+    let timestamp = now_iso_timestamp();
+    let cwd_json = serde_json::to_string(&cwd.to_string_lossy().into_owned())
+        .map_err(|error| format!("Cannot encode Agent Inbox path: {error}"))?;
+    let mut file = File::create(&path)
+        .map_err(|error| format!("Cannot create Agent Inbox session file: {error}"))?;
+    writeln!(
+        file,
+        "{{\"type\":\"session\",\"version\":3,\"id\":\"{id}\",\"timestamp\":\"{timestamp}\",\"cwd\":{cwd_json}}}"
+    )
+    .map_err(|error| format!("Cannot write Agent Inbox session header: {error}"))?;
+    writeln!(
+        file,
+        "{{\"type\":\"session_info\",\"id\":\"{}\",\"parentId\":null,\"timestamp\":\"{timestamp}\",\"name\":\"Agent Inbox\"}}",
+        uuid::Uuid::new_v4().simple()
+    )
+    .map_err(|error| format!("Cannot write Agent Inbox session name: {error}"))?;
+    Ok(())
+}
+
+fn find_latest_session_for_cwd(cwd: &Path) -> Option<PathBuf> {
+    let sessions_root = dirs::home_dir()?.join(".pi/agent/sessions");
+    list_session_files(&sessions_root)
+        .into_iter()
+        .filter(|path| {
+            extract_session_cwd(path)
+                .map(|session_cwd| same_dir(Path::new(&session_cwd), cwd))
+                .unwrap_or(false)
+        })
+        .filter_map(|path| {
+            let mtime = fs::metadata(&path).ok()?.modified().ok()?;
+            Some((mtime, path))
+        })
+        .max_by_key(|(mtime, _)| *mtime)
+        .map(|(_, path)| path)
+}
+
+fn same_dir(left: &Path, right: &Path) -> bool {
+    match (left.canonicalize(), right.canonicalize()) {
+        (Ok(left), Ok(right)) => left == right,
+        _ => left == right,
+    }
+}
+
 fn list_session_files(root: &Path) -> Vec<PathBuf> {
     let mut files = Vec::new();
     let Ok(entries) = fs::read_dir(root) else {
@@ -702,6 +825,7 @@ fn main() {
             open_folder_as_workspace,
             open_new_session_in_workspace,
             open_session_in_project,
+            ensure_agent_inbox_session,
             check_beta_update,
             install_beta_update
         ])

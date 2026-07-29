@@ -1,8 +1,8 @@
 import { reconcileSnapshotTarget } from "../session/bootstrap-target.js";
-import { selectSuperAgentSessionToLaunch } from "../super-agent/autolaunch.js";
 import { dispatchSuperAgentTaskNative } from "../super-agent/native-dispatch.js";
 import { isSuperAgentProjectPath } from "../super-agent/session.js";
 import { isSuperAgentEnabled } from "../super-agent/settings.js";
+import { selectSuperAgentStartupAction } from "../super-agent/startup-flow.js";
 import { buildTaskComposerPrompt, markTaskChildSessionBound } from "../super-agent/task-state.js";
 import { updateSuperAgentTask } from "../super-agent/task-store.js";
 import { applyTheme, getCurrentTheme } from "../themes.js";
@@ -144,6 +144,7 @@ function markSuperAgentLaunched() {
   }
 }
 let pendingBoundSessionFirstMessage = null;
+let superAgentEnsureInFlight = null;
 
 // Maps a dispatched child runtime instanceId -> Agent Inbox task id, so
 // `session_bound` events from the background child can upgrade the task's
@@ -316,7 +317,12 @@ document.getElementById("refresh-sessions-btn")?.addEventListener("click", (e) =
   // Force reflow so re-adding the class restarts the animation
   void btn.offsetWidth;
   btn.classList.add("spinning");
+  ensureSuperAgentStartupSession({ reloadAfterEnsure: false }).catch(showError);
   sidebar?.load().catch(showError);
+});
+window.addEventListener("picot-super-agent-autostart-changed", (event) => {
+  if (event.detail?.enabled) ensureSuperAgentStartupSession().catch(showError);
+  else sidebar?.render();
 });
 setupFileBrowser();
 const imageAttachments = setupComposerImageAttachments({
@@ -619,7 +625,7 @@ function subscribeToLiveSessions(sessions) {
     }
   }
   updateSuperAgentActiveState((sessions ?? []).find((session) => session.id === target.sessionId));
-  autoLaunchSuperAgentOnce(sessions);
+  handleSuperAgentStartupSessions(sessions).catch(showError);
 }
 
 function updateSuperAgentActiveState(session = null) {
@@ -686,23 +692,46 @@ document.addEventListener("sa-dispatch", (event) => {
   }).catch(showError);
 });
 
-function autoLaunchSuperAgentOnce(sessions) {
-  const invoke = globalThis.__TAURI__?.core?.invoke;
-  if (!invoke) return;
-  const latest = selectSuperAgentSessionToLaunch({
+async function handleSuperAgentStartupSessions(sessions) {
+  const action = selectSuperAgentStartupAction({
     alreadyLaunched: wasSuperAgentLaunched(),
     enabled: isSuperAgentEnabled(),
     sessions,
     currentSessionId: target.sessionId,
   });
-  if (!latest) return;
+  if (action.type === "ensure") {
+    await ensureSuperAgentStartupSession();
+    return;
+  }
+  if (action.type === "launch") {
+    await openSuperAgentSessionOnce(action.session);
+  }
+}
+
+async function ensureSuperAgentStartupSession({ reloadAfterEnsure = true } = {}) {
+  const invoke = globalThis.__TAURI__?.core?.invoke;
+  if (!invoke || !isSuperAgentEnabled()) return;
+  if (!superAgentEnsureInFlight) {
+    superAgentEnsureInFlight = invoke("ensure_agent_inbox_session").finally(() => {
+      superAgentEnsureInFlight = null;
+    });
+  }
+  await superAgentEnsureInFlight;
+  if (reloadAfterEnsure) await sidebar?.load({ quiet: true });
+}
+
+async function openSuperAgentSessionOnce(session) {
+  const invoke = globalThis.__TAURI__?.core?.invoke;
+  if (!invoke || !session) return;
   markSuperAgentLaunched();
-  invoke("open_session_in_project", {
-    projectPath: latest.projectPath,
-    sessionId: latest.id,
-  }).catch((error) => {
+  try {
+    await invoke("open_session_in_project", {
+      projectPath: session.projectPath,
+      sessionId: session.id,
+    });
+  } catch (error) {
     console.warn("[SuperAgent] Failed to auto-launch Agent Inbox:", error);
-  });
+  }
 }
 
 async function handleBackgroundRuntimeEvent(frame) {

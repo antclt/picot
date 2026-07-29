@@ -1125,7 +1125,7 @@ fn parse_session_summary_with_metadata(
         }
     }
     let Some(id) = id else { return Ok(None) };
-    if user_message_count == 0 && line_count <= 4 {
+    if user_message_count == 0 && line_count <= 4 && name.as_deref() != Some("Agent Inbox") {
         return Ok(None);
     }
     let Some(cwd) = cwd else {

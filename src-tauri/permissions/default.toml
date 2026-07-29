@@ -20,6 +20,11 @@ description = "Allow opening or focusing a project's workspace window at a saved
 commands.allow = ["open_session_in_project"]
 
 [[permission]]
+identifier = "allow-ensure-agent-inbox-session"
+description = "Allow bootstrapping the fixed Agent Inbox workspace and background runtime."
+commands.allow = ["ensure_agent_inbox_session"]
+
+[[permission]]
 identifier = "allow-check-beta-update"
 description = "Allow checking the prerelease Picot updater channel."
 commands.allow = ["check_beta_update"]
@@ -35,6 +40,7 @@ permissions = [
   "allow-open-folder-as-workspace",
   "allow-open-new-session-in-workspace",
   "allow-open-session-in-project",
+  "allow-ensure-agent-inbox-session",
   "allow-check-beta-update",
   "allow-install-beta-update",
 ]
