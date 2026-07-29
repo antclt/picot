@@ -216,6 +216,7 @@
 
 #message-input {
   padding: var(--space-3) var(--space-3) var(--space-1);
+  min-height: calc(2lh + var(--space-3) + var(--space-1));
   background: transparent;
   border: none;
   color: var(--text-primary);
