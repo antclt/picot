@@ -652,9 +652,14 @@ export async function handlePicotConfig(
       }
 
       case "read_super_agent_tasks": {
-        const content = fs.existsSync(SUPER_AGENT_TASKS_PATH)
-          ? fs.readFileSync(SUPER_AGENT_TASKS_PATH, "utf8")
-          : '{"tasks":[]}';
+        let content: string;
+        if (fs.existsSync(SUPER_AGENT_TASKS_PATH)) {
+          content = fs.readFileSync(SUPER_AGENT_TASKS_PATH, "utf8");
+        } else {
+          fs.mkdirSync(path.dirname(SUPER_AGENT_TASKS_PATH), { recursive: true });
+          content = '{"tasks":[]}';
+          fs.writeFileSync(SUPER_AGENT_TASKS_PATH, content, "utf8");
+        }
         let tasks: unknown[] = [];
         try {
           const parsed = JSON.parse(content) as { tasks?: unknown[] };
