@@ -32,6 +32,13 @@
   left: 0;
   right: 0;
   z-index: 10;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+
+.header::-webkit-scrollbar {
+  display: none;
 }
 
 .header::before {
@@ -44,6 +51,7 @@
   align-items: center;
   gap: var(--space-2);
   -webkit-app-region: no-drag;
+  flex-shrink: 0;
 }
 
 .sidebar-toggle,

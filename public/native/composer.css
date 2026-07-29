@@ -130,6 +130,12 @@
   justify-content: space-between;
   gap: var(--space-2);
   padding: var(--space-1) var(--space-2) var(--space-2);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.composer-toolbar::-webkit-scrollbar {
+  display: none;
 }
 
 .composer-toolbar-left,
@@ -137,6 +143,7 @@
   display: flex;
   align-items: center;
   gap: var(--space-1);
+  flex-shrink: 0;
 }
 
 /* Toolbar variants of model/thinking pills — flatter to sit inside the card */
@@ -340,4 +347,36 @@
   transition: transform 0.1s var(--ease);
 }
 
-/* Primary button — use .btn-primary or dialog action buttons */
+/* Narrow screens — reduce toolbar item footprint to keep send button visible */
+@media (max-width: 540px) {
+  .composer-toolbar-left,
+  .composer-toolbar-right {
+    gap: var(--space-0-5);
+  }
+
+  .composer-toolbar {
+    gap: var(--space-1);
+    padding: var(--space-1) var(--space-1-5) var(--space-1-5);
+  }
+
+  .composer-toolbar .thinking-tag {
+    padding: 0 var(--space-1-5);
+  }
+}
+
+@media (max-width: 420px) {
+  /* On very narrow screens, hide lower-priority items;
+     the toolbar still scrolls via overflow-x: auto if needed */
+  .composer-toolbar .thinking-tag {
+    display: none;
+  }
+
+  .composer-toolbar .input-mic-btn {
+    display: none;
+  }
+
+  .composer-toolbar .model-dropdown-btn {
+    padding: 0 var(--space-1);
+    gap: var(--space-0-5);
+  }
+}
