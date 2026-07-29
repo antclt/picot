@@ -44,8 +44,13 @@ function cubeIcon() {
     </svg>`;
 }
 
+function isSkillCommand(command) {
+  return command.type === "skill" || command.source === "skill";
+}
+
 function normalizeCommands(commands) {
   return Array.from(commands ?? [])
+    .filter(isSkillCommand)
     .map((command) => ({ ...command, command: commandInvocation(command) }))
     .filter((command) => command.command && command.capabilityState !== "disabled");
 }
@@ -59,7 +64,7 @@ export function setupComposerSlashMenu({ input, container, commandButton = null,
   let updateGeneration = 0;
 
   container.setAttribute("role", "listbox");
-  container.setAttribute("aria-label", "Slash commands");
+  container.setAttribute("aria-label", "Skill slash commands");
   input.setAttribute("aria-autocomplete", "list");
   input.setAttribute("aria-controls", container.id);
   input.setAttribute("aria-expanded", "false");
@@ -141,13 +146,13 @@ export function setupComposerSlashMenu({ input, container, commandButton = null,
     container.innerHTML = "";
     const heading = document.createElement("div");
     heading.className = "skill-slash-heading";
-    heading.textContent = "Slash commands";
+    heading.textContent = "Skills";
     container.appendChild(heading);
 
     if (matches.length === 0) {
       const empty = document.createElement("div");
       empty.className = "skill-slash-empty";
-      empty.textContent = "No matching commands";
+      empty.textContent = "No matching skills";
       container.appendChild(empty);
     } else {
       matches.forEach((command, index) => {

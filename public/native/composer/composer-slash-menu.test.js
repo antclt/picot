@@ -50,7 +50,7 @@ describe("composer slash menu", () => {
     expect(activeSlashQuery(input)).toBeNull();
   });
 
-  it("inserts selected skill commands", async () => {
+  it("only displays and inserts skill commands", async () => {
     const formSubmit = vi.fn();
     input.form?.addEventListener("submit", formSubmit);
     const controller = setupComposerSlashMenu({
@@ -58,6 +58,7 @@ describe("composer slash menu", () => {
       container: menu,
       getCommands: () => [
         { name: "settings", description: "Open settings", type: "builtin", scope: "picot" },
+        { name: "review", description: "Review files", type: "extension", scope: "user" },
         {
           name: "skill:research",
           description: "Investigate primary sources",
@@ -70,7 +71,13 @@ describe("composer slash menu", () => {
     input.value = "/";
     input.setSelectionRange(input.value.length, input.value.length);
     await controller.update();
-    input.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", cancelable: true }));
+
+    expect(menu.textContent).toContain("Skills");
+    expect(menu.querySelectorAll(".skill-slash-option")).toHaveLength(1);
+    expect(menu.textContent).toContain("Research");
+    expect(menu.textContent).not.toContain("Settings");
+    expect(menu.textContent).not.toContain("Review");
+
     input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", cancelable: true }));
 
     expect(input.value).toBe("/skill:research ");
@@ -84,7 +91,7 @@ describe("composer slash menu", () => {
     const controller = setupComposerSlashMenu({
       input,
       container: menu,
-      getCommands: () => [{ name: "btw", description: "Append message", type: "extension" }],
+      getCommands: () => [{ name: "skill:btw", description: "Append message", type: "skill" }],
     });
 
     input.value = "/bt";
@@ -93,7 +100,7 @@ describe("composer slash menu", () => {
     const event = new KeyboardEvent("keydown", { key: "Enter", cancelable: true });
     input.dispatchEvent(event);
 
-    expect(input.value).toBe("/btw ");
+    expect(input.value).toBe("/skill:btw ");
     expect(onSubmit).not.toHaveBeenCalled();
   });
 
