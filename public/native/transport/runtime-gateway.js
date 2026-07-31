@@ -57,6 +57,23 @@ export class RuntimeGateway {
     return this.#send({ type: "runtime_snapshot_request", sessionId });
   }
 
+  git(command, target) {
+    try {
+      assertTarget(target);
+      this.#adapter.subscribeTarget?.(target);
+      return this.#send(
+        {
+          type: command?.type === "git_ai_commit_message" ? "git_ai_commit_message" : "git_command",
+          workspaceId: target.workspaceId,
+          command: command?.type === "git_ai_commit_message" ? undefined : command,
+        },
+        command?.requestId,
+      );
+    } catch (error) {
+      return Promise.reject(error);
+    }
+  }
+
   capabilities(instanceId) {
     if (!instanceId) return Promise.reject(new Error("capabilities requires instanceId"));
     return this.#send({ type: "runtime_capabilities_request", instanceId });
@@ -67,8 +84,8 @@ export class RuntimeGateway {
     return () => this.#listeners.delete(listener);
   }
 
-  #send(frame) {
-    const requestId = `client-${this.#nextRequestId++}`;
+  #send(frame, requestIdOverride = null) {
+    const requestId = requestIdOverride || `client-${this.#nextRequestId++}`;
     const generation = this.#generation;
     return new Promise((resolve, reject) => {
       this.#pending.set(requestId, { resolve, reject, generation });

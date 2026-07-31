@@ -59,6 +59,11 @@ pub enum RoutedAction {
         request_id: String,
         frame: Value,
     },
+    Git {
+        client_id: String,
+        request_id: String,
+        frame: Value,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -142,6 +147,25 @@ impl HostRouter {
             .to_owned();
 
         match frame_type {
+            "git_command" | "git_ai_commit_message" => {
+                if client_kind != ClientKind::Desktop {
+                    return Err(RouterError::new(
+                        "remote_operation_forbidden",
+                        "Remote clients cannot use local Git operations",
+                    ));
+                }
+                if frame.get("workspaceId").and_then(Value::as_str).is_none() {
+                    return Err(RouterError::new(
+                        "invalid_git_command",
+                        "workspaceId is required",
+                    ));
+                }
+                Ok(RoutedAction::Git {
+                    client_id: client_id.to_owned(),
+                    request_id,
+                    frame: frame.clone(),
+                })
+            }
             "terminal_command" => {
                 if client_kind != ClientKind::Desktop {
                     return Err(RouterError::new(

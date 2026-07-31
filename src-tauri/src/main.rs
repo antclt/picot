@@ -1,6 +1,9 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod git_pi_runner;
+mod git_service;
 mod host_data;
+mod host_git;
 mod host_router;
 mod host_server;
 mod metadata_store;

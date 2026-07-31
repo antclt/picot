@@ -1,6 +1,7 @@
 #![cfg_attr(not(test), allow(dead_code))]
 
 use crate::host_data::{HostDataError, HostDataPlane, WriteFileResult};
+use crate::host_git;
 use crate::host_router::{HostRouter, RoutedAction, PROTOCOL_VERSION};
 use crate::native_pi_manager::NativePiManager;
 use crate::pi_launch::{list_installed_apps, open_external, open_in_app, PiLaunchResolver};
@@ -49,6 +50,8 @@ struct HostState {
     port: u16,
     terminal_manager: TerminalManager,
     terminal_events: tokio::sync::broadcast::Sender<(OwnerId, Value)>,
+    git_service: Arc<crate::git_service::GitService>,
+    git_events: tokio::sync::broadcast::Sender<(String, Value)>,
 }
 
 pub struct HostServer {
@@ -108,6 +111,8 @@ impl HostServer {
         // a destination address.
         let loopback_origin = format!("http://127.0.0.1:{}", address.port());
         let (terminal_events, _) = tokio::sync::broadcast::channel(256);
+        let (git_events, _) = tokio::sync::broadcast::channel(256);
+        let git_service = Arc::new(crate::git_service::GitService::new());
         let terminal_manager = TerminalManager::new(
             TerminalRegistry::new(15),
             TerminalStateStore::new(
@@ -130,6 +135,8 @@ impl HostServer {
             port: address.port(),
             terminal_manager,
             terminal_events,
+            git_service,
+            git_events,
         });
         let index = static_dir.join("index.html");
         let static_service = ServeDir::new(static_dir).fallback(ServeFile::new(index));
@@ -653,6 +660,7 @@ async fn handle_websocket(mut socket: WebSocket, state: Arc<HostState>) {
 
     let mut runtime_events = state.runtimes.subscribe();
     let mut terminal_events = state.terminal_events.subscribe();
+    let mut git_events = state.git_events.subscribe();
     let mut subscriptions = HashSet::new();
     loop {
         tokio::select! {
@@ -756,6 +764,17 @@ async fn handle_websocket(mut socket: WebSocket, state: Arc<HostState>) {
             event = terminal_events.recv() => {
                 match event {
                     Ok((owner, outgoing)) if desktop_owner.as_ref() == Some(&owner) => {
+                        if socket.send(Message::Text(outgoing.to_string().into())).await.is_err() {
+                            break;
+                        }
+                    }
+                    Ok(_) | Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {}
+                    Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+                }
+            }
+            event = git_events.recv() => {
+                match event {
+                    Ok((owner, outgoing)) if desktop_owner.as_ref() == Some(&OwnerId::from_client_id(&owner)) => {
                         if socket.send(Message::Text(outgoing.to_string().into())).await.is_err() {
                             break;
                         }
@@ -1004,6 +1023,20 @@ async fn dispatch(
                 "response": response,
             }))
         }
+        RoutedAction::Git {
+            client_id,
+            request_id,
+            frame,
+        } => host_git::dispatch(
+            &state.git_service,
+            &state.data,
+            &state.pi_launch,
+            &state.git_events,
+            &client_id,
+            &request_id,
+            &frame,
+        )
+        .await,
         RoutedAction::Terminal {
             client_id,
             request_id,

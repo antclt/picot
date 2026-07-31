@@ -25,6 +25,7 @@ import { showNativeDialog } from "./extensions/dialog.js";
 import { ExtensionUiHost } from "./extensions/extension-ui-host.js";
 import { showInlineExtensionPrompt } from "./extensions/inline-extension-prompt.js";
 import { setupAppUpdater } from "./features/app-updater.js";
+import { setupGitPanel } from "./features/git-panel-integration.js";
 import { refreshLanQrButton, setupLanQr } from "./features/lan-qr.js";
 import { resolveRemoteAuth } from "./features/remote-auth.js";
 import {
@@ -204,6 +205,15 @@ const config = new ConfigGateway({ runtime, getTarget: () => target });
 window.__picotConfigCall = (op, params, options) => config.call(op, params, options);
 const contextUsage = setupContextUsage();
 const filePreviewPanel = setupFilePreviewPanel();
+const gitPanel = setupGitPanel({
+  runtime,
+  getTarget: () => target,
+  container: document.getElementById("git-panel"),
+  fileSidebar: document.getElementById("file-sidebar"),
+  fileList: document.getElementById("file-list"),
+  filePreviewPanel,
+  onError: showError,
+});
 const sessionCostEl = document.getElementById("session-cost");
 let sessionTotalCost = 0;
 

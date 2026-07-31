@@ -135,6 +135,10 @@ impl PiLaunchResolver {
         self.run_pi_command(&["remove", source]).map(|_| ())
     }
 
+    pub fn bundled_pi_path(&self) -> Result<PathBuf, String> {
+        self.resolve_bundled_pi()
+    }
+
     fn resolve_bundled_pi(&self) -> Result<PathBuf, String> {
         let bin_name = if cfg!(target_os = "windows") {
             "pi.exe"
