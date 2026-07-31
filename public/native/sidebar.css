@@ -3,8 +3,8 @@
    ═══════════════════════════════════════════════════════ */
 
 .sidebar {
-  width: var(--sidebar-width);
-  min-width: var(--sidebar-width);
+  width: var(--panel-width, var(--sidebar-width));
+  min-width: var(--panel-width, var(--sidebar-width));
   background: var(--sidebar-bg-mobile);
   backdrop-filter: blur(var(--blur-heavy)) saturate(1.5);
   -webkit-backdrop-filter: blur(var(--blur-heavy)) saturate(1.5);

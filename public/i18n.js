@@ -10,8 +10,8 @@
 const LANGUAGE_COOKIE = "picot-language";
 const LANGUAGE_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 365 * 10; // 10 years
 
-const SUPPORTED_PREFERENCES = new Set(["system", "en", "zh"]);
-const BCP47_TAG = { en: "en", zh: "zh-CN" };
+const SUPPORTED_PREFERENCES = new Set(["system", "en", "zh", "ja", "es"]);
+const BCP47_TAG = { en: "en", zh: "zh-CN", ja: "ja", es: "es" };
 
 /** English messages — loaded at init, serve as the fallback. */
 let enMessages = {};
@@ -27,6 +27,8 @@ export const LANGUAGES = [
   { value: "system", labelKey: "settings.language.systemDefault" },
   { value: "en", nativeLabel: "English" },
   { value: "zh", nativeLabel: "中文" },
+  { value: "ja", nativeLabel: "日本語" },
+  { value: "es", nativeLabel: "Español" },
 ];
 
 // ── Preference normalization ──────────────────────────────────────────
@@ -39,8 +41,14 @@ export function resolveLocale(preference, systemLanguage = navigator.language) {
   const pref = normalizePreference(preference);
   if (pref === "en") return "en";
   if (pref === "zh") return "zh";
+  if (pref === "ja") return "ja";
+  if (pref === "es") return "es";
   // system
-  return systemLanguage?.toLowerCase().startsWith("zh") ? "zh" : "en";
+  const lang = systemLanguage?.toLowerCase() ?? "";
+  if (lang.startsWith("zh")) return "zh";
+  if (lang.startsWith("ja")) return "ja";
+  if (lang.startsWith("es")) return "es";
+  return "en";
 }
 
 // ── Cookie helpers (mirrors public/themes.js pattern) ─────────────────

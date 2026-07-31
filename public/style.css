@@ -145,7 +145,6 @@ body {
 .app-side-panel {
   --panel-width: 320px;
   width: var(--panel-width);
-  margin-top: var(--workspace-header-offset, 36px);
   min-width: var(--panel-width);
   max-width: var(--panel-width);
   flex: 0 0 var(--panel-width);
@@ -189,6 +188,17 @@ body {
 .app-side-panel-resize-handle:hover::after,
 body.is-resizing-side-panel .app-side-panel-resize-handle::after {
   background: var(--accent);
+}
+
+/* Variant for left-edge panels (drag handle sits on the right border) */
+.app-side-panel-resize-handle--right-edge {
+  left: auto;
+  right: -4px;
+}
+
+.app-side-panel-resize-handle--right-edge::after {
+  left: auto;
+  right: 3px;
 }
 
 body.is-resizing-side-panel {

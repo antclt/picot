@@ -15,7 +15,15 @@ function readStoredWidth(storageKey) {
 
 export function setupResizablePanel(
   panel,
-  { storageKey, defaultWidth, minWidth = DEFAULT_MIN_WIDTH, maxWidth = DEFAULT_MAX_WIDTH },
+  {
+    storageKey,
+    defaultWidth,
+    minWidth = DEFAULT_MIN_WIDTH,
+    maxWidth = DEFAULT_MAX_WIDTH,
+    // 'right' = panel is on the right edge (drag handle on left, drag left to grow)
+    // 'left'  = panel is on the left edge (drag handle on right, drag right to grow)
+    side = "right",
+  },
 ) {
   if (!panel) return () => {};
 
@@ -25,19 +33,25 @@ export function setupResizablePanel(
 
   const handle =
     panel.querySelector(".app-side-panel-resize-handle") || document.createElement("div");
-  handle.className = "app-side-panel-resize-handle";
+  handle.className =
+    side === "left"
+      ? "app-side-panel-resize-handle app-side-panel-resize-handle--right-edge"
+      : "app-side-panel-resize-handle";
   handle.setAttribute("role", "separator");
   handle.setAttribute("aria-orientation", "vertical");
   handle.setAttribute("title", t("migrated.ui.resizablePanel.title.resizePanel"));
   if (!handle.parentElement) {
-    panel.prepend(handle);
+    panel.append(handle);
   }
 
   let startX = 0;
   let startWidth = initialWidth;
 
   const onPointerMove = (event) => {
-    const nextWidth = clamp(startWidth + startX - event.clientX, minWidth, maxWidth);
+    // For right-edge panels: drag left (clientX decreases) → grow width → startX - clientX > 0
+    // For left-edge panels:  drag right (clientX increases) → grow width → clientX - startX > 0
+    const delta = side === "left" ? event.clientX - startX : startX - event.clientX;
+    const nextWidth = clamp(startWidth + delta, minWidth, maxWidth);
     setPanelWidth(panel, nextWidth, storageKey);
   };
 

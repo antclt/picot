@@ -6,6 +6,14 @@ import { describe, expect, it } from "vitest";
 const publicDir = resolve(import.meta.dirname);
 const en = JSON.parse(readFileSync(resolve(publicDir, "locales/en.json"), "utf-8"));
 const zh = JSON.parse(readFileSync(resolve(publicDir, "locales/zh.json"), "utf-8"));
+const ja = JSON.parse(readFileSync(resolve(publicDir, "locales/ja.json"), "utf-8"));
+const es = JSON.parse(readFileSync(resolve(publicDir, "locales/es.json"), "utf-8"));
+
+const NON_EN_LOCALES = [
+  { code: "zh", messages: zh },
+  { code: "ja", messages: ja },
+  { code: "es", messages: es },
+];
 
 // ── Flatten helpers ───────────────────────────────────────────────────
 
@@ -41,27 +49,64 @@ function extractPlaceholders(str) {
 }
 
 const enKeys = new Set(flattenKeys(en));
-const zhKeys = new Set(flattenKeys(zh));
 
 // ── Key parity ────────────────────────────────────────────────────────
 
 describe("locale key parity", () => {
-  it("zh contains every en key", () => {
-    const missing = [...enKeys].filter((k) => !zhKeys.has(k));
-    expect(missing, `zh.json missing keys: ${missing.join(", ")}`).toEqual([]);
-  });
+  for (const { code, messages } of NON_EN_LOCALES) {
+    const localeKeys = new Set(flattenKeys(messages));
 
-  it("en contains every zh key (no extra zh keys)", () => {
-    const extra = [...zhKeys].filter((k) => !enKeys.has(k));
-    expect(extra, `zh.json has extra keys not in en.json: ${extra.join(", ")}`).toEqual([]);
-  });
+    it(`${code} contains every en key`, () => {
+      const missing = [...enKeys].filter((k) => !localeKeys.has(k));
+      expect(missing, `${code}.json missing keys: ${missing.join(", ")}`).toEqual([]);
+    });
 
-  it("uses the required RECENT section titles", () => {
-    expect(en.sidebar.recent).toBe("RECENT");
-    expect(zh.sidebar.recent).toBe("最近访问");
-  });
+    it(`en contains every ${code} key (no extra ${code} keys)`, () => {
+      const extra = [...localeKeys].filter((k) => !enKeys.has(k));
+      expect(extra, `${code}.json has extra keys not in en.json: ${extra.join(", ")}`).toEqual([]);
+    });
 
-  it("every locale value is a non-empty string or nested plain object", () => {
+    it(`${code}: every locale value is a non-empty string or nested plain object`, () => {
+      const checkValues = (obj, path = "") => {
+        for (const [k, v] of Object.entries(obj)) {
+          const p = path ? `${path}.${k}` : k;
+          if (v !== null && typeof v === "object" && !Array.isArray(v)) {
+            checkValues(v, p);
+          } else if (typeof v === "string") {
+            expect(v.length, `empty string at ${p}`).toBeGreaterThan(0);
+          } else {
+            throw new Error(`non-string, non-object value at ${p}: ${typeof v}`);
+          }
+        }
+      };
+      checkValues(messages);
+    });
+
+    it(`en and ${code} have identical {placeholder} sets for every shared key`, () => {
+      const enFlat = flattenKeys(en).reduce((acc, key) => {
+        const val = lookupValue(en, key);
+        if (typeof val === "string") acc.set(key, extractPlaceholders(val));
+        return acc;
+      }, new Map());
+      const mismatches = [];
+      for (const [key, enPlaceholders] of enFlat) {
+        const localeVal = lookupValue(messages, key);
+        if (typeof localeVal !== "string") continue;
+        const localePlaceholders = extractPlaceholders(localeVal);
+        if (
+          enPlaceholders.size !== localePlaceholders.size ||
+          [...enPlaceholders].some((p) => !localePlaceholders.has(p))
+        ) {
+          mismatches.push(
+            `${key}: en={${[...enPlaceholders].join(",")}} ${code}={${[...localePlaceholders].join(",")}}`,
+          );
+        }
+      }
+      expect(mismatches, `Placeholder mismatches:\n${mismatches.join("\n")}`).toEqual([]);
+    });
+  }
+
+  it("every en value is a non-empty string or nested plain object", () => {
     const checkValues = (obj, path = "") => {
       for (const [k, v] of Object.entries(obj)) {
         const p = path ? `${path}.${k}` : k;
@@ -75,30 +120,11 @@ describe("locale key parity", () => {
       }
     };
     checkValues(en);
-    checkValues(zh);
   });
 
-  it("en and zh have identical {placeholder} sets for every shared key", () => {
-    const enFlat = flattenKeys(en).reduce((acc, key) => {
-      const val = lookupValue(en, key);
-      if (typeof val === "string") acc.set(key, extractPlaceholders(val));
-      return acc;
-    }, new Map());
-    const mismatches = [];
-    for (const [key, enPlaceholders] of enFlat) {
-      const zhVal = lookupValue(zh, key);
-      if (typeof zhVal !== "string") continue;
-      const zhPlaceholders = extractPlaceholders(zhVal);
-      if (
-        enPlaceholders.size !== zhPlaceholders.size ||
-        [...enPlaceholders].some((p) => !zhPlaceholders.has(p))
-      ) {
-        mismatches.push(
-          `${key}: en={${[...enPlaceholders].join(",")}} zh={${[...zhPlaceholders].join(",")}}`,
-        );
-      }
-    }
-    expect(mismatches, `Placeholder mismatches:\n${mismatches.join("\n")}`).toEqual([]);
+  it("uses the required RECENT section titles", () => {
+    expect(en.sidebar.recent).toBe("RECENT");
+    expect(zh.sidebar.recent).toBe("最近访问");
   });
 });
 

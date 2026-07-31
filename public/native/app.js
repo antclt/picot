@@ -12,6 +12,7 @@ import { setupAtFileMention } from "../ui/at-file-mention.js";
 import { ConvNav } from "../ui/conv-nav.js";
 import { setupMessagesInsets } from "../ui/layout-insets.js";
 import { MessageRenderer } from "../ui/message-renderer.js";
+import { setupResizablePanel } from "../ui/resizable-panel.js";
 import { ToolCardRenderer } from "../ui/tool-card.js";
 import { setupComposerAutoResize } from "./composer/composer-autoresize.js";
 import { setupComposerImageAttachments } from "./composer/composer-images.js";
@@ -851,6 +852,14 @@ function setupSidebarToggle() {
     e.preventDefault();
     setCollapsed(true);
   });
+
+  setupResizablePanel(sidebarEl, {
+    storageKey: "pi-studio-sidebar-width",
+    defaultWidth: 272,
+    minWidth: 200,
+    maxWidth: 480,
+    side: "left",
+  });
 }
 
 function setupFilePreviewPanel() {
@@ -945,7 +954,19 @@ function setupFileBrowser() {
     }
   });
 
-  document.getElementById("file-sidebar-toggle")?.addEventListener("click", () => {
+  const toggleBtn = document.getElementById("file-sidebar-toggle");
+  toggleBtn?.addEventListener("click", () => {
+    const isCollapsed = sidebar.classList.toggle("collapsed");
+    if (!isCollapsed && browser.currentPath === null) browser.load().catch(showError);
+  });
+  if (toggleBtn) {
+    const shortcutLabel = isMacOS() ? "⌘B" : "Ctrl+B";
+    const baseTitle = toggleBtn.title || "Files";
+    toggleBtn.title = `${baseTitle} (${shortcutLabel})`;
+  }
+  document.addEventListener("keydown", (event) => {
+    if (!isFilePanelShortcut(event)) return;
+    event.preventDefault();
     const isCollapsed = sidebar.classList.toggle("collapsed");
     if (!isCollapsed && browser.currentPath === null) browser.load().catch(showError);
   });
@@ -1454,6 +1475,23 @@ if (thinkingBtn) {
       showError(error);
     }
   });
+}
+
+function isMacOS() {
+  return navigator.platform.startsWith("Mac") || navigator.userAgent.includes("Macintosh");
+}
+
+function isFilePanelShortcut(event) {
+  if (event.defaultPrevented || event.isComposing) return false;
+  if (isFilePanelShortcutTypingTarget(event.target)) return false;
+  if (event.altKey || event.shiftKey || event.key.toLowerCase() !== "b") return false;
+  return event.metaKey || event.ctrlKey;
+}
+
+function isFilePanelShortcutTypingTarget(target) {
+  if (!(target instanceof Element)) return false;
+  if (target.closest("input, textarea, select")) return true;
+  return target.closest('[contenteditable="true"]') !== null;
 }
 
 window.__picotNative = {

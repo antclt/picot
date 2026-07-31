@@ -48,6 +48,7 @@ export class TerminalPanel {
     this.tabButtons = new Map();
     this._restartNoticeShown = false;
     this._dragRefitTimer = null;
+    this._terminalKeydownHandler = null;
     this.enlarged = false;
     this._fullscreenBoundsCleanup = null;
     this.toggleEl = null;
@@ -90,6 +91,12 @@ export class TerminalPanel {
       </svg>
     `;
     this.toggleEl.addEventListener("click", () => this.toggle());
+    this._terminalKeydownHandler = (event) => {
+      if (!isTerminalShortcut(event)) return;
+      event.preventDefault();
+      this.toggle();
+    };
+    document.addEventListener("keydown", this._terminalKeydownHandler);
 
     this.root = document.createElement("section");
     this.root.className = "terminal-panel hidden";
@@ -442,6 +449,10 @@ export class TerminalPanel {
     this.root = null;
     this.tabBarEl = null;
     this.bodyEl = null;
+    if (this._terminalKeydownHandler) {
+      document.removeEventListener("keydown", this._terminalKeydownHandler);
+      this._terminalKeydownHandler = null;
+    }
   }
 
   layoutHeight() {
@@ -574,8 +585,32 @@ export class TerminalPanel {
   applyLocale() {
     // Re-render so i18n-driven titles/labels follow a live locale switch.
     const toggleLabel = t("terminal.toggle");
+    const shortcutLabel = terminalShortcutLabel();
     this.toggleEl?.setAttribute("aria-label", toggleLabel);
-    this.toggleEl?.setAttribute("title", toggleLabel);
+    this.toggleEl?.setAttribute("title", `${toggleLabel} (${shortcutLabel})`);
     this._renderTabBar();
   }
+}
+
+function isMacOSPlatform() {
+  return navigator.platform.startsWith("Mac") || navigator.userAgent.includes("Macintosh");
+}
+
+function terminalShortcutLabel() {
+  return isMacOSPlatform() ? "Ctrl+`" : "Ctrl+`";
+}
+
+function isTerminalShortcut(event) {
+  if (event.defaultPrevented || event.isComposing) return false;
+  if (event.metaKey || event.altKey || event.shiftKey) return false;
+  if (event.key !== "`") return false;
+  if (!event.ctrlKey) return false;
+  // Don't fire when typing in a text field
+  const target = event.target;
+  if (!(target instanceof Element)) return false;
+  if (target.closest("input, textarea, select")) return false;
+  if (target.closest('[contenteditable="true"]') !== null) return false;
+  // Don't swallow shortcuts inside the terminal itself
+  if (target.closest(".terminal-body")) return false;
+  return true;
 }
