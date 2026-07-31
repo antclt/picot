@@ -1,4 +1,4 @@
-import { t } from "../i18n.js";
+import { t } from "../../i18n.js";
 
 const messageTimers = new WeakMap();
 

@@ -472,6 +472,15 @@
     "thinkingLevel": "Thinking: {level}",
     "thinkingCompact": "Think {level}",
     "off": "off",
+    "thinkingFaster": "Faster",
+    "thinkingSmarter": "Smarter",
+    "thinkingLevels": {
+      "off": "off",
+      "minimal": "minimal",
+      "low": "low",
+      "medium": "medium",
+      "high": "high"
+    },
     "thinkingTitle": "Thinking effort controls reasoning depth. Click to cycle.",
     "thinkingAriaLabel": "Thinking effort: {level}. Click to cycle reasoning depth.",
     "agentConfiguration": "Agent Configuration",
@@ -664,5 +673,176 @@
     "back": "Back",
     "newTask": "New Task",
     "showMore": "Show more"
+  },
+  "migrated": {
+    "bootstrap": {
+      "text": {
+        "picotStartup": "Picot Startup",
+        "pi": "pi"
+      }
+    },
+    "index": {
+      "alt": {
+        "picotLogo": "Picot logo"
+      },
+      "title": {
+        "newSession": "New session",
+        "settings": "Settings",
+        "downloadAndInstallUpdate": "Download and install update",
+        "workspacePath": "Workspace path",
+        "gitBranch": "Git branch",
+        "chooseApp": "Choose app",
+        "files": "Files",
+        "close": "Close",
+        "minimal": "minimal",
+        "low": "low",
+        "medium": "medium",
+        "high": "high"
+      },
+      "ariaLabel": {
+        "toggleFileBrowser": "Toggle file browser",
+        "keyboardShortcuts": "Keyboard shortcuts",
+        "conversationNavigator": "Conversation navigator",
+        "openCommands": "Open commands",
+        "thinkingEffortOffClickToCycleReasoning": "Thinking effort: off. Click to cycle reasoning depth.",
+        "receiveBetaUpdates": "Receive beta updates",
+        "searchTasks": "Search tasks",
+        "searchResults": "Search results"
+      },
+      "placeholder": {
+        "typeAMessageOrUseToCall": "Type a message, or use / to call a skill…",
+        "providers": "{ \"providers\": { ... } }",
+        "searchTasksAndMessages": "Search tasks and messages…"
+      },
+      "text": {
+        "update": "Update",
+        "new": "New ↓",
+        "thinkOff": "Think off",
+        "extensions": "Extensions",
+        "skills": "Skills",
+        "faster": "Faster",
+        "smarter": "Smarter",
+        "betaUpdates": "Beta updates",
+        "receivePrereleasePicotBuilds": "Receive prerelease Picot builds",
+        "piAgentAuthJson": "~/.pi/agent/auth.json",
+        "save": "Save",
+        "piAgentModelsJson": "~/.pi/agent/models.json",
+        "cancel": "Cancel",
+        "openLink": "Open Link"
+      }
+    },
+    "app": {
+      "textcontent": {
+        "retrying": "Retrying…"
+      }
+    },
+    "components": {
+      "chatSettingsPanel": {
+        "textcontent": {
+          "checkingTelegram": "Checking Telegram…"
+        },
+        "placeholder": {
+          "pasteANewTokenToReconnect": "Paste a new token to reconnect"
+        }
+      }
+    },
+    "native": {
+      "app": {
+        "textcontent": {
+          "openSettings": "Open Settings",
+          "noModelsMatchYourSearch": "No models match your search."
+        }
+      },
+      "composer": {
+        "composerSlashMenu": {
+          "textcontent": {
+            "noMatchingSkills": "No matching skills"
+          },
+          "ariaLabel": {
+            "skillSlashCommands": "Skill slash commands"
+          }
+        }
+      },
+      "extensions": {
+        "inlineExtensionPrompt": {
+          "placeholder": {
+            "typeACustomAnswer": "Type a custom answer"
+          },
+          "textcontent": {
+            "noPreview": "No preview"
+          },
+          "ariaLabel": {
+            "extensionQuestion": "Extension question"
+          }
+        }
+      },
+      "features": {
+        "rpivTodoMirror": {
+          "textcontent": {
+            "todos": "Todos"
+          }
+        }
+      },
+      "notifications": {
+        "notificationCenter": {
+          "ariaLabel": {
+            "dismissNotification": "Dismiss notification"
+          }
+        }
+      },
+      "session": {
+        "sessionSearchDialog": {
+          "textcontent": {
+            "searchingMessages": "Searching messages…"
+          }
+        },
+        "sessionSidebar": {
+          "textcontent": {
+            "showMore": "Show more"
+          }
+        }
+      },
+      "settings": {
+        "settingsConfig": {
+          "textcontent": {
+            "loading": "Loading…"
+          }
+        }
+      }
+    },
+    "sidebar": {
+      "buildSessionItem": {
+        "textcontent": {
+          "tmux": "tmux"
+        }
+      },
+      "index": {
+        "textcontent": {
+          "pinned": "Pinned"
+        }
+      }
+    },
+    "terminalPanel": {
+      "ariaLabel": {
+        "closeTerminalTab": "Close terminal tab"
+      }
+    },
+    "ui": {
+      "imageLightbox": {
+        "ariaLabel": {
+          "imagePreview": "Image preview"
+        }
+      },
+      "messageRenderer": {
+        "title": {
+          "forkSessionFromHere": "Fork session from here"
+        }
+      },
+      "resizablePanel": {
+        "title": {
+          "resizePanel": "Resize panel"
+        }
+      }
+    }
   }
 }

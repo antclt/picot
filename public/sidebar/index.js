@@ -1027,10 +1027,10 @@ export class SessionSidebar {
     star.className = "fav-star";
     star.textContent = "★";
     const title = document.createElement("span");
-    title.textContent = "Agent Inbox";
+    title.textContent = t("settings.agentInbox");
     const count = document.createElement("span");
     count.className = "project-count";
-    count.textContent = "Pinned";
+    count.textContent = t("migrated.sidebar.index.textcontent.pinned");
     header.append(star, title, count);
     group.appendChild(header);
 

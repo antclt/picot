@@ -44,7 +44,8 @@
     "check:design": "bun scripts/check-design-css.mjs",
     "check:design:fix": "bun scripts/check-design-css.mjs --fix",
     "check:permissions": "bun run scripts/check-tauri-permissions.js",
-    "check:rust": "bash scripts/check-rust.sh"
+    "check:rust": "bash scripts/check-rust.sh",
+    "i18n:migrate": "node scripts/migrate-i18n-wording.js"
   },
   "dependencies": {
     "@codemirror/commands": "6.10.1",

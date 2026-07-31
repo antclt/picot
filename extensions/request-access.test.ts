@@ -5,25 +5,19 @@ import { describe, expect, it } from "vitest";
 import { isLoopbackAddress, isLoopbackOnlyApiRequest } from "./request-access";
 
 describe("isLoopbackAddress", () => {
-  it.each([
-    "127.0.0.1",
-    "127.0.0.2",
-    "::1",
-    "::ffff:127.0.0.1",
-  ])("accepts loopback address %s", (address) => {
-    expect(isLoopbackAddress(address)).toBe(true);
-  });
+  it.each(["127.0.0.1", "127.0.0.2", "::1", "::ffff:127.0.0.1"])(
+    "accepts loopback address %s",
+    (address) => {
+      expect(isLoopbackAddress(address)).toBe(true);
+    },
+  );
 
-  it.each([
-    undefined,
-    null,
-    "",
-    "192.168.1.20",
-    "10.0.0.2",
-    "::ffff:192.168.1.20",
-  ])("rejects non-loopback address %s", (address) => {
-    expect(isLoopbackAddress(address)).toBe(false);
-  });
+  it.each([undefined, null, "", "192.168.1.20", "10.0.0.2", "::ffff:192.168.1.20"])(
+    "rejects non-loopback address %s",
+    (address) => {
+      expect(isLoopbackAddress(address)).toBe(false);
+    },
+  );
 });
 
 describe("isLoopbackOnlyApiRequest", () => {

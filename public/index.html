@@ -13,6 +13,8 @@
         <link rel="stylesheet" href="style-theme.css" />
         <link rel="stylesheet" href="design-system.css" />
         <link rel="stylesheet" href="style.css" />
+        <link rel="stylesheet" href="vendor/xterm.css" />
+        <script src="vendor/xterm.js"></script>
         <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
         <script>
             // Boot-time instance-swap overlay gate kept for session route swaps.
@@ -40,7 +42,7 @@
             <div
                 class="instance-swap-overlay__label"
                 id="instance-swap-overlay-label"
-            >
+             data-i18n="sidebar.startingSession">
                 Starting session…
             </div>
         </div>
@@ -68,10 +70,10 @@
             <div class="sidebar" id="sidebar">
                 <div class="sidebar-header">
                     <div class="mode-toggle" id="mode-toggle">
-                        <span class="mode-link active" title="Chat"
+                        <span class="mode-link active" title="Chat" data-i18n-title="nav.chat"
                             ><img
                                 src="icons/logo-dark.svg"
-                                alt="Picot logo"
+                                alt="Picot logo" data-i18n-alt="migrated.index.alt.picotLogo"
                                 class="tau-icon"
                         /></span>
                     </div>
@@ -80,15 +82,15 @@
                             type="text"
                             id="session-search-input"
                             class="ui-input ui-input--sm sidebar-search-input"
-                            placeholder="Search..."
+                            placeholder="Search..." data-i18n-ph="sidebar.search"
                             autocomplete="off"
                         />
                         <button
                             type="button"
                             id="session-search-clear"
                             class="sidebar-search-clear hidden"
-                            title="Clear search"
-                            aria-label="Clear search"
+                            title="Clear search" data-i18n-title="sidebar.clearSearch"
+                            aria-label="Clear search" data-i18n-aria-label="sidebar.clearSearch"
                         >
                             <svg
                                 width="12"
@@ -108,8 +110,8 @@
                         <button
                             class="ui-icon-button ui-icon-button--sm ui-icon-button--ghost icon-btn"
                             id="new-session-btn"
-                            title="New session"
-                            aria-label="New session"
+                            title="New session" data-i18n-title="migrated.index.title.newSession"
+                            aria-label="New session" data-i18n-aria-label="migrated.index.title.newSession"
                         >
                             <svg
                                 width="14"
@@ -128,8 +130,8 @@
                         <button
                             class="ui-icon-button ui-icon-button--sm ui-icon-button--ghost icon-btn"
                             id="open-folder-btn"
-                            title="Open folder as workspace"
-                            aria-label="Open folder"
+                            title="Open folder as workspace" data-i18n-title="sidebar.openFolder"
+                            aria-label="Open folder" data-i18n-aria-label="sidebar.openFolderAria"
                         >
                             <svg
                                 width="14"
@@ -151,8 +153,8 @@
                         <button
                             class="ui-icon-button ui-icon-button--sm ui-icon-button--ghost icon-btn"
                             id="refresh-sessions-btn"
-                            title="Refresh sessions"
-                            aria-label="Refresh sessions"
+                            title="Refresh sessions" data-i18n-title="sidebar.refreshSessions"
+                            aria-label="Refresh sessions" data-i18n-aria-label="sidebar.refreshSessions"
                         >
                             <svg
                                 width="14"
@@ -173,15 +175,15 @@
                     </div>
                 </div>
                 <div class="session-list" id="session-list">
-                    <div class="session-loading">Loading sessions...</div>
+                    <div class="session-loading" data-i18n="sidebar.loadingSessions">Loading sessions...</div>
                 </div>
                 <div class="sidebar-footer">
                     <div class="sidebar-settings-row">
                         <button
                             class="ui-icon-button ui-icon-button--sm sidebar-settings-btn"
                             id="settings-btn"
-                            title="Settings"
-                            aria-label="Settings"
+                            title="Settings" data-i18n-title="migrated.index.title.settings"
+                            aria-label="Settings" data-i18n-aria-label="migrated.index.title.settings"
                         >
                             <svg
                                 width="14"
@@ -198,14 +200,14 @@
                                 />
                                 <circle cx="12" cy="12" r="3" />
                             </svg>
-                            <span>Settings</span>
+                            <span data-i18n="migrated.index.title.settings">Settings</span>
                         </button>
                         <button
                             class="sidebar-update-pill hidden"
                             id="sidebar-update-btn"
-                            title="Download and install update"
-                            aria-label="Download and install update"
-                        >
+                            title="Download and install update" data-i18n-title="migrated.index.title.downloadAndInstallUpdate"
+                            aria-label="Download and install update" data-i18n-aria-label="migrated.index.title.downloadAndInstallUpdate"
+                         data-i18n="migrated.index.text.update">
                             Update
                         </button>
                     </div>
@@ -215,16 +217,16 @@
             <!-- Sidebar overlay for mobile -->
             <div class="sidebar-overlay" id="sidebar-overlay"></div>
 
-            <!-- Main Chat Area -->
-            <div class="main">
+            <!-- Workspace -->
+            <div class="workspace">
                 <!-- Header -->
                 <div class="header session-header">
                     <div class="header-left">
                         <button
                             class="sidebar-toggle"
                             id="sidebar-toggle"
-                            title="Toggle sidebar"
-                            aria-label="Toggle sidebar"
+                            title="Toggle sidebar" data-i18n-title="nav.toggleSidebar"
+                            aria-label="Toggle sidebar" data-i18n-aria-label="nav.toggleSidebar"
                         >
                             <svg
                                 width="18"
@@ -244,8 +246,8 @@
                         <button
                             class="ui-icon-button ui-icon-button--sm ui-icon-button--ghost icon-btn lan-qr-btn hidden"
                             id="lan-qr-btn"
-                            title="Show mobile QR code"
-                            aria-label="Show mobile QR code"
+                            title="Show mobile QR code" data-i18n-title="nav.showMobileQR"
+                            aria-label="Show mobile QR code" data-i18n-aria-label="nav.showMobileQR"
                         >
                             <svg
                                 width="16"
@@ -282,16 +284,16 @@
                         <span
                             class="pill session-cost"
                             id="session-cost"
-                            title="Session cost"
+                            title="Session cost" data-i18n-title="usage.sessionCostTitle"
                         ></span>
                         <span class="context-usage-anchor">
                             <span
                                 class="pill token-usage"
                                 id="token-usage"
-                                title="Context usage"
+                                title="Context usage" data-i18n-title="usage.contextTitle"
                             ></span>
                             <div class="context-viz hidden" id="context-viz">
-                                <div class="context-viz-title">
+                                <div class="context-viz-title" data-i18n="misc.contextWindow">
                                     Context Window
                                 </div>
                                 <div class="context-bar" id="context-bar"></div>
@@ -308,24 +310,23 @@
                         <span
                             class="pill workspace-indicator hidden"
                             id="workspace-indicator"
-                            title="Workspace path"
+                            title="Workspace path" data-i18n-title="migrated.index.title.workspacePath"
                         ></span>
                         <span
                             class="pill git-branch-indicator hidden"
                             id="git-branch-indicator"
-                            title="Git branch"
+                            title="Git branch" data-i18n-title="migrated.index.title.gitBranch"
                         ></span>
 
                         <span
                             class="header-open-app hidden"
                             id="header-open-app"
-                            role="group"
                         >
                             <button
                                 class="ui-button ui-button--sm ui-button--secondary header-open-app-btn"
                                 id="header-open-app-btn"
-                                title="Open workspace"
-                                aria-label="Open workspace in app"
+                                title="Open workspace" data-i18n-title="nav.openWorkspace"
+                                aria-label="Open workspace in app" data-i18n-aria-label="nav.openWorkspaceInApp"
                             >
                                 <span
                                     class="header-open-app-logo"
@@ -340,8 +341,8 @@
                             <button
                                 class="header-open-app-toggle"
                                 id="header-open-app-toggle"
-                                title="Choose app"
-                                aria-label="Choose app to open workspace"
+                                title="Choose app" data-i18n-title="migrated.index.title.chooseApp"
+                                aria-label="Choose app to open workspace" data-i18n-aria-label="nav.chooseApp"
                             >
                                 <svg
                                     width="10"
@@ -364,8 +365,8 @@
                         <button
                             class="ui-icon-button ui-icon-button--sm ui-icon-button--ghost icon-btn"
                             id="file-sidebar-toggle"
-                            title="Files"
-                            aria-label="Toggle file browser"
+                            title="Files" data-i18n-title="migrated.index.title.files"
+                            aria-label="Toggle file browser" data-i18n-aria-label="migrated.index.ariaLabel.toggleFileBrowser"
                         >
                             <svg
                                 width="16"
@@ -385,6 +386,9 @@
                     </div>
                 </div>
 
+                <div class="workspace-content">
+                    <!-- Main Chat Area -->
+                    <div class="main">
                 <!-- Super Agent Chat Header web component (shown when SA is active) -->
                 <sa-chat-header
                     class="super-agent-chat-header hidden"
@@ -397,15 +401,15 @@
                         <div class="welcome-icon">
                             <img
                                 src="icons/logo-dark.svg"
-                                alt="Picot logo"
+                                alt="Picot logo" data-i18n-alt="migrated.index.alt.picotLogo"
                                 class="tau-icon-welcome"
                             />
                         </div>
-                        <p>Welcome to Picot</p>
-                        <p class="hint">
+                        <p data-i18n="app.welcome">Welcome to Picot</p>
+                        <p class="hint" data-i18n="app.welcomeHint">
                             Type a message below to start chatting with Pi, or select a session from the sidebar.
                         </p>
-                        <div class="shortcuts-hint" aria-label="Keyboard shortcuts">
+                        <div class="shortcuts-hint">
                             <span><kbd>/</kbd> Focus input</span>
                             <span><kbd>Esc</kbd> Abort</span>
                         </div>
@@ -413,10 +417,10 @@
                 </div>
 
                 <!-- Conversation navigator rail (Codex-style) -->
-                <div class="conv-nav hidden" id="conv-nav" aria-label="Conversation navigator">
+                <nav class="conv-nav hidden" id="conv-nav" aria-label="Conversation navigator" data-i18n-aria-label="migrated.index.ariaLabel.conversationNavigator">
                     <!-- Dot track — populated by JS -->
                     <div class="conv-nav-track" id="conv-nav-track"></div>
-                </div>
+                </nav>
 
                 <!-- Tooltip floated next to the rail — fixed-position, outside the rail
                      so it isn't clipped by any stacking context on the rail itself -->
@@ -427,11 +431,11 @@
                 </div>
 
                 <!-- New-message badge kept separate so badge logic still works -->
-                <div class="conv-nav-new-badge hidden" id="scroll-bottom-badge">New ↓</div>
+                <div class="conv-nav-new-badge hidden" id="scroll-bottom-badge" data-i18n="migrated.index.text.new">New ↓</div>
 
                 <!-- Legacy IDs kept as invisible references so existing JS bindings don't break -->
-                <button id="scroll-prev-btn" hidden aria-hidden="true"></button>
-                <button id="scroll-bottom-btn" hidden aria-hidden="true"></button>
+                <button id="scroll-prev-btn" hidden ></button>
+                <button id="scroll-bottom-btn" hidden ></button>
 
                 <!-- Typing indicator (hidden, kept for JS reference) -->
                 <div
@@ -477,7 +481,7 @@
                             ></div>
                             <textarea
                                 id="message-input"
-                                placeholder="Type a message, or use / to call a skill…"
+                                placeholder="Type a message, or use / to call a skill…" data-i18n-ph="migrated.index.placeholder.typeAMessageOrUseToCall"
                                 autocomplete="off"
                                 rows="2"
                             ></textarea>
@@ -487,8 +491,8 @@
                                         type="button"
                                         class="ui-icon-button ui-icon-button--sm ui-icon-button--ghost input-icon-btn"
                                         id="attach-btn"
-                                        title="Attach image"
-                                        aria-label="Attach image"
+                                        title="Attach image" data-i18n-title="input.attachImage"
+                                        aria-label="Attach image" data-i18n-aria-label="input.attachImage"
                                         tabindex="-1"
                                     >
                                         <svg
@@ -519,8 +523,8 @@
                                         type="button"
                                         class="ui-icon-button ui-icon-button--sm ui-icon-button--ghost input-icon-btn"
                                         id="command-btn"
-                                        title="Commands"
-                                        aria-label="Open commands"
+                                        title="Commands" data-i18n-title="input.commands"
+                                        aria-label="Open commands" data-i18n-aria-label="migrated.index.ariaLabel.openCommands"
                                         tabindex="-1"
                                     >
                                         <svg
@@ -558,7 +562,7 @@
                                             type="button"
                                             class="ui-button ui-button--sm ui-button--ghost model-dropdown-btn"
                                             id="model-dropdown-btn"
-                                            title="Switch model"
+                                            title="Switch model" data-i18n-title="input.switchModel"
                                             tabindex="-1"
                                         >
                                             <span
@@ -591,17 +595,17 @@
                                         type="button"
                                         class="thinking-tag off"
                                         id="thinking-btn"
-                                        title="Thinking effort controls reasoning depth. Click to cycle."
-                                        aria-label="Thinking effort: off. Click to cycle reasoning depth."
+                                        title="Thinking effort controls reasoning depth. Click to cycle." data-i18n-title="settings.thinkingTitle"
+                                        aria-label="Thinking effort: off. Click to cycle reasoning depth." data-i18n-aria-label="migrated.index.ariaLabel.thinkingEffortOffClickToCycleReasoning"
                                         tabindex="-1"
-                                    >
+                                     data-i18n="migrated.index.text.thinkOff">
                                         Think off
                                     </button>
                                     <button
                                         type="button"
                                         class="ui-icon-button ui-icon-button--sm ui-icon-button--ghost input-mic-btn"
                                         id="mic-btn"
-                                        title="Voice input"
+                                        title="Voice input" data-i18n-title="voice.voiceInput"
                                         tabindex="-1"
                                     >
                                         <svg
@@ -631,7 +635,7 @@
                                     <button
                                         type="submit"
                                         id="send-btn"
-                                        title="Send message"
+                                        title="Send message" data-i18n-title="input.send"
                                         tabindex="-1"
                                     >
                                         <span class="send-icon"
@@ -660,7 +664,7 @@
                                         type="button"
                                         id="abort-btn"
                                         class="hidden"
-                                        title="Abort (Esc)"
+                                        title="Abort (Esc)" data-i18n-title="input.abort"
                                         tabindex="-1"
                                     >
                                         <svg
@@ -683,7 +687,273 @@
                         </div>
                     </form>
                 </div>
-            </div>
+                    </div>
+
+                    <!-- File Preview Panel (between chat and file tree) -->
+                    <hr
+                        class="file-preview-resizer collapsed"
+                        id="file-preview-resizer"
+                        aria-orientation="vertical"
+                        tabindex="0"
+                        aria-valuenow="42"
+                        aria-valuemin="20"
+                        aria-valuemax="70"
+                    />
+                    <section
+                        class="file-preview-panel collapsed"
+                        id="file-preview-panel"
+                        aria-label="File preview"
+                        data-i18n-aria-label="files.preview.title"
+                    >
+                        <div
+                            class="file-preview-tabs-bar"
+                            id="file-preview-tabs-bar"
+                        >
+                            <div
+                                class="file-preview-tabs"
+                                id="file-preview-tabs"
+                            ></div>
+                            <div class="file-preview-panel-controls">
+                                <button
+                                    type="button"
+                                    class="ui-icon-button ui-icon-button--sm ui-icon-button--ghost icon-btn"
+                                    id="file-preview-toolbar-toggle"
+                                    title="Editor controls"
+                                    data-i18n-title="files.preview.showControls"
+                                    aria-label="Editor controls"
+                                    data-i18n-aria-label="files.preview.showControls"
+                                    aria-expanded="false"
+                                    aria-controls="file-preview-toolbar"
+                                >
+                                    <svg
+                                        aria-hidden="true"
+                                        width="14"
+                                        height="14"
+                                        viewBox="0 0 24 24"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        stroke-width="2"
+                                        stroke-linecap="round"
+                                    >
+                                        <line x1="4" y1="6" x2="20" y2="6" />
+                                        <line x1="4" y1="12" x2="20" y2="12" />
+                                        <line x1="4" y1="18" x2="20" y2="18" />
+                                        <circle cx="8" cy="6" r="2" fill="currentColor" />
+                                        <circle cx="16" cy="12" r="2" fill="currentColor" />
+                                        <circle cx="10" cy="18" r="2" fill="currentColor" />
+                                    </svg>
+                                </button>
+                                <button
+                                    type="button"
+                                    class="ui-icon-button ui-icon-button--sm ui-icon-button--ghost icon-btn"
+                                    id="file-preview-open"
+                                    title="Open in desktop app"
+                                    data-i18n-title="files.preview.openDesktop"
+                                    aria-label="Open in desktop app"
+                                    data-i18n-aria-label="files.preview.openDesktop"
+                                >
+                                    <svg
+                                        aria-hidden="true"
+                                        width="14"
+                                        height="14"
+                                        viewBox="0 0 24 24"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        stroke-width="2"
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                    >
+                                        <path d="M14 3h7v7" />
+                                        <path d="M10 14 21 3" />
+                                        <path
+                                            d="M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5"
+                                        />
+                                    </svg>
+                                </button>
+                                <button
+                                    class="ui-icon-button ui-icon-button--sm ui-icon-button--ghost icon-btn file-preview-enlarge-btn"
+                                    id="file-preview-enlarge"
+                                    title="Enlarge panel"
+                                    data-i18n-title="files.preview.enlarge"
+                                    aria-label="Enlarge panel"
+                                    data-i18n-aria-label="files.preview.enlarge"
+                                >
+                                    <svg
+                                        width="14"
+                                        height="14"
+                                        viewBox="0 0 24 24"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        stroke-width="2"
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                    >
+                                        <path d="M8 3H5a2 2 0 0 0-2 2v3" />
+                                        <path d="M21 8V5a2 2 0 0 0-2-2h-3" />
+                                        <path d="M3 16v3a2 2 0 0 0 2 2h3" />
+                                        <path d="M16 21h3a2 2 0 0 0 2-2v-3" />
+                                    </svg>
+                                </button>
+                                <button
+                                    class="ui-icon-button ui-icon-button--sm ui-icon-button--ghost icon-btn file-preview-collapse-btn hidden"
+                                    id="file-preview-collapse"
+                                    title="Collapse panel"
+                                    data-i18n-title="files.preview.collapse"
+                                    aria-label="Collapse panel"
+                                    data-i18n-aria-label="files.preview.collapse"
+                                >
+                                    <svg
+                                        width="14"
+                                        height="14"
+                                        viewBox="0 0 24 24"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        stroke-width="2"
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                    >
+                                        <path d="M8 3v3a2 2 0 0 1-2 2H3" />
+                                        <path d="M21 8h-3a2 2 0 0 1-2-2V3" />
+                                        <path d="M3 16h3a2 2 0 0 1 2 2v3" />
+                                        <path d="M16 21v-3a2 2 0 0 1 2-2h3" />
+                                    </svg>
+                                </button>
+                                <button
+                                    class="ui-icon-button ui-icon-button--sm ui-icon-button--ghost icon-btn"
+                                    id="file-preview-close"
+                                    title="Close panel"
+                                    data-i18n-title="files.preview.close"
+                                    aria-label="Close panel"
+                                    data-i18n-aria-label="files.preview.close"
+                                >
+                                    <svg
+                                        width="14"
+                                        height="14"
+                                        viewBox="0 0 24 24"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        stroke-width="2"
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                    >
+                                        <line x1="18" y1="6" x2="6" y2="18" />
+                                        <line x1="6" y1="6" x2="18" y2="18" />
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                        <div
+                            class="file-preview-toolbar hidden"
+                            id="file-preview-toolbar"
+                            role="toolbar"
+                            aria-label="Editor controls"
+                            data-i18n-aria-label="files.preview.showControls"
+                        >
+                            <fieldset
+                                class="file-preview-mode"
+                                aria-label="View mode"
+                                data-i18n-aria-label="files.preview.mode"
+                            >
+                                <button
+                                    type="button"
+                                    id="file-preview-mode-preview"
+                                    data-i18n="files.preview.preview"
+                                >
+                                    Preview
+                                </button>
+                                <button
+                                    type="button"
+                                    id="file-preview-mode-edit"
+                                    data-i18n="files.preview.edit"
+                                >
+                                    Edit
+                                </button>
+                            </fieldset>
+                            <button
+                                type="button"
+                                id="file-preview-save"
+                                title="Save"
+                                data-i18n-title="files.preview.save"
+                                aria-label="Save"
+                                data-i18n-aria-label="files.preview.save"
+                                data-i18n="files.preview.save"
+                            >
+                                Save
+                            </button>
+                            <button
+                                type="button"
+                                id="file-preview-reload"
+                                title="Reload from disk"
+                                data-i18n-title="files.preview.conflictReload"
+                                aria-label="Reload from disk"
+                                data-i18n-aria-label="files.preview.conflictReload"
+                                data-i18n="files.preview.conflictReload"
+                            >
+                                Reload
+                            </button>
+                            <button
+                                type="button"
+                                id="file-preview-search"
+                                title="Find"
+                                data-i18n-title="files.preview.find"
+                                aria-label="Find"
+                                data-i18n-aria-label="files.preview.find"
+                                data-i18n="files.preview.find"
+                            >
+                                Find
+                            </button>
+                            <button
+                                type="button"
+                                id="file-preview-go-to-line"
+                                title="Go to line"
+                                data-i18n-title="files.preview.goToLine"
+                                aria-label="Go to line"
+                                data-i18n-aria-label="files.preview.goToLine"
+                                data-i18n="files.preview.goToLine"
+                            >
+                                Line
+                            </button>
+                            <input
+                                type="text"
+                                class="file-preview-go-to-line-input hidden"
+                                id="file-preview-go-to-line-input"
+                                inputmode="numeric"
+                                autocomplete="off"
+                                placeholder="Line number"
+                                data-i18n-ph="files.preview.goToLinePrompt"
+                                aria-label="Line number"
+                                data-i18n-aria-label="files.preview.goToLinePrompt"
+                            />
+                            <button
+                                type="button"
+                                id="file-preview-copy"
+                                title="Copy all"
+                                data-i18n-title="files.preview.copyContent"
+                                aria-label="Copy all"
+                                data-i18n-aria-label="files.preview.copyContent"
+                                data-i18n="files.preview.copyContent"
+                            >
+                                Copy
+                            </button>
+                            <label class="file-preview-toolbar-check">
+                                <input type="checkbox" id="file-preview-wrap" />
+                                <span data-i18n="files.preview.lineWrap">Wrap</span>
+                            </label>
+                            <label class="file-preview-toolbar-check">
+                                <input type="checkbox" id="file-preview-autosave" />
+                                <span data-i18n="files.preview.autoSave">Auto-save</span>
+                            </label>
+                            <span
+                                class="file-preview-status"
+                                id="file-preview-status"
+                                aria-live="polite"
+                            ></span>
+                        </div>
+                        <div
+                            class="file-preview-content"
+                            id="file-preview-content"
+                        ></div>
+                    </section>
 
             <!-- Super Agent Runtime Panel (right column, shown when SA active) -->
             <super-agent-runtime
@@ -704,7 +974,7 @@
                     <button
                         class="ui-icon-button ui-icon-button--sm ui-icon-button--ghost icon-btn"
                         id="file-sidebar-up"
-                        title="Parent directory"
+                        title="Parent directory" data-i18n-title="files.parentDirectory"
                     >
                         <svg
                             width="14"
@@ -723,7 +993,7 @@
                     <button
                         class="ui-icon-button ui-icon-button--sm ui-icon-button--ghost icon-btn"
                         id="file-sidebar-finder"
-                        title="Open in file manager"
+                        title="Open in file manager" data-i18n-title="files.openInFileManager"
                     >
                         <svg
                             width="14"
@@ -743,8 +1013,8 @@
                     <button
                         class="ui-icon-button ui-icon-button--sm ui-icon-button--ghost icon-btn app-side-panel-close-btn"
                         id="file-sidebar-close"
-                        title="Close"
-                        aria-label="Close file browser"
+                        title="Close" data-i18n-title="migrated.index.title.close"
+                        aria-label="Close file browser" data-i18n-aria-label="files.close"
                     >
                         <svg
                             width="14"
@@ -768,35 +1038,40 @@
                 ></div>
                 <div class="file-list" id="file-list"></div>
             </div>
+                </div>
+            </div>
         </div>
 
         <div class="settings-overlay hidden" id="settings-overlay"></div>
 
         <div class="settings-panel hidden" id="settings-panel">
             <aside class="settings-nav">
-                <div class="settings-nav-title">Settings</div>
+                <div class="settings-nav-title" data-i18n="migrated.index.title.settings">Settings</div>
                 <button
                     class="settings-nav-item active"
                     data-settings-tab="general"
-                >
+                 data-i18n="settings.general">
                     General
                 </button>
                 <button
                     class="settings-nav-item"
                     data-settings-tab="extensions"
-                >
+                 data-i18n="migrated.index.text.extensions">
                     Extensions
                 </button>
-                <button class="settings-nav-item" data-settings-tab="usage">
+                <button class="settings-nav-item" data-settings-tab="skills" data-i18n="migrated.index.text.skills">
+                    Skills
+                </button>
+                <button class="settings-nav-item" data-settings-tab="usage" data-i18n="settings.usage">
                     Usage
                 </button>
                 <button
                     class="settings-nav-item"
                     data-settings-tab="configuration"
-                >
+                 data-i18n="settings.configuration">
                     Configuration
                 </button>
-                <button class="settings-nav-item" data-settings-tab="chat">
+                <button class="settings-nav-item" data-settings-tab="chat" data-i18n="settings.agentInbox">
                     Agent Inbox
                 </button>
                 <button class="settings-nav-back" id="settings-close">
@@ -807,13 +1082,40 @@
                 <div class="settings-tab active" data-settings-panel="general">
                     <div class="settings-body">
                         <div class="settings-section">
-                            <div class="settings-section-title">Appearance</div>
+                            <div
+                                class="settings-section-title"
+                                data-i18n="settings.appearance"
+                            >
+                                Appearance
+                            </div>
                             <div class="theme-grid" id="theme-grid"></div>
+                            <div class="settings-row" id="setting-language">
+                                <span class="settings-label settings-label-stack">
+                                    <span
+                                        class="settings-label-main"
+                                        data-i18n="settings.language.title"
+                                        >Language</span
+                                    >
+                                    <span
+                                        class="settings-label-sub"
+                                        data-i18n="settings.language.description"
+                                        >Choose the interface language. System
+                                        Default follows your operating
+                                        system.</span
+                                    >
+                                </span>
+                                <select
+                                    class="ui-select settings-language-select"
+                                    id="settings-language-select"
+                                    aria-label="Language"
+                                    data-i18n-aria-label="settings.language.title"
+                                ></select>
+                            </div>
                         </div>
                         <div class="settings-section">
-                            <div class="settings-section-title">Agent</div>
+                            <div class="settings-section-title" data-i18n="settings.agent">Agent</div>
                             <div class="settings-row" id="setting-auto-compact">
-                                <span class="settings-label"
+                                <span class="settings-label" data-i18n="settings.autoCompaction"
                                     >Auto-compaction</span
                                 >
                                 <button
@@ -825,10 +1127,10 @@
                                 <span
                                     class="settings-label settings-label-stack"
                                 >
-                                    <span class="settings-label-main"
+                                    <span class="settings-label-main" data-i18n="settings.thinkingEffort"
                                         >Thinking effort</span
                                     >
-                                    <span class="settings-label-sub"
+                                    <span class="settings-label-sub" data-i18n="settings.reasoningDepth"
                                         >Reasoning depth</span
                                     >
                                 </span>
@@ -836,16 +1138,18 @@
                                     class="thinking-effort"
                                     id="thinking-effort"
                                     role="radiogroup"
-                                    aria-label="Thinking effort"
+                                    aria-label="Thinking effort" data-i18n-aria-label="settings.thinkingEffort"
                                 >
                                     <div class="thinking-effort-ends">
-                                        <span>Faster</span>
+                                        <span data-i18n="settings.thinkingFaster">Faster</span>
                                         <span
                                             class="thinking-effort-name"
                                             id="thinking-effort-name"
+                                            data-thinking-level="off"
+                                            data-i18n="settings.thinkingLevels.off"
                                             >off</span
                                         >
-                                        <span>Smarter</span>
+                                        <span data-i18n="settings.thinkingSmarter">Smarter</span>
                                     </div>
                                     <div
                                         class="thinking-effort-track"
@@ -856,56 +1160,57 @@
                                             id="thinking-effort-marker"
                                             aria-hidden="true"
                                         ></span>
-                                        <button
-                                            type="button"
+                                        <input
+                                            type="radio"
                                             class="thinking-effort-dot"
                                             data-level="off"
-                                            role="radio"
-                                            aria-checked="true"
-                                            aria-label="off"
-                                            title="off"
-                                        ></button>
-                                        <button
-                                            type="button"
+                                            name="thinking-effort-level"
+                                            value="off"
+                                            checked
+                                            aria-label="off" data-i18n-aria-label="settings.thinkingLevels.off"
+                                            title="off" data-i18n-title="settings.thinkingLevels.off"
+                                        />
+                                        <input
+                                            type="radio"
                                             class="thinking-effort-dot"
                                             data-level="minimal"
-                                            role="radio"
-                                            aria-checked="false"
-                                            aria-label="minimal"
-                                            title="minimal"
-                                        ></button>
-                                        <button
-                                            type="button"
+                                            name="thinking-effort-level"
+                                            value="minimal"
+                                            aria-label="minimal" data-i18n-aria-label="settings.thinkingLevels.minimal"
+                                            title="minimal" data-i18n-title="settings.thinkingLevels.minimal"
+                                        />
+                                        <input
+                                            type="radio"
                                             class="thinking-effort-dot"
                                             data-level="low"
-                                            role="radio"
-                                            aria-checked="false"
-                                            aria-label="low"
-                                            title="low"
-                                        ></button>
-                                        <button
-                                            type="button"
+                                            name="thinking-effort-level"
+                                            value="low"
+                                            aria-label="low" data-i18n-aria-label="settings.thinkingLevels.low"
+                                            title="low" data-i18n-title="settings.thinkingLevels.low"
+                                        />
+                                        <input
+                                            type="radio"
                                             class="thinking-effort-dot"
                                             data-level="medium"
-                                            role="radio"
-                                            aria-checked="false"
-                                            aria-label="medium"
-                                            title="medium"
-                                        ></button>
-                                        <button
-                                            type="button"
+                                            name="thinking-effort-level"
+                                            value="medium"
+                                            aria-label="medium" data-i18n-aria-label="settings.thinkingLevels.medium"
+                                            title="medium" data-i18n-title="settings.thinkingLevels.medium"
+                                        />
+                                        <input
+                                            type="radio"
                                             class="thinking-effort-dot"
                                             data-level="high"
-                                            role="radio"
-                                            aria-checked="false"
-                                            aria-label="high"
-                                            title="high"
-                                        ></button>
+                                            name="thinking-effort-level"
+                                            value="high"
+                                            aria-label="high" data-i18n-aria-label="settings.thinkingLevels.high"
+                                            title="high" data-i18n-title="settings.thinkingLevels.high"
+                                        />
                                     </div>
                                 </div>
                             </div>
                             <div class="settings-row">
-                                <span class="settings-label"
+                                <span class="settings-label" data-i18n="settings.showThinking"
                                     >Show thinking</span
                                 >
                                 <button
@@ -918,9 +1223,9 @@
                             class="settings-section"
                             id="setting-updater-section"
                         >
-                            <div class="settings-section-title">Updates</div>
+                            <div class="settings-section-title" data-i18n="settings.updates">Updates</div>
                             <div class="settings-row" id="setting-pi-version">
-                                <span class="settings-label">Pi version</span>
+                                <span class="settings-label" data-i18n="settings.piVersion">Pi version</span>
                                 <span
                                     class="settings-static-value"
                                     id="setting-pi-version-value"
@@ -938,7 +1243,7 @@
                                 >
                             </div>
                             <div class="settings-row settings-update-row">
-                                <span class="settings-label">Updates</span>
+                                <span class="settings-label" data-i18n="settings.updates">Updates</span>
                                 <span class="settings-update-controls">
                                     <span
                                         class="settings-static-value"
@@ -951,22 +1256,22 @@
                                         type="button"
                                         class="ui-button ui-button--secondary settings-value-btn"
                                         id="btn-check-updates"
-                                    >
+                                     data-i18n="updater.checkNow">
                                         Check now
                                     </button>
                                 </span>
                             </div>
                             <div class="settings-row">
                                 <span class="settings-label settings-label-stack">
-                                    <span class="settings-label-main">Beta updates</span>
-                                    <span class="settings-label-sub">Receive prerelease Picot builds</span>
+                                    <span class="settings-label-main" data-i18n="migrated.index.text.betaUpdates">Beta updates</span>
+                                    <span class="settings-label-sub" data-i18n="migrated.index.text.receivePrereleasePicotBuilds">Receive prerelease Picot builds</span>
                                 </span>
                                 <button
                                     type="button"
                                     class="settings-toggle"
                                     id="toggle-beta-updates"
                                     role="switch"
-                                    aria-label="Receive beta updates"
+                                    aria-label="Receive beta updates" data-i18n-aria-label="migrated.index.ariaLabel.receiveBetaUpdates"
                                     aria-checked="false"
                                 ></button>
                             </div>
@@ -977,10 +1282,10 @@
                 <div class="settings-tab" data-settings-panel="extensions">
                     <div class="settings-body">
                         <div class="settings-section">
-                            <div class="settings-section-title">
+                            <div class="settings-section-title" data-i18n="settings.browseCommunityPackages">
                                 Browse Community Packages
                             </div>
-                            <p class="settings-help">
+                            <p class="settings-help" data-i18n="settings.browseHelp">
                                 Discover extensions, skills, themes, and prompts
                                 from the Pi ecosystem. Install with one click.
                             </p>
@@ -989,7 +1294,7 @@
                                     type="text"
                                     id="pkg-browse-search"
                                     class="pkg-browse-search"
-                                    placeholder="Search packages..."
+                                    placeholder="Search packages..." data-i18n-ph="extensions.searchPackages"
                                     autocomplete="off"
                                     spellcheck="false"
                                 />
@@ -1001,35 +1306,35 @@
                                         type="button"
                                         class="pkg-browse-pill active"
                                         data-pkg-type="all"
-                                    >
+                                     data-i18n="extensions.all">
                                         All
                                     </button>
                                     <button
                                         type="button"
                                         class="pkg-browse-pill"
                                         data-pkg-type="extension"
-                                    >
+                                     data-i18n="migrated.index.text.extensions">
                                         Extensions
                                     </button>
                                     <button
                                         type="button"
                                         class="pkg-browse-pill"
                                         data-pkg-type="skill"
-                                    >
+                                     data-i18n="migrated.index.text.skills">
                                         Skills
                                     </button>
                                     <button
                                         type="button"
                                         class="pkg-browse-pill"
                                         data-pkg-type="theme"
-                                    >
+                                     data-i18n="extensions.themes">
                                         Themes
                                     </button>
                                     <button
                                         type="button"
                                         class="pkg-browse-pill"
                                         data-pkg-type="prompt"
-                                    >
+                                     data-i18n="extensions.prompts">
                                         Prompts
                                     </button>
                                 </div>
@@ -1038,18 +1343,18 @@
                                         type="checkbox"
                                         id="pkg-browse-installed-only"
                                     />
-                                    <span>Installed only</span>
+                                    <span data-i18n="extensions.installedOnly">Installed only</span>
                                 </label>
                                 <select
                                     id="pkg-browse-sort"
                                     class="pkg-browse-sort"
-                                    aria-label="Sort packages"
+                                    aria-label="Sort packages" data-i18n-aria-label="extensions.sortPackages"
                                 >
-                                    <option value="downloads">
+                                    <option value="downloads" data-i18n="extensions.mostDownloads">
                                         Most downloads
                                     </option>
-                                    <option value="name">Name (A–Z)</option>
-                                    <option value="updated">
+                                    <option value="name" data-i18n="extensions.nameAZ">Name (A–Z)</option>
+                                    <option value="updated" data-i18n="extensions.recentlyUpdated">
                                         Recently updated
                                     </option>
                                 </select>
@@ -1071,6 +1376,12 @@
                     </div>
                 </div>
 
+                <div class="settings-tab" data-settings-panel="skills">
+                    <div class="settings-body">
+                        <div id="settings-skills"></div>
+                    </div>
+                </div>
+
                 <div class="settings-tab" data-settings-panel="usage">
                     <div class="settings-usage-embed">
                         <cost-dashboard
@@ -1084,12 +1395,12 @@
                 <div class="settings-tab" data-settings-panel="configuration">
                     <div class="settings-body">
                         <div class="settings-section">
-                            <div class="settings-section-title">
+                            <div class="settings-section-title" data-i18n="settings.authentication">
                                 Authentication
                             </div>
                             <p class="settings-help">
                                 Keys are stored locally in
-                                <code>~/.pi/agent/auth.json</code> (chmod 600).
+                                <code data-i18n="migrated.index.text.piAgentAuthJson">~/.pi/agent/auth.json</code> (chmod 600).
                                 Picot launched from Finder does not read shell
                                 environment variables, so set keys here for them
                                 to stick across launches.
@@ -1098,7 +1409,7 @@
                                 class="settings-api-keys"
                                 id="settings-api-keys"
                             >
-                                <div class="settings-api-keys-loading">
+                                <div class="settings-api-keys-loading" data-i18n="settings.loadingProviders">
                                     Loading providers…
                                 </div>
                             </div>
@@ -1108,7 +1419,7 @@
                             id="settings-auth-section"
                             style="display: none"
                         >
-                            <div class="settings-section-title">Protection</div>
+                            <div class="settings-section-title" data-i18n="settings.protection">Protection</div>
                             <div class="settings-row">
                                 <span class="settings-label"
                                     >Require login</span
@@ -1121,7 +1432,7 @@
                         </div>
 
                         <div class="settings-section">
-                            <div class="settings-section-title">Agent</div>
+                            <div class="settings-section-title" data-i18n="settings.agent">Agent</div>
                             <div class="settings-config-meta">
                                 <span class="settings-label"
                                     >Agent config file</span
@@ -1150,7 +1461,7 @@
                                     <button
                                         class="ui-button ui-button--primary"
                                         id="inline-config-save"
-                                    >
+                                     data-i18n="migrated.index.text.save">
                                         Save
                                     </button>
                                 </div>
@@ -1158,15 +1469,15 @@
                         </div>
 
                         <div class="settings-section">
-                            <div class="settings-section-title">
+                            <div class="settings-section-title" data-i18n="settings.llmProviders">
                                 LLM providers
                             </div>
                             <p class="settings-help">
-                                Edit <code>~/.pi/agent/models.json</code> to add
+                                Edit <code data-i18n="migrated.index.text.piAgentModelsJson">~/.pi/agent/models.json</code> to add
                                 custom providers (Ollama, vLLM, LM Studio,
                                 OpenAI-compatible proxies, OpenRouter routing
                                 overrides, etc). See the
-                                <a href="#" id="models-config-docs-link"
+                                <a href="https://github.com/earendil-works/pi-mono/blob/main/packages/coding-agent/docs/models.md" id="models-config-docs-link" target="_blank" rel="noopener noreferrer"
                                     >models.json docs</a
                                 >
                                 for the full schema. Changes are picked up
@@ -1188,7 +1499,7 @@
                                 autocomplete="off"
                                 autocorrect="off"
                                 autocapitalize="off"
-                                placeholder='{ "providers": { ... } }'
+                                placeholder='{ "providers": { ... } }' data-i18n-ph="migrated.index.placeholder.providers"
                             ></textarea>
                             <div class="settings-config-actions">
                                 <div
@@ -1201,13 +1512,13 @@
                                     <button
                                         class="ui-button ui-button--secondary"
                                         id="inline-models-insert-example"
-                                    >
+                                     data-i18n="actions.insertExample">
                                         Insert example
                                     </button>
                                     <button
                                         class="ui-button ui-button--primary"
                                         id="inline-models-save"
-                                    >
+                                     data-i18n="migrated.index.text.save">
                                         Save
                                     </button>
                                 </div>
@@ -1231,7 +1542,7 @@
         <div class="config-editor-modal hidden" id="config-editor-modal">
             <div class="config-editor-header">
                 <div class="config-editor-title-group">
-                    <h3>Agent Configuration</h3>
+                    <h3 data-i18n="settings.agentConfiguration">Agent Configuration</h3>
                     <span
                         class="config-editor-path"
                         id="config-editor-path"
@@ -1268,10 +1579,10 @@
                 ></div>
             </div>
             <div class="config-editor-footer">
-                <button class="ui-button ui-button--secondary config-editor-cancel" id="config-editor-cancel">
+                <button class="ui-button ui-button--secondary config-editor-cancel" id="config-editor-cancel" data-i18n="migrated.index.text.cancel">
                     Cancel
                 </button>
-                <button class="ui-button ui-button--primary" id="config-editor-save">
+                <button class="ui-button ui-button--primary" id="config-editor-save" data-i18n="migrated.index.text.save">
                     Save
                 </button>
             </div>
@@ -1287,7 +1598,7 @@
             id="session-search-dialog"
             role="dialog"
             aria-modal="true"
-            aria-label="Search tasks"
+            aria-label="Search tasks" data-i18n-aria-label="migrated.index.ariaLabel.searchTasks"
         >
             <div class="session-search-input-row">
                 <svg
@@ -1309,7 +1620,7 @@
                     type="text"
                     class="session-search-dialog-input"
                     id="session-search-dialog-input"
-                    placeholder="Search tasks and messages…"
+                    placeholder="Search tasks and messages…" data-i18n-ph="migrated.index.placeholder.searchTasksAndMessages"
                     autocomplete="off"
                     spellcheck="false"
                 />
@@ -1318,7 +1629,7 @@
                 class="session-search-results"
                 id="session-search-results"
                 role="listbox"
-                aria-label="Search results"
+                aria-label="Search results" data-i18n-aria-label="migrated.index.ariaLabel.searchResults"
             ></div>
         </div>
 
@@ -1328,7 +1639,7 @@
             id="command-palette-overlay"
         ></div>
         <div class="command-palette hidden" id="command-palette">
-            <div class="command-palette-header">Commands</div>
+            <div class="command-palette-header" data-i18n="input.commands">Commands</div>
             <div class="command-list" id="command-list"></div>
         </div>
 
@@ -1342,16 +1653,16 @@
             id="lan-qr-modal"
             role="dialog"
             aria-modal="true"
-            aria-label="Mobile QR code"
+            aria-label="Mobile QR code" data-i18n-aria-label="lanQr.modalAriaLabel"
         >
             <div class="lan-qr-modal-backdrop" id="lan-qr-modal-backdrop"></div>
             <div class="lan-qr-modal-content">
                 <div class="lan-qr-modal-header">
-                    <span class="lan-qr-modal-title">Open on Mobile</span>
+                    <span class="lan-qr-modal-title" data-i18n="lanQr.title">Open on Mobile</span>
                     <button
                         class="ui-icon-button ui-icon-button--sm ui-icon-button--ghost lan-qr-modal-close icon-btn"
                         id="lan-qr-modal-close"
-                        aria-label="Close"
+                        aria-label="Close" data-i18n-aria-label="migrated.index.title.close"
                     >
                         <svg
                             width="16"
@@ -1369,15 +1680,15 @@
                     </button>
                 </div>
                 <div class="lan-qr-modal-body">
-                    <div class="lan-qr-loading" id="lan-qr-loading">
+                    <div class="lan-qr-loading" id="lan-qr-loading" data-i18n="lanQr.generating">
                         Generating QR code…
                     </div>
                     <img
                         class="lan-qr-image hidden"
                         id="lan-qr-image"
-                        alt="QR code for mobile access"
+                        alt="QR code for mobile access" data-i18n-alt="lanQr.qrAlt"
                     />
-                    <div class="lan-qr-hint">
+                    <div class="lan-qr-hint" data-i18n="lanQr.hint">
                         Scan with your phone to open Picot on the same network
                     </div>
                     <button
@@ -1401,13 +1712,38 @@
                             <polyline points="15 3 21 3 21 9" />
                             <line x1="10" y1="14" x2="21" y2="3" />
                         </svg>
-                        <span>Open Link</span>
+                        <span data-i18n="migrated.index.text.openLink">Open Link</span>
                     </button>
                 </div>
             </div>
         </div>
 
         <!-- Scripts -->
+        <!-- Import map: redirects browser-only package specifiers to the
+             same-origin ESM vendor bundles produced by scripts/build-frontend.js.
+             Vitest resolves these imports from node_modules directly. -->
+        <script type="importmap">
+            {
+                "imports": {
+                    "@codemirror/state": "./vendor/codemirror.js",
+                    "@codemirror/view": "./vendor/codemirror.js",
+                    "@codemirror/commands": "./vendor/codemirror.js",
+                    "@codemirror/language": "./vendor/codemirror.js",
+                    "@codemirror/search": "./vendor/codemirror.js",
+                    "@codemirror/theme-one-dark": "./vendor/codemirror.js",
+                    "@codemirror/lang-javascript": "./vendor/codemirror.js",
+                    "@codemirror/lang-json": "./vendor/codemirror.js",
+                    "@codemirror/lang-markdown": "./vendor/codemirror.js",
+                    "@codemirror/lang-python": "./vendor/codemirror.js",
+                    "@codemirror/lang-yaml": "./vendor/codemirror.js",
+                    "@codemirror/lang-css": "./vendor/codemirror.js",
+                    "@codemirror/lang-html": "./vendor/codemirror.js",
+                    "@codemirror/legacy-modes/mode/r": "./vendor/codemirror.js",
+                    "@codemirror/legacy-modes/mode/shell": "./vendor/codemirror.js",
+                    "pdfjs-dist/legacy/build/pdf.mjs": "./vendor/pdf.js"
+                }
+            }
+        </script>
         <script type="module" src="bootstrap-entry.js"></script>
         <script type="module" src="components/super-agent-entry.js"></script>
         <script type="module" src="components/super-agent-runtime.js"></script>

@@ -1,5 +1,5 @@
 // Render logic for the Settings → Usage tab cost dashboard.
-import { t } from "../i18n.js";
+import { t } from "../../i18n.js";
 
 function escapeHtml(value) {
   return String(value ?? "")

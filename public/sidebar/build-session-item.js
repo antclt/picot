@@ -53,7 +53,7 @@ export function buildSessionItem({
   if (session.tmux) {
     const tmuxTag = document.createElement("span");
     tmuxTag.className = "session-tag tmux-tag";
-    tmuxTag.textContent = "tmux";
+    tmuxTag.textContent = t("migrated.sidebar.buildSessionItem.textcontent.tmux");
     titleRow.appendChild(tmuxTag);
   }
   const actionSlot = document.createElement("span");

@@ -992,8 +992,9 @@ Quick Chat 与 Side Chat 是隔离的、**不持久化**的临时 Pi 会话进�
 
 ### 进程模型与传输
 
+- Native Host v2 迁移后，`host_router.rs` 将 `terminal_command` 作为桌面端专用的一等帧拦截，`host_server.rs` 用 Host data plane 中的 `workspaceId` 解析规范化 workspace root，再调用 `TerminalManager`；PTY 事件经 owner 分区的 broadcast 通道回到对应 WebSocket。remote client 在 router 层被拒绝，终端帧仍不进入 Pi runtime。前端接线位于 `public/native/features/terminal-panel-integration.js`，由 `public/native/app.js` 显式初始化。
 - `terminal_manager.rs`：唯一拥有 PTY 的模块（`portable-pty`）。reserve→spawn→commit 状态机，8–16ms/32KiB 输出批处理，reader 线程赋单调 `u64` 序号并通过 `send_owner_event` 投递 `terminal_event`；`kill_owner`/`kill_all` 用 Unix `killpg`（PTY 进程组，含 shell 后代）或 Windows `child.kill()` 终止；checkpoint/journal 由 `terminal_output.rs` 保管（≤2 MiB checkpoint、≤4 MiB journal、溢出设 `historyGap` 不杀进程）。
-- `broker_ws.rs`：`route_ui_message` 在 `ephemeral_command` 之后、generic 转发之前拦截 `terminal_command`；`dispatch_terminal_command` 从 `VerifiedClientContext` + `WindowOwnerRegistry` 派生 owner/规范化 cwd/当前 `workspaceGeneration`，**忽略 payload 里的 owner/cwd/port/pid/executable/args**；帧的 `workspaceGeneration` 与 host 当前绑定比较，不符则只回 `terminal_command_failed`。终端流量**不经过 Pi、不经过 `embedded-server.ts`、不新增 Tauri command、不走 generic 转发**。
+- `host_router.rs`/`host_server.rs`：在通用 runtime 转发前拦截 `terminal_command`；owner 从桌面窗口 session-scoped `clientId` 派生，规范化 cwd 由 Host data plane 根据已注册的 `workspaceId` 解析，**忽略 payload 里的 owner/cwd/port/pid/executable/args**。终端流量**不经过 Pi、不新增 Tauri command、不走 generic runtime 转发**。
 - 优先级：第一版终端事件复用 broker 既有的 owner→client 通道（`send_owner_event` 只投递给当前认证 owner client），输出批处理在 manager 端完成；Pi chat/control 帧与终端帧共用该通道。严格的 per-terminal 有界队列 + 饱和 `terminal_journal_resync` 作为后续增强。
 
 ### 所有权分区与 capability

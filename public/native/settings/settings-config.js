@@ -5,7 +5,7 @@
 // routes through the picot-bridge `/picot-config` command). All model-registry
 // access still happens inside pi via the bridge — this module only renders.
 
-import { onLocaleChange, t } from "../i18n.js";
+import { onLocaleChange, t } from "../../i18n.js";
 import {
   clearSettingsSaveMessage,
   setSettingsSaveButtonSaving,
@@ -548,7 +548,10 @@ export function setupSettingsConfig({ configGateway, onModelConfigurationChanged
     if (!inlineConfigTextarea) return;
     inlineConfigError?.classList.add("hidden");
     inlineConfigTextarea.value = "";
-    if (inlineConfigPath) inlineConfigPath.textContent = "Loading…";
+    if (inlineConfigPath)
+      inlineConfigPath.textContent = t(
+        "migrated.native.settings.settingsConfig.textcontent.loading",
+      );
     try {
       const data = await call("read_agent_config");
       if (!data?.ok) throw new Error(data?.error || "Failed to load config");
@@ -627,7 +630,10 @@ export function setupSettingsConfig({ configGateway, onModelConfigurationChanged
     if (!inlineModelsTextarea) return;
     clearInlineModelsError();
     inlineModelsTextarea.value = "";
-    if (inlineModelsPath) inlineModelsPath.textContent = "Loading…";
+    if (inlineModelsPath)
+      inlineModelsPath.textContent = t(
+        "migrated.native.settings.settingsConfig.textcontent.loading",
+      );
     try {
       const data = await call("read_models_config");
       if (!data?.ok) throw new Error(data?.error || "Failed to load models.json");

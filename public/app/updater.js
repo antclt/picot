@@ -87,7 +87,7 @@ export function createAppUpdater({
       sidebarUpdateBtn.textContent = t("updater.update");
       sidebarUpdateBtn.dataset.tone = "";
       sidebarUpdateBtn.disabled = false;
-      sidebarUpdateBtn.title = "Download and install update";
+      sidebarUpdateBtn.title = t("migrated.index.title.downloadAndInstallUpdate");
       return;
     }
     sidebarUpdateBtn.textContent = label;

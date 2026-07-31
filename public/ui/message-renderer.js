@@ -162,7 +162,7 @@ export class MessageRenderer {
 
     const shortcuts = document.createElement("div");
     shortcuts.className = "shortcuts-hint";
-    shortcuts.setAttribute("aria-label", "Keyboard shortcuts");
+    shortcuts.setAttribute("aria-label", t("migrated.index.ariaLabel.keyboardShortcuts"));
     const focusShortcut = this._textElement("span", "");
     this._appendMarkup(focusShortcut, `<kbd>/</kbd> ${this.escapeHtml(t("shortcuts.focusInput"))}`);
     const abortShortcut = this._textElement("span", "");
@@ -516,8 +516,8 @@ export class MessageRenderer {
   _createForkButton() {
     const button = document.createElement("button");
     button.className = "message-fork-btn";
-    button.setAttribute("aria-label", "Fork session from here");
-    button.title = "Fork session from here";
+    button.setAttribute("aria-label", t("migrated.ui.messageRenderer.title.forkSessionFromHere"));
+    button.title = t("migrated.ui.messageRenderer.title.forkSessionFromHere");
     this._appendMarkup(button, FORK_ICON);
     return button;
   }

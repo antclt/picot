@@ -1,6 +1,8 @@
 // ABOUTME: Owns per-window owner identity, bearer capability validation, and the
 // ABOUTME: exact-origin navigation boundary for capability-bearing WebViews.
 
+#![allow(dead_code)]
+
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -16,6 +18,16 @@ const OWNER_ID_LEN: usize = 16;
 /// Opaque per-window owner identity. Distinct from the bearer capability.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct OwnerId(String);
+
+impl OwnerId {
+    /// Derive a non-secret, stable owner partition from a desktop window's
+    /// session-scoped client id. The v2 Host keeps the raw client id private.
+    pub(crate) fn from_client_id(client_id: &str) -> Self {
+        use sha2::{Digest, Sha256};
+        let digest = Sha256::digest(client_id.as_bytes());
+        Self(hex_encode(&digest[..OWNER_ID_LEN]))
+    }
+}
 
 /// Shared registry of window owners, their capabilities, and navigation permits.
 #[derive(Clone, Default)]

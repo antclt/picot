@@ -7,6 +7,13 @@ import { t } from "./i18n.js";
 const MIN_HEIGHT_PX = 160;
 const DEFAULT_HEIGHT_RATIO = 0.3;
 const MAX_HEIGHT_RATIO = 0.7;
+const SVG_BASE =
+  'viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"';
+const CLOSE_ICON_SVG = `<svg ${SVG_BASE}><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>`;
+const EXPAND_ICON_SVG = `<svg ${SVG_BASE}><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>`;
+const PLUS_ICON_SVG = `<svg ${SVG_BASE}><path d="M5 12h14"/><path d="M12 5v14"/></svg>`;
+const REFRESH_ICON_SVG = `<svg ${SVG_BASE}><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 21v-5h5"/></svg>`;
+const FULLSCREEN_SCOPE_CHAT = "chat";
 
 /**
  * TerminalPanel owns the panel DOM, tab bar, collapse/expand behavior, height
@@ -17,10 +24,19 @@ const MAX_HEIGHT_RATIO = 0.7;
  * probe. It never holds owner/root/port/capability — those stay host-owned.
  */
 export class TerminalPanel {
-  constructor({ native, client, subscribeLocale, getAvailableHeight } = {}) {
+  constructor({
+    native,
+    client,
+    subscribeLocale,
+    getAvailableHeight,
+    getFullscreenBounds,
+    fullscreenScope = FULLSCREEN_SCOPE_CHAT,
+  } = {}) {
     this.native = Boolean(native);
     this.client = client;
     this.getAvailableHeight = getAvailableHeight || (() => 800);
+    this.getFullscreenBounds = getFullscreenBounds || null;
+    this.fullscreenScope = fullscreenScope;
     this.expanded = false;
     this.heightPx = null;
     /** Ordered tab metadata: { terminalId, generation, label, profileId, status } */
@@ -33,6 +49,7 @@ export class TerminalPanel {
     this._restartNoticeShown = false;
     this._dragRefitTimer = null;
     this.enlarged = false;
+    this._fullscreenBoundsCleanup = null;
     this.toggleEl = null;
     this.root = null;
     this.tabBarEl = null;
@@ -77,7 +94,7 @@ export class TerminalPanel {
     this.root = document.createElement("section");
     this.root.className = "terminal-panel hidden";
     this.root.dataset.terminalPanel = "";
-    this.root.setAttribute("aria-label", "Terminal");
+    this.root.setAttribute("aria-label", t("terminal.panelLabel"));
 
     const resizer = document.createElement("div");
     resizer.className = "terminal-resizer";
@@ -103,7 +120,7 @@ export class TerminalPanel {
     closeButton.type = "button";
     closeButton.className = "terminal-collapse";
     closeButton.dataset.terminalCollapse = "";
-    closeButton.textContent = "×";
+    closeButton.innerHTML = CLOSE_ICON_SVG;
     closeButton.addEventListener("click", () => this.collapse());
 
     this.enlargeButton = document.createElement("button");
@@ -112,15 +129,14 @@ export class TerminalPanel {
     this.enlargeButton.dataset.terminalEnlarge = "";
     this.enlargeButton.title = t("terminal.enlarge");
     this.enlargeButton.setAttribute("aria-label", t("terminal.enlarge"));
-    this.enlargeButton.innerHTML =
-      '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>';
+    this.enlargeButton.innerHTML = EXPAND_ICON_SVG;
     this.enlargeButton.addEventListener("click", () => this.toggleEnlarge());
 
     const newTabButton = document.createElement("button");
     newTabButton.type = "button";
     newTabButton.className = "terminal-new-tab";
     newTabButton.dataset.terminalNewTab = "";
-    newTabButton.textContent = "+";
+    newTabButton.innerHTML = PLUS_ICON_SVG;
     newTabButton.title = t("terminal.newTab");
     newTabButton.addEventListener("click", () => {
       if (!this.locked) this.client?.create?.("default");
@@ -180,14 +196,18 @@ export class TerminalPanel {
     this._updateToggleAffordance();
   }
 
-  /** Toggle the panel between its default height and covering the whole workspace. */
+  /** Toggle the panel between its default height and the chat-panel bounds. */
   toggleEnlarge() {
     this.enlarged = !this.enlarged;
     if (this.enlarged) {
       this.root?.classList.add("enlarged");
+      this._applyFullscreenBounds();
+      this._startFullscreenBoundsTracking();
       if (this.root) this.root.style.height = "";
     } else {
       this.root?.classList.remove("enlarged");
+      this._stopFullscreenBoundsTracking();
+      this._clearFullscreenBounds();
       const available = this.getAvailableHeight() || 800;
       this.setHeight(Math.round(available * DEFAULT_HEIGHT_RATIO));
     }
@@ -331,11 +351,20 @@ export class TerminalPanel {
       label.className = "terminal-tab-label";
       label.textContent = tab.label || tab.terminalId;
       btn.appendChild(label);
+      const restart = document.createElement("span");
+      restart.className = "terminal-tab-restart";
+      restart.innerHTML = REFRESH_ICON_SVG;
+      restart.title = t("terminal.retry");
+      restart.addEventListener("click", (event) => {
+        event.stopPropagation();
+        this.client?.restart?.(tab.terminalId, tab.generation);
+      });
+      btn.appendChild(restart);
       const close = document.createElement("button");
       close.type = "button";
       close.className = "terminal-tab-close";
-      close.textContent = "×";
-      close.setAttribute("aria-label", "Close terminal tab");
+      close.innerHTML = CLOSE_ICON_SVG;
+      close.setAttribute("aria-label", t("migrated.terminalPanel.ariaLabel.closeTerminalTab"));
       close.addEventListener("click", (event) => {
         event.stopPropagation();
         const live = tab.status === "running" || tab.status === "creating";
@@ -343,15 +372,6 @@ export class TerminalPanel {
         this.client?.close?.(tab.terminalId, tab.generation);
       });
       btn.appendChild(close);
-      const restart = document.createElement("span");
-      restart.className = "terminal-tab-restart";
-      restart.textContent = "↻";
-      restart.title = t("terminal.retry");
-      restart.addEventListener("click", (event) => {
-        event.stopPropagation();
-        this.client?.restart?.(tab.terminalId, tab.generation);
-      });
-      btn.appendChild(restart);
       btn.addEventListener("click", () => this.setActiveTerminalId(tab.terminalId));
       this.tabButtons.set(tab.terminalId, btn);
       if (newTabBtn) {
@@ -409,6 +429,7 @@ export class TerminalPanel {
   destroy() {
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
+    this._stopFullscreenBoundsTracking();
     this.unsubscribeLocale?.();
     this.unsubscribeLocale = null;
     for (const btn of this.tabButtons.values()) btn.remove();
@@ -443,6 +464,50 @@ export class TerminalPanel {
     this.bodyEl.prepend(notice);
     // Auto-dismiss so it doesn't outlive the session that produced it.
     setTimeout(() => notice.remove(), 8000);
+  }
+
+  _applyFullscreenBounds() {
+    if (!this.root) return;
+    this.root.dataset.fullscreenScope = this.fullscreenScope;
+    const bounds = this.getFullscreenBounds?.();
+    if (!bounds) {
+      this._clearFullscreenBounds();
+      return;
+    }
+    const left = Number.isFinite(bounds.left) ? bounds.left : 0;
+    const top = Number.isFinite(bounds.top) ? bounds.top : 0;
+    const right = Number.isFinite(bounds.right) ? bounds.right : 0;
+    this.root.style.setProperty("--terminal-fullscreen-left", `${Math.max(0, Math.round(left))}px`);
+    this.root.style.setProperty("--terminal-fullscreen-top", `${Math.max(0, Math.round(top))}px`);
+    this.root.style.setProperty(
+      "--terminal-fullscreen-right",
+      `${Math.max(0, Math.round(right))}px`,
+    );
+  }
+
+  _clearFullscreenBounds() {
+    if (!this.root) return;
+    delete this.root.dataset.fullscreenScope;
+    this.root.style.removeProperty("--terminal-fullscreen-left");
+    this.root.style.removeProperty("--terminal-fullscreen-top");
+    this.root.style.removeProperty("--terminal-fullscreen-right");
+  }
+
+  _startFullscreenBoundsTracking() {
+    if (this._fullscreenBoundsCleanup) return;
+    const update = () => {
+      if (this.enlarged) {
+        this._applyFullscreenBounds();
+        this.client?.refitAll?.();
+      }
+    };
+    window.addEventListener("resize", update);
+    this._fullscreenBoundsCleanup = () => window.removeEventListener("resize", update);
+  }
+
+  _stopFullscreenBoundsTracking() {
+    this._fullscreenBoundsCleanup?.();
+    this._fullscreenBoundsCleanup = null;
   }
 
   _beginResize(event) {

@@ -1,3 +1,5 @@
+import { t } from "../../i18n.js";
+
 const TODO_TOOL_NAME = "todo";
 const TODO_WIDGET_KEY = "rpiv-todos";
 const EMPTY_STATE = Object.freeze({ tasks: Object.freeze([]), nextId: 1 });
@@ -71,7 +73,10 @@ export class RpivTodoMirrorPanel {
   constructor({ container }) {
     this.#element = document.createElement("section");
     this.#element.className = "rpiv-todo-panel hidden is-collapsed";
-    this.#element.setAttribute("aria-label", "Todos");
+    this.#element.setAttribute(
+      "aria-label",
+      t("migrated.native.features.rpivTodoMirror.textcontent.todos"),
+    );
     container?.insertBefore(this.#element, container.querySelector("form"));
   }
 
@@ -121,7 +126,7 @@ export class RpivTodoMirrorPanel {
     dot.textContent = hasActive ? "●" : "○";
     const title = document.createElement("span");
     title.className = "rpiv-todo-panel__title";
-    title.textContent = "Todos";
+    title.textContent = t("migrated.native.features.rpivTodoMirror.textcontent.todos");
     titleGroup.append(dot, title);
     const summary = document.createElement("span");
     summary.className = "rpiv-todo-panel__summary";

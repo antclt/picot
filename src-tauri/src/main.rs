@@ -10,6 +10,12 @@ mod pi_rpc_bridge;
 mod remote_auth;
 mod runtime_coordinator;
 mod settings_store;
+mod terminal_manager;
+mod terminal_output;
+mod terminal_profiles;
+mod terminal_registry;
+mod terminal_state_store;
+mod window_owner;
 
 use host_server::HostServer;
 use metadata_store::MetadataStore;

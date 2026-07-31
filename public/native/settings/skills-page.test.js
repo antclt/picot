@@ -6,7 +6,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const localeListeners = new Set();
-vi.mock("../i18n.js", () => ({
+vi.mock("../../i18n.js", () => ({
   t: (key, params) => {
     if (params) {
       if (key.endsWith("enabledCount")) return `${params.enabled}/${params.total}`;

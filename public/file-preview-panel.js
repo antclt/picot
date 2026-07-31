@@ -87,6 +87,7 @@ export class FilePreviewPanel {
     tabBar,
     content,
     mainContainer,
+    fileApi,
     onOpenDesktop,
     onCopyText,
     confirmDirty,
@@ -98,6 +99,7 @@ export class FilePreviewPanel {
     this.tabBar = tabBar;
     this.content = content;
     this.mainContainer = mainContainer;
+    this.fileApi = fileApi || null;
     this.onOpenDesktop = onOpenDesktop || (() => {});
     this.onCopyText = onCopyText || ((text) => navigator.clipboard?.writeText(text));
     this.confirmDirty = confirmDirty || ((tabs, reason) => this._showDirtyDialog(tabs, reason));
@@ -806,9 +808,11 @@ export class FilePreviewPanel {
     this.loadAbortControllers.set(tab.id, controller);
 
     try {
-      const res = await fetch(`/api/files/content?path=${encodeURIComponent(tab.filePath)}`, {
-        signal: controller.signal,
-      });
+      const res = this.fileApi?.readFileContent
+        ? await this.fileApi.readFileContent(tab.filePath, { signal: controller.signal })
+        : await fetch(`/api/files/content?path=${encodeURIComponent(tab.filePath)}`, {
+            signal: controller.signal,
+          });
       if (this.loadTokens.get(tab.id) !== token || !this.state.getTab(tab.id)) return false;
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
@@ -1010,6 +1014,7 @@ export class FilePreviewPanel {
           errorDetail: error instanceof Error ? error.message : String(error),
         });
       },
+      rawUrlForPath: this.fileApi?.rawUrlForPath?.bind(this.fileApi),
     });
     this.currentRenderer.mount(this.content);
     this._renderToolbar();
@@ -1079,16 +1084,23 @@ export class FilePreviewPanel {
     this.state.updateTab(tabId, { saving: true, saveError: null });
 
     try {
-      const res = await fetch("/api/files/content", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          path: tab.filePath,
-          content: savedContent,
-          expectedMtimeMs,
-          force,
-        }),
-      });
+      const res = this.fileApi?.writeFileContent
+        ? await this.fileApi.writeFileContent({
+            path: tab.filePath,
+            content: savedContent,
+            expectedMtimeMs,
+            force,
+          })
+        : await fetch("/api/files/content", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              path: tab.filePath,
+              content: savedContent,
+              expectedMtimeMs,
+              force,
+            }),
+          });
 
       if (res.status === 409) {
         this.state.updateTab(tabId, { saving: false, conflict: true });

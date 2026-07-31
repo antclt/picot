@@ -1,3 +1,5 @@
+import { FilePreviewPanel } from "../file-preview-panel.js";
+import { initI18n, onLocaleChange, t } from "../i18n.js";
 import { reconcileSnapshotTarget } from "../session/bootstrap-target.js";
 import { dispatchSuperAgentTaskNative } from "../super-agent/native-dispatch.js";
 import { isSuperAgentProjectPath } from "../super-agent/session.js";
@@ -10,6 +12,7 @@ import { ConvNav } from "../ui/conv-nav.js";
 import { setupMessagesInsets } from "../ui/layout-insets.js";
 import { MessageRenderer } from "../ui/message-renderer.js";
 import { ToolCardRenderer } from "../ui/tool-card.js";
+import { setupComposerAutoResize } from "./composer/composer-autoresize.js";
 import { setupComposerImageAttachments } from "./composer/composer-images.js";
 import { setupComposerSlashMenu } from "./composer/composer-slash-menu.js";
 import { setupComposerSubmitHandling } from "./composer/composer-submit.js";
@@ -27,6 +30,7 @@ import {
   isRpivTodoWidgetRequest,
   RpivTodoMirrorPanel,
 } from "./features/rpiv-todo-mirror.js";
+import { setupTerminalPanel } from "./features/terminal-panel-integration.js";
 import { createNotificationCenter } from "./notifications/notification-center.js";
 import { createSessionSelectionHandler } from "./session/session-navigation.js";
 import { setupSessionSearchDialog } from "./session/session-search-dialog.js";
@@ -63,6 +67,7 @@ const route = parseAppRoute(window.location.pathname);
 if (route.name !== "session") throw new Error("Native Picot requires a session route");
 
 applyTheme(getCurrentTheme());
+await initI18n();
 document.body.dataset.runtime = "native";
 
 const messagesElement = document.getElementById("messages");
@@ -80,6 +85,7 @@ setupMessagesInsets({
   messages: messagesElement,
   header: document.querySelector(".header"),
   inputArea: document.querySelector(".input-area"),
+  workspaceContent: document.querySelector(".workspace-content"),
 });
 const messageRenderer = new MessageRenderer(messagesElement);
 const toolRenderer = new ToolCardRenderer(messagesElement);
@@ -98,6 +104,7 @@ const attachButton = document.getElementById("attach-btn");
 const imageInput = document.getElementById("image-input");
 const imagePreviews = document.getElementById("image-previews");
 const skillSlashMenu = document.getElementById("skill-slash-menu");
+const composerAutoResize = setupComposerAutoResize({ input });
 const queuedMessages = document.getElementById("queued-messages");
 const todoMirrorPanel = new RpivTodoMirrorPanel({
   container: document.querySelector(".input-area"),
@@ -111,6 +118,13 @@ const modelDropdownMenu = document.getElementById("model-dropdown-menu");
 const modelDropdownToolbar = modelDropdown?.closest(".composer-toolbar");
 const thinkingBtn = document.getElementById("thinking-btn");
 const THINKING_LEVELS = ["off", "minimal", "low", "medium", "high"];
+
+function formatThinkingLevelLabel(level) {
+  const normalizedLevel = level || "off";
+  const key = `settings.thinkingLevels.${normalizedLevel}`;
+  const label = t(key);
+  return label === key ? normalizedLevel : label;
+}
 let currentThinkingLevel = "off";
 let currentModelId = null;
 let currentModelContextWindow = 0;
@@ -164,9 +178,14 @@ const remoteAuth = await resolveRemoteAuth();
 
 const adapter = new HostRuntimeAdapter({
   url: resolveHostWebSocketUrl(window),
-  clientId: `${remoteAuth.clientType}-${randomId()}`,
+  clientId: sessionScopedClientId(remoteAuth.clientType),
   clientType: remoteAuth.clientType,
   deviceToken: remoteAuth.deviceToken,
+});
+setupTerminalPanel({
+  adapter,
+  getWorkspaceId: () => target.workspaceId,
+  native: remoteAuth.clientType === "desktop",
 });
 const runtime = new RuntimeGateway(adapter);
 const data = new HostDataGateway(adapter, { fetchImpl: window.fetch.bind(window) });
@@ -174,6 +193,7 @@ const control = new HostControlGateway(adapter);
 const config = new ConfigGateway({ runtime, getTarget: () => target });
 window.__picotConfigCall = (op, params, options) => config.call(op, params, options);
 const contextUsage = setupContextUsage();
+const filePreviewPanel = setupFilePreviewPanel();
 const sessionCostEl = document.getElementById("session-cost");
 let sessionTotalCost = 0;
 
@@ -223,6 +243,7 @@ const extensionUi = new ExtensionUiHost({
     },
     editorText: (request) => {
       input.value = request.text || "";
+      composerAutoResize.sync();
       input.focus();
     },
     widget: (request) => {
@@ -306,6 +327,7 @@ messagesElement.addEventListener("messagefork", async (event) => {
     const data = result?.response?.data;
     if (!data?.cancelled && data?.text != null) {
       input.value = data.text;
+      composerAutoResize.sync();
       input.focus();
     }
   } catch (error) {
@@ -461,6 +483,19 @@ function provisionalTargetFromRoute(currentRoute) {
     sessionId: currentRoute.sessionId,
     instanceId: "pending-bootstrap",
   };
+}
+
+function sessionScopedClientId(clientType) {
+  const key = "picot:host-client-id";
+  try {
+    const existing = sessionStorage.getItem(key);
+    if (existing) return existing;
+    const created = `${clientType}-${randomId()}`;
+    sessionStorage.setItem(key, created);
+    return created;
+  } catch {
+    return `${clientType}-${randomId()}`;
+  }
 }
 
 async function loadBootstrapTarget(currentRoute) {
@@ -648,6 +683,7 @@ function insertTaskPrompt(task) {
   if (!task) return;
   const draft = input.value.trim();
   input.value = `${buildTaskComposerPrompt(task)}${draft ? `\n${draft}` : ""}`;
+  composerAutoResize.sync();
   input.focus();
 }
 
@@ -798,6 +834,64 @@ function setupSidebarToggle() {
   });
 }
 
+function setupFilePreviewPanel() {
+  const panel = document.getElementById("file-preview-panel");
+  const resizer = document.getElementById("file-preview-resizer");
+  const tabBar = document.getElementById("file-preview-tabs");
+  const content = document.getElementById("file-preview-content");
+  const mainContainer = document.querySelector(".main");
+  if (!panel || !resizer || !tabBar || !content || !mainContainer) return null;
+
+  const fileApi = createNativeFilePreviewApi({ workspaceId: () => target.workspaceId });
+  return new FilePreviewPanel({
+    panel,
+    resizer,
+    tabBar,
+    content,
+    mainContainer,
+    fileApi,
+    onOpenDesktop: (relativePath) => openWorkspaceRelativePath(relativePath).catch(showError),
+  });
+}
+
+function createNativeFilePreviewApi({ workspaceId }) {
+  const buildUrl = (path, endpoint) => {
+    const url = new URL(endpoint, window.location.origin);
+    url.searchParams.set("workspaceId", workspaceId());
+    url.searchParams.set("path", path);
+    return url;
+  };
+  return {
+    readFileContent(path, { signal } = {}) {
+      return fetch(buildUrl(path, "/api/files/content"), { signal });
+    },
+    writeFileContent({ path, content, expectedMtimeMs, force }) {
+      return fetch("/api/files/content", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workspaceId: workspaceId(),
+          path,
+          content,
+          expectedMtimeMs,
+          force,
+        }),
+      });
+    },
+    rawUrlForPath(path) {
+      return buildUrl(path, "/api/files/raw").toString();
+    },
+  };
+}
+
+async function openWorkspaceRelativePath(relativePath = "") {
+  const info = await data.workspaceInfo(target.workspaceId);
+  const root = info?.path ?? "";
+  const normalizedRelative = String(relativePath || "").replace(/^\/+/, "");
+  const absolutePath = normalizedRelative ? `${root}/${normalizedRelative}` : root;
+  await control.openInApp(absolutePath);
+}
+
 function setupFileBrowser() {
   const sidebar = document.getElementById("file-sidebar");
   const fileList = document.getElementById("file-list");
@@ -808,6 +902,15 @@ function setupFileBrowser() {
   if (upBtn) upBtn.disabled = true; // disabled until we've navigated into a subdir
 
   const browser = new NativeFileBrowser(fileList, pathEl, data, target.workspaceId, {
+    onFileOpen(entry) {
+      openWorkspaceRelativePath(entry.relativePath).catch(showError);
+    },
+    onFileSelect(entry) {
+      filePreviewPanel?.openFile(entry.relativePath, {
+        fileName: entry.name,
+        size: entry.size,
+      });
+    },
     onPathChange(path) {
       // Enable the up button only when we're inside a subdirectory.
       if (upBtn) upBtn.disabled = path === "";
@@ -816,11 +919,8 @@ function setupFileBrowser() {
 
   document.getElementById("file-sidebar-finder")?.addEventListener("click", async () => {
     try {
-      const info = await data.workspaceInfo(target.workspaceId);
-      const root = info?.path ?? "";
       const current = browser.currentPath ?? "";
-      const absolutePath = current ? `${root}/${current}` : root;
-      await control.openInApp(absolutePath);
+      await openWorkspaceRelativePath(current);
     } catch (error) {
       showError(error);
     }
@@ -855,11 +955,13 @@ async function sendComposerInput({ altKey }) {
   }
   input.value = "";
   input.scrollTop = 0;
+  composerAutoResize.sync();
   imageAttachments.clear();
   try {
     await runtime.request(intent.command, target, { idempotencyKey: randomId() });
   } catch (error) {
     input.value = value;
+    composerAutoResize.sync();
     imageAttachments.setImages(images);
     throw error;
   }
@@ -1106,12 +1208,11 @@ function updateComposerModel(model) {
 function updateComposerThinking(level) {
   currentThinkingLevel = level ?? "off";
   if (thinkingBtn) {
-    thinkingBtn.textContent = `Think ${currentThinkingLevel}`;
+    const levelLabel = formatThinkingLevelLabel(currentThinkingLevel);
+    thinkingBtn.textContent = t("settings.thinkingCompact", { level: levelLabel });
     thinkingBtn.className = `thinking-tag${currentThinkingLevel === "off" ? " off" : ""}`;
-    thinkingBtn.setAttribute(
-      "aria-label",
-      `Thinking effort: ${currentThinkingLevel}. Click to cycle reasoning depth.`,
-    );
+    thinkingBtn.title = t("settings.thinkingTitle");
+    thinkingBtn.setAttribute("aria-label", t("settings.thinkingAriaLabel", { level: levelLabel }));
   }
   // Sync settings panel radio group
   settingsPanel?.thinkingControl?.updateUI(level);
@@ -1172,15 +1273,15 @@ function renderEmptyModelDropdown(container) {
 
   const title = document.createElement("div");
   title.className = "model-dropdown-empty-title";
-  title.textContent = "No models available";
+  title.textContent = t("models.emptyTitle");
 
   const message = document.createElement("div");
-  message.textContent = "No API keys configured. Set a key in Settings → Configuration.";
+  message.textContent = t("models.emptyHelp");
 
   const settingsButton = document.createElement("button");
   settingsButton.type = "button";
   settingsButton.className = "btn-primary model-dropdown-empty-action";
-  settingsButton.textContent = "Open Settings";
+  settingsButton.textContent = t("migrated.native.app.textcontent.openSettings");
   settingsButton.addEventListener("click", () => {
     closeModelDropdown();
     settingsPanel?.openSettings("configuration");
@@ -1245,7 +1346,7 @@ function renderModelDropdownItems(container, filter = "") {
   if (matchingModels.length === 0) {
     const empty = document.createElement("div");
     empty.className = "model-dropdown-empty";
-    empty.textContent = "No models match your search.";
+    empty.textContent = t("migrated.native.app.textcontent.noModelsMatchYourSearch");
     container.appendChild(empty);
     return;
   }
@@ -1261,7 +1362,7 @@ function renderModelDropdownMenu() {
 
   const search = document.createElement("input");
   search.className = "model-dropdown-search";
-  search.placeholder = "Search models…";
+  search.placeholder = t("models.searchPlaceholder");
   search.type = "text";
   modelDropdownMenu.appendChild(search);
 
@@ -1315,6 +1416,10 @@ if (modelDropdownBtn) {
 
 document.addEventListener("click", (event) => {
   if (!event.target.closest("#model-dropdown")) closeModelDropdown();
+});
+
+onLocaleChange(() => {
+  updateComposerThinking(currentThinkingLevel);
 });
 
 if (thinkingBtn) {

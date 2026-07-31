@@ -1,3 +1,5 @@
+import { t } from "../../i18n.js";
+
 function commandInvocation(command) {
   const name = command?.name ?? command?.command ?? "";
   if (!name) return "";
@@ -64,7 +66,10 @@ export function setupComposerSlashMenu({ input, container, commandButton = null,
   let updateGeneration = 0;
 
   container.setAttribute("role", "listbox");
-  container.setAttribute("aria-label", "Skill slash commands");
+  container.setAttribute(
+    "aria-label",
+    t("migrated.native.composer.composerSlashMenu.ariaLabel.skillSlashCommands"),
+  );
   input.setAttribute("aria-autocomplete", "list");
   input.setAttribute("aria-controls", container.id);
   input.setAttribute("aria-expanded", "false");
@@ -146,13 +151,15 @@ export function setupComposerSlashMenu({ input, container, commandButton = null,
     container.innerHTML = "";
     const heading = document.createElement("div");
     heading.className = "skill-slash-heading";
-    heading.textContent = "Skills";
+    heading.textContent = t("migrated.index.text.skills");
     container.appendChild(heading);
 
     if (matches.length === 0) {
       const empty = document.createElement("div");
       empty.className = "skill-slash-empty";
-      empty.textContent = "No matching skills";
+      empty.textContent = t(
+        "migrated.native.composer.composerSlashMenu.textcontent.noMatchingSkills",
+      );
       container.appendChild(empty);
     } else {
       matches.forEach((command, index) => {

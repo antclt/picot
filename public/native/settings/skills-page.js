@@ -1,7 +1,7 @@
 // ABOUTME: Renders and mutates Settings > Skills from server-authoritative Pi inventories.
 // ABOUTME: Renders one tree per sourceRoot; skills sort before groups, each alphabetically.
 
-import { onLocaleChange, t } from "../i18n.js";
+import { onLocaleChange, t } from "../../i18n.js";
 
 /**
  * @typedef {Object} SkillInventoryItem
@@ -105,6 +105,14 @@ function el(tag, props = {}, children = []) {
  * @param {(msg:string)=>void} [opts.showError]
  */
 export function setupSkillsPage({ container, rpcCommand, showSuccess, showError }) {
+  if (!container || !rpcCommand) {
+    return {
+      activate: async () => {},
+      load: async () => {},
+      destroy: () => {},
+    };
+  }
+
   let scope = "global";
   /** @type {SkillInventory|null} */
   let inventory = null;

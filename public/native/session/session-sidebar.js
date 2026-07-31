@@ -1,3 +1,4 @@
+import { t } from "../../i18n.js";
 import { isSuperAgentProjectPath } from "../../super-agent/session.js";
 import { isSuperAgentEnabled } from "../../super-agent/settings.js";
 import { randomId } from "../utils/random-id.js";
@@ -229,7 +230,7 @@ export class SessionSidebar {
     this.searchQuery = "";
     this._searchResults = null;
     this._searchTimer = null;
-    this._visibleCount = INITIAL_LIMIT;
+    this._visibleCountsByProject = new Map();
     this._loadSeq = 0;
     this._loadCommitted = 0;
     this.contextMenu = null;
@@ -810,17 +811,13 @@ export class SessionSidebar {
     const list = document.createElement("div");
     list.className = `project-sessions${collapsed ? " collapsed" : ""}`;
 
-    // Only the current project gets show-more/less; other projects list all
-    // their sessions once expanded.
-    const visible =
-      project.isCurrent && !this.searchQuery
-        ? project.sessions.slice(0, this._visibleCount)
-        : project.sessions;
+    const visibleCount = this.#projectVisibleCount(project, project.sessions.length);
+    const visible = this.searchQuery ? project.sessions : project.sessions.slice(0, visibleCount);
     visible.forEach((session) => {
       list.appendChild(this.#buildItem(session));
     });
-    if (project.isCurrent && !this.searchQuery) {
-      const toggle = this.#buildToggleRow(visible.length, project.sessions.length);
+    if (!this.searchQuery) {
+      const toggle = this.#buildToggleRow(project, visible.length, project.sessions.length);
       if (toggle) list.appendChild(toggle);
     }
 
@@ -838,7 +835,26 @@ export class SessionSidebar {
     return group;
   }
 
-  #buildToggleRow(visibleCount, totalCount) {
+  #projectVisibleKey(project) {
+    return project.path || project.name || "unknown";
+  }
+
+  #projectVisibleCount(project, totalCount) {
+    const stored = this._visibleCountsByProject.get(this.#projectVisibleKey(project));
+    if (typeof stored === "number" && Number.isFinite(stored)) {
+      return Math.max(INITIAL_LIMIT, Math.min(totalCount, Math.floor(stored)));
+    }
+    return Math.min(totalCount, INITIAL_LIMIT);
+  }
+
+  #setProjectVisibleCount(project, count) {
+    this._visibleCountsByProject.set(
+      this.#projectVisibleKey(project),
+      Math.max(INITIAL_LIMIT, count),
+    );
+  }
+
+  #buildToggleRow(project, visibleCount, totalCount) {
     const hasMore = visibleCount < totalCount;
     const canShowLess = visibleCount > INITIAL_LIMIT;
     if (!hasMore && !canShowLess) return null;
@@ -848,10 +864,10 @@ export class SessionSidebar {
       const more = document.createElement("button");
       more.type = "button";
       more.className = "project-sessions-toggle";
-      more.textContent = "Show more";
+      more.textContent = t("sidebar.showMore");
       more.addEventListener("click", (event) => {
         event.stopPropagation();
-        this._visibleCount = visibleCount + STEP;
+        this.#setProjectVisibleCount(project, visibleCount + STEP);
         this.render();
       });
       row.appendChild(more);
@@ -860,10 +876,10 @@ export class SessionSidebar {
       const less = document.createElement("button");
       less.type = "button";
       less.className = "project-sessions-toggle project-sessions-toggle-less";
-      less.textContent = "Show less";
+      less.textContent = t("sidebar.showLess");
       less.addEventListener("click", (event) => {
         event.stopPropagation();
-        this._visibleCount = Math.max(INITIAL_LIMIT, visibleCount - STEP);
+        this.#setProjectVisibleCount(project, Math.max(INITIAL_LIMIT, visibleCount - STEP));
         this.render();
       });
       row.appendChild(less);

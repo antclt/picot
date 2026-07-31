@@ -1,14 +1,21 @@
-// Wires the thinking-effort radio group in the settings General tab. Updates
-// the thinking level via runtime.request({type: "set_thinking_level"}) and
-// syncs the UI (radio aria-checked, thumb position, level name display).
+// Wires the thinking-effort radio group in the settings General tab. Persists
+// the default thinking level to Pi settings and also applies it to the current
+// session so the visible composer stays in sync.
 
+import { onLocaleChange, t } from "../../i18n.js";
 import { randomId } from "../utils/random-id.js";
 
-export function setupThinkingEffortControl({ runtime, getTarget, onError }) {
+function formatThinkingLevelLabel(level) {
+  const key = `settings.thinkingLevels.${level}`;
+  const label = t(key);
+  return label === key ? level : label;
+}
+
+export function setupThinkingEffortControl({ runtime, getTarget, configGateway, onError }) {
   const radioGroup = document.getElementById("thinking-effort");
   const levelName = document.getElementById("thinking-effort-name");
   const thumb = document.getElementById("thinking-effort-marker");
-  if (!radioGroup || !runtime || !getTarget) return;
+  if (!radioGroup) return;
 
   const buttons = Array.from(radioGroup.querySelectorAll(".thinking-effort-dot"));
   const levels = buttons.map((btn) => btn.dataset.level).filter(Boolean);
@@ -17,16 +24,17 @@ export function setupThinkingEffortControl({ runtime, getTarget, onError }) {
     const index = levels.indexOf(level);
     if (index === -1) return;
 
-    // Update aria-checked and active state
+    // Update checked and active state.
     for (let i = 0; i < buttons.length; i++) {
       const isActive = i === index;
-      buttons[i].setAttribute("aria-checked", String(isActive));
+      buttons[i].checked = isActive;
       buttons[i].classList.toggle("active", isActive);
     }
 
     // Update level name display
     if (levelName) {
-      levelName.textContent = level;
+      levelName.dataset.thinkingLevel = level;
+      levelName.textContent = formatThinkingLevelLabel(level);
     }
 
     // Move thumb to the selected position. The thumb has real width (it's a
@@ -41,17 +49,32 @@ export function setupThinkingEffortControl({ runtime, getTarget, onError }) {
   }
 
   async function setThinkingLevel(level) {
-    const target = getTarget();
-    if (!target) {
-      onError?.(new Error("No active session"));
-      return;
-    }
-
     try {
-      await runtime.request({ type: "set_thinking_level", level }, target, {
-        idempotencyKey: randomId(),
-      });
+      if (configGateway) {
+        const response = await configGateway.call("set_default_thinking_level", {
+          level,
+          scope: "global",
+        });
+        if (!response?.ok) throw new Error(response?.error || "Failed to save thinking level");
+      }
+
+      const target = getTarget?.();
+      if (runtime && target) {
+        await runtime.request({ type: "set_thinking_level", level }, target, {
+          idempotencyKey: randomId(),
+        });
+      }
       updateUI(level);
+    } catch (error) {
+      onError?.(error);
+    }
+  }
+
+  async function loadDefaultThinkingLevel() {
+    if (!configGateway) return;
+    try {
+      const response = await configGateway.call("get_default_thinking_level", { scope: "global" });
+      if (response?.ok && response.data?.level) updateUI(response.data.level);
     } catch (error) {
       onError?.(error);
     }
@@ -69,7 +92,7 @@ export function setupThinkingEffortControl({ runtime, getTarget, onError }) {
 
   // Keyboard navigation for radio group
   radioGroup.addEventListener("keydown", (event) => {
-    const currentIndex = buttons.findIndex((btn) => btn.getAttribute("aria-checked") === "true");
+    const currentIndex = buttons.findIndex((btn) => btn.checked);
     let nextIndex = currentIndex;
 
     if (event.key === "ArrowRight" || event.key === "ArrowDown") {
@@ -89,5 +112,16 @@ export function setupThinkingEffortControl({ runtime, getTarget, onError }) {
     }
   });
 
-  return { updateUI };
+  const unsubscribeLocale = onLocaleChange(() => {
+    const currentLevel =
+      levelName?.dataset.thinkingLevel ||
+      levels.find((_, i) => {
+        return buttons[i]?.checked;
+      });
+    if (currentLevel) updateUI(currentLevel);
+  });
+
+  void loadDefaultThinkingLevel();
+
+  return { updateUI, destroy: unsubscribeLocale };
 }

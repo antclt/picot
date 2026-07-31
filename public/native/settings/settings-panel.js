@@ -1,8 +1,11 @@
+import { t } from "../../i18n.js";
 import { applyTheme, getCurrentTheme, themes } from "../../themes.js";
 import { loadCostDashboard } from "./cost-dashboard.js";
+import { setupLanguageSelector } from "./language-selector.js";
 import { setupPackageBrowse } from "./package-browse.js";
 import { setupSettingsConfig } from "./settings-config.js";
 import { setupSettingsToggles } from "./settings-toggles.js";
+import { setupSkillsPage } from "./skills-page.js";
 import { setupThinkingEffortControl } from "./thinking-effort-control.js";
 
 // Wires the settings overlay panel for the native runtime: open/close, tab
@@ -43,10 +46,34 @@ export function setupSettingsPanel({
   const config = configGateway
     ? setupSettingsConfig({ configGateway, onModelConfigurationChanged })
     : null;
-  const thinkingControl = runtime
-    ? setupThinkingEffortControl({ runtime, getTarget, onError })
-    : null;
-  setupSettingsToggles();
+  const thinkingControl = setupThinkingEffortControl({
+    runtime,
+    getTarget,
+    configGateway,
+    onError,
+  });
+  const skillsPage = setupSkillsPage({
+    container: document.getElementById("settings-skills"),
+    rpcCommand: async (command) => {
+      if (!configGateway) {
+        return { success: false, error: t("settings.skills.loadFailed") };
+      }
+      const { type, ...params } = command;
+      const result = await configGateway.call(type, params);
+      if (!result?.ok) {
+        return { success: false, error: result?.error || t("settings.skills.loadFailed") };
+      }
+      return { success: true, data: result.data };
+    },
+    showSuccess: notify
+      ? (message) => notify({ type: "success", title: t("status.saved"), message })
+      : undefined,
+    showError: notify
+      ? (message) => notify({ type: "error", title: t("settings.skills.saveFailed"), message })
+      : (message) => onError?.(message),
+  });
+  setupLanguageSelector();
+  setupSettingsToggles({ configGateway, onError });
   let usageLoaded = false;
 
   function loadUsage() {
@@ -73,6 +100,7 @@ export function setupSettingsPanel({
 
     if (target === "usage") loadUsage();
     if (target === "extensions") void packageBrowse.load();
+    if (target === "skills") void skillsPage.activate();
     if (target === "configuration") loadConfiguration();
   }
 
@@ -105,13 +133,13 @@ export function setupSettingsPanel({
 
   async function loadPiVersion() {
     if (!piVersionValue) return;
-    piVersionValue.textContent = "Loading…";
+    piVersionValue.textContent = t("migrated.native.settings.settingsConfig.textcontent.loading");
     try {
       const response = await fetch("/health");
       const health = await response.json();
       piVersionValue.textContent = health?.piVersion || "Unavailable";
     } catch {
-      piVersionValue.textContent = "Unavailable";
+      piVersionValue.textContent = t("sidebar.unavailable");
     }
   }
 
@@ -121,7 +149,7 @@ export function setupSettingsPanel({
       const version = await globalThis.__TAURI__?.app?.getVersion?.();
       appVersionValue.textContent = version ? `v${version}` : "Unavailable";
     } catch {
-      appVersionValue.textContent = "Unavailable";
+      appVersionValue.textContent = t("sidebar.unavailable");
     }
   }
 

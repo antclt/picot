@@ -13,9 +13,7 @@ export function getPackageInstallFailure(err, operation = "install") {
   const isUninstall = operation === "uninstall";
   return {
     title: isUninstall ? t("extensions.uninstallFailed") : t("extensions.installFailed"),
-    note: isUninstall
-      ? t("extensions.uninstallFailedNote")
-      : t("extensions.installFailedNote"),
+    note: isUninstall ? t("extensions.uninstallFailedNote") : t("extensions.installFailedNote"),
     detail: summarizePackageError(fullMessage),
   };
 }

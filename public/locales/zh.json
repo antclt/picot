@@ -472,6 +472,15 @@
     "thinkingLevel": "思考：{level}",
     "thinkingCompact": "思考 {level}",
     "off": "关闭",
+    "thinkingFaster": "更快",
+    "thinkingSmarter": "更智能",
+    "thinkingLevels": {
+      "off": "关闭",
+      "minimal": "最小",
+      "low": "低",
+      "medium": "中",
+      "high": "高"
+    },
     "thinkingTitle": "思考深度控制推理深度。点击切换。",
     "thinkingAriaLabel": "思考深度：{level}。点击切换推理深度。",
     "agentConfiguration": "智能体配置",
@@ -664,5 +673,176 @@
     "back": "返回",
     "newTask": "新任务",
     "showMore": "显示更多"
+  },
+  "migrated": {
+    "bootstrap": {
+      "text": {
+        "picotStartup": "Picot Startup",
+        "pi": "pi"
+      }
+    },
+    "index": {
+      "alt": {
+        "picotLogo": "Picot logo"
+      },
+      "title": {
+        "newSession": "New session",
+        "settings": "设置",
+        "downloadAndInstallUpdate": "Download and install update",
+        "workspacePath": "Workspace path",
+        "gitBranch": "Git branch",
+        "chooseApp": "Choose app",
+        "files": "文件",
+        "close": "关闭",
+        "minimal": "最小",
+        "low": "低",
+        "medium": "中",
+        "high": "高"
+      },
+      "ariaLabel": {
+        "toggleFileBrowser": "Toggle file browser",
+        "keyboardShortcuts": "Keyboard shortcuts",
+        "conversationNavigator": "Conversation navigator",
+        "openCommands": "Open commands",
+        "thinkingEffortOffClickToCycleReasoning": "思考深度：关闭。点击切换推理深度。",
+        "receiveBetaUpdates": "Receive beta updates",
+        "searchTasks": "Search tasks",
+        "searchResults": "Search results"
+      },
+      "placeholder": {
+        "typeAMessageOrUseToCall": "Type a message, or use / to call a skill…",
+        "providers": "{ \"providers\": { ... } }",
+        "searchTasksAndMessages": "Search tasks and messages…"
+      },
+      "text": {
+        "update": "更新",
+        "new": "New ↓",
+        "thinkOff": "思考 关闭",
+        "extensions": "扩展",
+        "skills": "技能",
+        "faster": "更快",
+        "smarter": "更智能",
+        "betaUpdates": "Beta updates",
+        "receivePrereleasePicotBuilds": "Receive prerelease Picot builds",
+        "piAgentAuthJson": "~/.pi/agent/auth.json",
+        "save": "保存",
+        "piAgentModelsJson": "~/.pi/agent/models.json",
+        "cancel": "取消",
+        "openLink": "打开链接"
+      }
+    },
+    "app": {
+      "textcontent": {
+        "retrying": "Retrying…"
+      }
+    },
+    "components": {
+      "chatSettingsPanel": {
+        "textcontent": {
+          "checkingTelegram": "Checking Telegram…"
+        },
+        "placeholder": {
+          "pasteANewTokenToReconnect": "Paste a new token to reconnect"
+        }
+      }
+    },
+    "native": {
+      "app": {
+        "textcontent": {
+          "openSettings": "打开设置",
+          "noModelsMatchYourSearch": "No models match your search."
+        }
+      },
+      "composer": {
+        "composerSlashMenu": {
+          "textcontent": {
+            "noMatchingSkills": "No matching skills"
+          },
+          "ariaLabel": {
+            "skillSlashCommands": "Skill slash commands"
+          }
+        }
+      },
+      "extensions": {
+        "inlineExtensionPrompt": {
+          "placeholder": {
+            "typeACustomAnswer": "Type a custom answer"
+          },
+          "textcontent": {
+            "noPreview": "No preview"
+          },
+          "ariaLabel": {
+            "extensionQuestion": "Extension question"
+          }
+        }
+      },
+      "features": {
+        "rpivTodoMirror": {
+          "textcontent": {
+            "todos": "Todos"
+          }
+        }
+      },
+      "notifications": {
+        "notificationCenter": {
+          "ariaLabel": {
+            "dismissNotification": "Dismiss notification"
+          }
+        }
+      },
+      "session": {
+        "sessionSearchDialog": {
+          "textcontent": {
+            "searchingMessages": "Searching messages…"
+          }
+        },
+        "sessionSidebar": {
+          "textcontent": {
+            "showMore": "显示更多"
+          }
+        }
+      },
+      "settings": {
+        "settingsConfig": {
+          "textcontent": {
+            "loading": "加载中…"
+          }
+        }
+      }
+    },
+    "sidebar": {
+      "buildSessionItem": {
+        "textcontent": {
+          "tmux": "tmux"
+        }
+      },
+      "index": {
+        "textcontent": {
+          "pinned": "Pinned"
+        }
+      }
+    },
+    "terminalPanel": {
+      "ariaLabel": {
+        "closeTerminalTab": "Close terminal tab"
+      }
+    },
+    "ui": {
+      "imageLightbox": {
+        "ariaLabel": {
+          "imagePreview": "Image preview"
+        }
+      },
+      "messageRenderer": {
+        "title": {
+          "forkSessionFromHere": "Fork session from here"
+        }
+      },
+      "resizablePanel": {
+        "title": {
+          "resizePanel": "Resize panel"
+        }
+      }
+    }
   }
 }

@@ -23,6 +23,7 @@ export interface CostParams {
   granularity?: string;
   scope?: string;
   range?: string;
+  models?: Set<string>;
 }
 
 function bucketForDate(date: Date, granularity: string): string {

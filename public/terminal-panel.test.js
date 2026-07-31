@@ -14,6 +14,7 @@ function mountedPanel(opts = {}) {
     client,
     subscribeLocale: opts.subscribeLocale,
     getAvailableHeight: opts.getAvailableHeight || (() => opts.availableHeight || 800),
+    getFullscreenBounds: opts.getFullscreenBounds,
   });
   panel.mount({ toggleContainer: document.body, panelContainer: document.body });
   return { panel, client };
@@ -46,6 +47,37 @@ test("resizer clamps to 160px minimum and 70 percent maximum", () => {
   expect(panel.setHeight(10)).toBe(160);
   expect(panel.setHeight(900)).toBe(700);
   expect(panel.setHeight(400)).toBe(400);
+});
+
+test("enlarged terminal uses chat panel bounds instead of covering the sidebar", () => {
+  const { panel } = mountedPanel({
+    client: { refitAll: vi.fn() },
+    getFullscreenBounds: () => ({ left: 272, top: 36, right: 320 }),
+  });
+
+  panel.toggleEnlarge();
+
+  expect(panel.root.classList.contains("enlarged")).toBe(true);
+  expect(panel.root.dataset.fullscreenScope).toBe("chat");
+  expect(panel.root.style.getPropertyValue("--terminal-fullscreen-left")).toBe("272px");
+  expect(panel.root.style.getPropertyValue("--terminal-fullscreen-top")).toBe("36px");
+  expect(panel.root.style.getPropertyValue("--terminal-fullscreen-right")).toBe("320px");
+});
+
+test("restoring enlarged terminal clears fullscreen bounds", () => {
+  const { panel } = mountedPanel({
+    client: { refitAll: vi.fn() },
+    getFullscreenBounds: () => ({ left: 272, top: 36, right: 0 }),
+  });
+
+  panel.toggleEnlarge();
+  panel.toggleEnlarge();
+
+  expect(panel.root.classList.contains("enlarged")).toBe(false);
+  expect(panel.root.dataset.fullscreenScope).toBeUndefined();
+  expect(panel.root.style.getPropertyValue("--terminal-fullscreen-left")).toBe("");
+  expect(panel.root.style.getPropertyValue("--terminal-fullscreen-top")).toBe("");
+  expect(panel.root.style.getPropertyValue("--terminal-fullscreen-right")).toBe("");
 });
 
 test("resizing the panel refits the xterm viewport", () => {

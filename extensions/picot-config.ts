@@ -27,6 +27,12 @@ import {
   type TelegramBotIdentity,
   type TelegramWorkerStatusLike,
 } from "./pi-chat-setup";
+import {
+  buildSkillInventory,
+  mutateSkillEnabled,
+  type SkillScope,
+  type SkillTarget,
+} from "./skill-inventory";
 
 type ModelHealthStatus = "unknown" | "healthy" | "unhealthy";
 
@@ -61,6 +67,20 @@ type CatalogRegistry = {
   refresh: () => void | Promise<void>;
 };
 
+type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+
+type ConfigContext = {
+  modelRegistry?: CatalogRegistry;
+  cwd?: string;
+  isProjectTrusted?: () => boolean;
+};
+
+type SkillInventoryMutation = {
+  scope?: unknown;
+  target?: unknown;
+  enabled?: unknown;
+};
+
 type ApiKeyCredential = { type: "api_key"; key: string };
 
 type CredentialStoreLike = {
@@ -91,6 +111,20 @@ function errMessage(e: unknown): string {
   }
 }
 
+function resolveHomeDir(): string {
+  const candidates: string[] = [];
+  const add = (value?: string) => {
+    if (typeof value === "string" && value.trim()) candidates.push(path.resolve(value.trim()));
+  };
+  add(process.env.HOME);
+  add(process.env.USERPROFILE);
+  if (process.env.HOMEDRIVE && process.env.HOMEPATH) {
+    add(`${process.env.HOMEDRIVE}${process.env.HOMEPATH}`);
+  }
+  add(os.homedir());
+  return candidates[0] || os.homedir();
+}
+
 function resolvePiAgentRoot(): string {
   const candidates: string[] = [];
   const add = (value?: string) => {
@@ -114,6 +148,7 @@ function resolvePiAgentRoot(): string {
   return path.join(candidates[0] || os.homedir(), ".pi", "agent");
 }
 
+const HOME_DIR = resolveHomeDir();
 const PI_AGENT_ROOT = resolvePiAgentRoot();
 const MODELS_PREFS_PATH = path.join(PI_AGENT_ROOT, "picot-models.json");
 const AGENT_CONFIG_PATH = path.join(PI_AGENT_ROOT, "settings.json");
@@ -123,6 +158,16 @@ const AUTH_CONFIG_PATH = path.join(PI_AGENT_ROOT, "auth.json");
 const CHAT_WORKER_STATUS_DIR = path.join(PI_AGENT_ROOT, "chat", "worker-status");
 const SUPER_AGENT_TASKS_PATH = path.join(PI_AGENT_ROOT, "super-agent", "tasks.json");
 const PISTUDIO_INSTANCES_DIR = path.join(os.homedir(), ".pi", "pistudio-instances");
+const PROJECT_CONFIG_DIR_NAME = ".pi";
+const THINKING_LEVELS = new Set<ThinkingLevel>([
+  "off",
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+]);
 
 function modelPreferenceKey(provider: string, modelId: string): string {
   return `${provider}/${modelId}`;
@@ -141,6 +186,34 @@ function normalizeModelHealth(value: unknown): ModelHealth {
   };
   if (typeof candidate.error === "string") health.error = candidate.error;
   return health;
+}
+
+function parseSkillScope(value: unknown): SkillScope {
+  if (value === "global" || value === "project") return value;
+  throw new Error("Invalid skill inventory scope");
+}
+
+function parseSkillTarget(value: unknown): SkillTarget {
+  if (!value || typeof value !== "object") throw new Error("Invalid skill inventory mutation");
+  const target = value as { kind?: unknown; id?: unknown };
+  if (target.kind !== "skill" && target.kind !== "group") {
+    throw new Error("Invalid skill inventory mutation");
+  }
+  if (typeof target.id !== "string" || target.id.length === 0) {
+    throw new Error("Invalid skill inventory mutation");
+  }
+  return { kind: target.kind, id: target.id };
+}
+
+function skillInventoryOptions(scope: SkillScope, ctx: ConfigContext) {
+  const cwd = typeof ctx.cwd === "string" && ctx.cwd ? ctx.cwd : process.cwd();
+  return {
+    scope,
+    cwd,
+    agentDir: PI_AGENT_ROOT,
+    homeDir: HOME_DIR,
+    projectTrusted: Boolean(ctx.isProjectTrusted?.()),
+  };
 }
 
 function sanitizeHealthError(error: unknown): string {
@@ -324,6 +397,138 @@ function writeConfigFile(filePath: string, content: unknown): void {
   fs.writeFileSync(filePath, content, "utf8");
 }
 
+function readSettingsObject(filePath: string): Record<string, unknown> {
+  if (!fs.existsSync(filePath)) return {};
+  const parsed = JSON.parse(fs.readFileSync(filePath, "utf8"));
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error(`Pi settings must be a JSON object: ${filePath}`);
+  }
+  return parsed as Record<string, unknown>;
+}
+
+function writeSettingsObject(filePath: string, settings: Record<string, unknown>): void {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  const temporary = path.join(
+    path.dirname(filePath),
+    `.picot-settings-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}.tmp`,
+  );
+  try {
+    fs.writeFileSync(temporary, `${JSON.stringify(settings, null, 2)}\n`, "utf8");
+    fs.renameSync(temporary, filePath);
+  } finally {
+    try {
+      if (fs.existsSync(temporary)) fs.rmSync(temporary, { force: true });
+    } catch {
+      // Best-effort cleanup only.
+    }
+  }
+}
+
+function asThinkingLevel(value: unknown): ThinkingLevel {
+  const level = asString(value);
+  if (THINKING_LEVELS.has(level as ThinkingLevel)) return level as ThinkingLevel;
+  throw new Error(`Unsupported thinking level: ${level || String(value)}`);
+}
+
+function resolveSettingsPath(
+  scope: unknown,
+  ctx: ConfigContext,
+): { scope: "global" | "project"; path: string } {
+  const normalizedScope = asString(scope) || "global";
+  if (normalizedScope === "global") return { scope: "global", path: AGENT_CONFIG_PATH };
+  if (normalizedScope !== "project")
+    throw new Error(`Unsupported settings scope: ${normalizedScope}`);
+  const cwd = asString(ctx.cwd);
+  if (!cwd) throw new Error("Project settings require an active workspace");
+  if (ctx.isProjectTrusted && !ctx.isProjectTrusted()) {
+    throw new Error("Project settings cannot be changed until the workspace is trusted");
+  }
+  return {
+    scope: "project",
+    path: path.join(cwd, PROJECT_CONFIG_DIR_NAME, "settings.json"),
+  };
+}
+
+function getProjectSettings(
+  ctx: ConfigContext,
+): { path: string; settings: Record<string, unknown> } | null {
+  const cwd = asString(ctx.cwd);
+  if (!cwd || (ctx.isProjectTrusted && !ctx.isProjectTrusted())) return null;
+  const settingsPath = path.join(cwd, PROJECT_CONFIG_DIR_NAME, "settings.json");
+  return { path: settingsPath, settings: readSettingsObject(settingsPath) };
+}
+
+function getDefaultThinkingLevel(scope: unknown, ctx: ConfigContext) {
+  const requestedScope = asString(scope) || "global";
+  if (requestedScope === "project" || requestedScope === "effective") {
+    const project = getProjectSettings(ctx);
+    const projectValue = project?.settings.defaultThinkingLevel;
+    if (typeof projectValue === "string" && THINKING_LEVELS.has(projectValue as ThinkingLevel)) {
+      return { level: projectValue, source: "project", path: project.path };
+    }
+    if (requestedScope === "project") {
+      const writableProject = resolveSettingsPath("project", ctx);
+      return { level: "off", source: "pi_default", path: writableProject.path };
+    }
+  }
+  const globalValue = readSettingsObject(AGENT_CONFIG_PATH).defaultThinkingLevel;
+  if (typeof globalValue === "string" && THINKING_LEVELS.has(globalValue as ThinkingLevel)) {
+    return { level: globalValue, source: "global", path: AGENT_CONFIG_PATH };
+  }
+  return { level: "off", source: "pi_default", path: AGENT_CONFIG_PATH };
+}
+
+function setDefaultThinkingLevel(level: unknown, scope: unknown, ctx: ConfigContext) {
+  const thinkingLevel = asThinkingLevel(level);
+  const target = resolveSettingsPath(scope, ctx);
+  const settings = readSettingsObject(target.path);
+  settings.defaultThinkingLevel = thinkingLevel;
+  writeSettingsObject(target.path, settings);
+  return { level: thinkingLevel, scope: target.scope, path: target.path };
+}
+
+function getCompactionEnabled(settings: Record<string, unknown>): boolean | undefined {
+  const compaction = settings.compaction;
+  if (!compaction || typeof compaction !== "object" || Array.isArray(compaction)) return undefined;
+  const enabled = (compaction as Record<string, unknown>).enabled;
+  return typeof enabled === "boolean" ? enabled : undefined;
+}
+
+function getDefaultAutoCompaction(scope: unknown, ctx: ConfigContext) {
+  const requestedScope = asString(scope) || "global";
+  if (requestedScope === "project" || requestedScope === "effective") {
+    const project = getProjectSettings(ctx);
+    const projectValue = project ? getCompactionEnabled(project.settings) : undefined;
+    if (typeof projectValue === "boolean") {
+      return { enabled: projectValue, source: "project", path: project?.path };
+    }
+    if (requestedScope === "project") {
+      const writableProject = resolveSettingsPath("project", ctx);
+      return { enabled: true, source: "pi_default", path: writableProject.path };
+    }
+  }
+  const globalValue = getCompactionEnabled(readSettingsObject(AGENT_CONFIG_PATH));
+  if (typeof globalValue === "boolean") {
+    return { enabled: globalValue, source: "global", path: AGENT_CONFIG_PATH };
+  }
+  return { enabled: true, source: "pi_default", path: AGENT_CONFIG_PATH };
+}
+
+function setDefaultAutoCompaction(enabled: unknown, scope: unknown, ctx: ConfigContext) {
+  if (typeof enabled !== "boolean") throw new Error("enabled must be a boolean");
+  const target = resolveSettingsPath(scope, ctx);
+  const settings = readSettingsObject(target.path);
+  const existing = settings.compaction;
+  const compaction =
+    existing && typeof existing === "object" && !Array.isArray(existing)
+      ? { ...(existing as Record<string, unknown>) }
+      : {};
+  compaction.enabled = enabled;
+  settings.compaction = compaction;
+  writeSettingsObject(target.path, settings);
+  return { enabled, scope: target.scope, path: target.path };
+}
+
 function asString(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
@@ -457,7 +662,7 @@ async function removeStoredApiKey(
 export async function handlePicotConfig(
   op: string,
   params: Record<string, unknown>,
-  ctx: { modelRegistry?: CatalogRegistry },
+  ctx: ConfigContext,
 ): Promise<PicotConfigResult> {
   const registry = ctx.modelRegistry;
   const preferences = new ModelPreferencesStore();
@@ -524,6 +729,26 @@ export async function handlePicotConfig(
         return { ok: true, data: { provider } };
       }
 
+      case "list_skill_inventory": {
+        const scope = parseSkillScope(params.scope);
+        return { ok: true, data: buildSkillInventory(skillInventoryOptions(scope, ctx)) };
+      }
+
+      case "set_skill_enabled": {
+        const mutation = params as SkillInventoryMutation;
+        const scope = parseSkillScope(mutation.scope);
+        const target = parseSkillTarget(mutation.target);
+        if (typeof mutation.enabled !== "boolean") {
+          throw new Error("Invalid skill inventory mutation");
+        }
+        const result = await mutateSkillEnabled({
+          ...skillInventoryOptions(scope, ctx),
+          target,
+          enabled: mutation.enabled,
+        });
+        return { ok: true, data: result };
+      }
+
       case "read_agent_config":
         return { ok: true, data: readConfigFile(AGENT_CONFIG_PATH, "{}") };
 
@@ -531,6 +756,18 @@ export async function handlePicotConfig(
         writeConfigFile(AGENT_CONFIG_PATH, params.content);
         return { ok: true, data: { path: AGENT_CONFIG_PATH } };
       }
+
+      case "get_default_thinking_level":
+        return { ok: true, data: getDefaultThinkingLevel(params.scope, ctx) };
+
+      case "set_default_thinking_level":
+        return { ok: true, data: setDefaultThinkingLevel(params.level, params.scope, ctx) };
+
+      case "get_default_auto_compaction":
+        return { ok: true, data: getDefaultAutoCompaction(params.scope, ctx) };
+
+      case "set_default_auto_compaction":
+        return { ok: true, data: setDefaultAutoCompaction(params.enabled, params.scope, ctx) };
 
       case "read_models_config":
         return { ok: true, data: readConfigFile(MODELS_CONFIG_PATH, '{\n  "providers": {}\n}\n') };

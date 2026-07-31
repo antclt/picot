@@ -21,6 +21,7 @@ export function createFileRenderer({
   onChange,
   onModeChange,
   onError,
+  rawUrlForPath,
   renderAs,
 } = {}) {
   const classification = classifyFilePath(filePath || "");
@@ -59,10 +60,10 @@ export function createFileRenderer({
       });
 
     case "image":
-      return createImageRenderer({ filePath, fileName });
+      return createImageRenderer({ filePath, fileName, rawUrlForPath });
 
     case "pdf":
-      return createPdfRenderer({ filePath, onError });
+      return createPdfRenderer({ filePath, onError, rawUrlForPath });
 
     case "text":
       return createTextRenderer({
@@ -306,7 +307,7 @@ function createTextRenderer({
 
 // ─── Image renderer ─────────────────────────────────────────────────────
 
-function createImageRenderer({ filePath, fileName }) {
+function createImageRenderer({ filePath, fileName, rawUrlForPath }) {
   let imgEl = null;
   let containerEl = null;
 
@@ -319,7 +320,10 @@ function createImageRenderer({ filePath, fileName }) {
       imgEl = document.createElement("img");
       imgEl.className = "file-image-img";
       imgEl.alt = fileName || filePath || "";
-      imgEl.src = `/api/files/raw?path=${encodeURIComponent(filePath)}`;
+      imgEl.src =
+        typeof rawUrlForPath === "function"
+          ? rawUrlForPath(filePath)
+          : `/api/files/raw?path=${encodeURIComponent(filePath)}`;
       imgEl.onerror = () => {
         if (containerEl) {
           containerEl.classList.add("file-image-error");

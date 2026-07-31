@@ -778,6 +778,7 @@ setupMessagesInsets({
   messages: messagesContainer,
   header: headerEl,
   inputArea: inputAreaEl,
+  workspaceContent: document.querySelector(".workspace-content"),
 });
 
 // State tracking
@@ -1133,6 +1134,7 @@ const terminalPanel = new TerminalPanel({
     document.querySelector(".workspace")?.clientHeight ||
     document.querySelector(".workspace-content")?.clientHeight ||
     600,
+  getFullscreenBounds: getTerminalFullscreenBounds,
   client: {
     create: (profileId) => terminalClient.command({ type: "terminal_create", profileId }),
     close: (id, gen) =>
@@ -1196,6 +1198,22 @@ const terminalPanel = new TerminalPanel({
     },
   },
 });
+function getTerminalFullscreenBounds() {
+  const workspace = document.querySelector(".workspace");
+  const workspaceContent = document.querySelector(".workspace-content");
+  const main = document.querySelector(".workspace .main");
+  if (!workspace || !workspaceContent || !main) return null;
+
+  const workspaceRect = workspace.getBoundingClientRect();
+  const contentRect = workspaceContent.getBoundingClientRect();
+  const mainRect = main.getBoundingClientRect();
+  return {
+    left: mainRect.left - workspaceRect.left,
+    top: contentRect.top - workspaceRect.top,
+    right: workspaceRect.right - mainRect.right,
+  };
+}
+
 // The panel is mounted only after the broker confirms native capability:
 // `transport.capabilities.native` is false before the WS handshake completes,
 // so mounting at module top would skip it on the desktop. The event listeners
@@ -2324,7 +2342,7 @@ function handleAutoRetryStart(event = null) {
   if (attempt && maxAttempts) {
     statusText.textContent = `Retrying (${attempt}/${maxAttempts})...`;
   } else {
-    statusText.textContent = "Retrying…";
+    statusText.textContent = t("migrated.app.textcontent.retrying");
   }
   updateUI();
 }
@@ -2958,15 +2976,21 @@ const modelDropdownBtn = document.getElementById("model-dropdown-btn");
 const modelDropdownLabel = document.getElementById("model-dropdown-label");
 const modelDropdownMenu = document.getElementById("model-dropdown-menu");
 const thinkingBtn = document.getElementById("thinking-btn");
+function formatThinkingLevelLabel(level) {
+  const normalizedLevel = level || "off";
+  const key = `settings.thinkingLevels.${normalizedLevel}`;
+  const label = t(key);
+  return label === key ? normalizedLevel : label;
+}
 function formatCompactThinkingLevelLabel(level) {
-  return t("settings.thinkingCompact", { level: level || t("settings.off") });
+  return t("settings.thinkingCompact", { level: formatThinkingLevelLabel(level) });
 }
 function updateThinkingBtn() {
   thinkingBtn.textContent = formatCompactThinkingLevelLabel(currentThinkingLevel);
   thinkingBtn.title = t("settings.thinkingTitle");
   thinkingBtn.setAttribute(
     "aria-label",
-    t("settings.thinkingAriaLabel", { level: currentThinkingLevel || t("settings.off") }),
+    t("settings.thinkingAriaLabel", { level: formatThinkingLevelLabel(currentThinkingLevel) }),
   );
   thinkingBtn.classList.toggle("off", currentThinkingLevel === "off");
   renderThinkingEffort(currentThinkingLevel || "off", {

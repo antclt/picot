@@ -15,6 +15,7 @@
 @import url("ui/conv-nav.css");
 @import url("native/session/session-sidebar.css");
 @import url("native/workspace/file-browser.css");
+@import url("native/workspace/file-preview-panel.css");
 @import url("native/session/session-search-dialog.css");
 @import url("native/workspace/header-open-app.css");
 @import url("native/extensions/command-palette.css");
@@ -23,6 +24,7 @@
 @import url("native/composer/composer-slash-menu.css");
 @import url("native/composer/queued-messages.css");
 @import url("native/features/rpiv-todo-mirror.css");
+@import url("native/features/terminal-panel.css");
 @import url("native/notifications/notification-center.css");
 @import url("native/extensions/dialog.css");
 @import url("native/extensions/inline-extension-prompt.css");
@@ -32,6 +34,7 @@
 @import url("native/messages.css");
 @import url("native/composer.css");
 @import url("native/settings/package-browse.css");
+@import url("native/settings/skills-page.css");
 @import url("components/chat-settings-panel.css");
 @import url("native/settings/settings-panel.css");
 @import url("native/settings/settings-config.css");
@@ -141,6 +144,7 @@ body {
 .app-side-panel {
   --panel-width: 320px;
   width: var(--panel-width);
+  margin-top: var(--workspace-header-offset, 36px);
   min-width: var(--panel-width);
   max-width: var(--panel-width);
   flex: 0 0 var(--panel-width);
