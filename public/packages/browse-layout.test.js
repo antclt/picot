@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, test } from "vitest";
 
-const styleCss = readFileSync(resolve("public/style.css"), "utf8");
+const styleCss = readFileSync(resolve("public/native/settings/package-browse.css"), "utf8");
 
 function ruleBody(selector) {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -23,7 +23,7 @@ describe("extensions browse layout", () => {
     expect(descriptionRule).toContain("overflow: hidden");
   });
 
-  test("lets any visible status (installing/removing/error) expand beyond the card clamp", () => {
+  test("lets visible progress status expand beyond the card clamp", () => {
     const statusRule = ruleBody(".pkg-browse-row:has(.settings-extension-status:not([hidden]))");
 
     expect(statusRule).toContain("height: auto");

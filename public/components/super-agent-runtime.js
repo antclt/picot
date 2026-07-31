@@ -2,7 +2,8 @@
  * <super-agent-runtime> Web Component
  *
  * Replaces the SuperAgentRuntime class + initRuntimeCollapse in super-agent/panel.js.
- * Renders its own HTML, polls /api/super-agent/tasks every 3s.
+ * Renders its own HTML, polls Agent Inbox tasks every 3s via the
+ * picot-config gateway (window.__picotConfigCall).
  *
  * Usage:
  *   <super-agent-runtime id="super-agent-runtime"></super-agent-runtime>
@@ -117,6 +118,10 @@ class SuperAgentRuntime extends HTMLElement {
   }
 
   _openPanel(filter = null) {
+    document.body.classList.add("super-agent-active");
+    document.getElementById("super-agent-chat-header")?.classList.remove("hidden");
+    document.querySelector(".super-agent-pinned-group .session-item")?.click();
+    document.getElementById("super-agent-sidebar-entry")?.classList.add("active");
     this.classList.remove("collapsed");
     localStorage.setItem("sa-runtime-collapsed", "0");
     if (filter) this._setFilter(filter);
@@ -139,18 +144,23 @@ class SuperAgentRuntime extends HTMLElement {
   }
 
   async _poll() {
+    const call = window.__picotConfigCall;
+    if (typeof call !== "function") {
+      this._scheduleRetry();
+      return;
+    }
     try {
-      const res = await fetch("/api/super-agent/tasks");
-      if (!res.ok) {
+      const result = await call("read_super_agent_tasks");
+      if (!result?.ok) {
         this._scheduleRetry();
         return;
       }
-      const json = await res.text();
+      const json = JSON.stringify(result.data?.tasks || []);
       this._hasLoadedOnce = true;
       this._retryDelay = 400;
       if (json === this._lastJson) return;
       this._lastJson = json;
-      this._tasks = normalizeSuperAgentTasks(JSON.parse(json).tasks || []);
+      this._tasks = normalizeSuperAgentTasks(result.data?.tasks || []);
       this._renderAll();
     } catch {
       this._scheduleRetry();
@@ -158,11 +168,12 @@ class SuperAgentRuntime extends HTMLElement {
   }
 
   async _loadProjects() {
+    const call = window.__picotConfigCall;
+    if (typeof call !== "function") return;
     try {
-      const res = await fetch("/api/super-agent/projects");
-      if (!res.ok) return;
-      const data = await res.json();
-      this._projects = Array.isArray(data.projects) ? data.projects : [];
+      const result = await call("list_super_agent_projects");
+      if (!result?.ok) return;
+      this._projects = Array.isArray(result.data?.projects) ? result.data.projects : [];
       this._projectsLoadedOnce = true;
       this._renderTasks();
     } catch {
@@ -183,11 +194,9 @@ class SuperAgentRuntime extends HTMLElement {
   }
 
   async _save() {
-    await fetch("/api/super-agent/tasks", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ tasks: this._tasks }),
-    });
+    const call = window.__picotConfigCall;
+    if (typeof call !== "function") return;
+    await call("write_super_agent_tasks", { tasks: this._tasks });
     this._lastJson = null;
   }
 
@@ -371,9 +380,10 @@ class SuperAgentRuntime extends HTMLElement {
         if (hasTargetProject) {
           body += `<div class="runtime-task-target">Target: <strong>${esc(projectName)}</strong></div>`;
         }
-        if (task.dispatch?.childPort) {
+        if (task.dispatch?.childSessionId || task.dispatch?.childPort) {
+          const canOpen = Boolean(task.dispatch?.childSessionId);
           body += `<div class="runtime-approve-row">
-            <button class="sa-btn" data-action="view-session" data-task-id="${escAttr(task.id)}">View Session →</button>
+            <button class="sa-btn" data-action="view-session" data-task-id="${escAttr(task.id)}" ${canOpen ? "" : 'disabled title="Waiting for the agent session to start…"'}>View Session →</button>
             ${task.status === "running" ? `<button class="sa-btn sa-btn-dismiss" data-action="force-cancel" data-task-id="${escAttr(task.id)}">Force Cancel</button>` : ""}
           </div>`;
         } else if (task.status === "running") {

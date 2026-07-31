@@ -3,6 +3,8 @@
 use crate::metadata_store::MetadataStore;
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
+use std::path::Path;
+use std::sync::{Arc, Mutex};
 use uuid::Uuid;
 
 const PAIRING_LIFETIME_SECONDS: u64 = 5 * 60;
@@ -21,16 +23,27 @@ pub enum PairingError {
 }
 
 pub struct RemoteAuth {
-    store: MetadataStore,
+    store: Arc<Mutex<MetadataStore>>,
     pending: HashMap<Vec<u8>, u64>,
 }
 
 impl RemoteAuth {
-    pub fn new(store: MetadataStore) -> Self {
+    pub fn new(store: Arc<Mutex<MetadataStore>>) -> Self {
         Self {
             store,
             pending: HashMap::new(),
         }
+    }
+
+    /// Resolve (or mint) the stable workspace id for a project path. Shares the
+    /// same metadata store that native windows use, so LAN/mobile clients get
+    /// the identical workspace id and can reuse any live runtime instead of
+    /// spawning a duplicate for the same session file.
+    pub fn resolve_workspace(&self, path: &Path) -> Result<String, String> {
+        self.store
+            .lock()
+            .map_err(|_| "metadata store poisoned".to_string())?
+            .workspace_id_for_path(path)
     }
 
     pub fn create_pairing(&mut self, now: u64) -> Pairing {
@@ -61,17 +74,25 @@ impl RemoteAuth {
             Uuid::new_v4().simple()
         );
         self.store
+            .lock()
+            .map_err(|_| PairingError::Storage("metadata store poisoned".into()))?
             .store_device_token(device_id, &device_token)
             .map_err(PairingError::Storage)?;
         Ok(device_token)
     }
 
     pub fn authorize(&self, device_token: &str) -> Result<bool, String> {
-        self.store.verify_device_token(device_token)
+        self.store
+            .lock()
+            .map_err(|_| "metadata store poisoned".to_string())?
+            .verify_device_token(device_token)
     }
 
     pub fn revoke(&mut self, device_id: &str) -> Result<(), String> {
-        self.store.revoke_device(device_id)
+        self.store
+            .lock()
+            .map_err(|_| "metadata store poisoned".to_string())?
+            .revoke_device(device_id)
     }
 }
 
@@ -84,6 +105,7 @@ mod tests {
     use super::{PairingError, RemoteAuth};
     use crate::metadata_store::MetadataStore;
     use std::fs;
+    use std::sync::{Arc, Mutex};
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn auth() -> (RemoteAuth, std::path::PathBuf) {
@@ -94,7 +116,7 @@ mod tests {
         let temp = std::env::temp_dir().join(format!("picot-remote-auth-{nonce}"));
         fs::create_dir_all(&temp).unwrap();
         let store = MetadataStore::open(&temp.join("picot.sqlite3")).unwrap();
-        (RemoteAuth::new(store), temp)
+        (RemoteAuth::new(Arc::new(Mutex::new(store))), temp)
     }
 
     #[test]

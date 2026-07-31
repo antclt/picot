@@ -38,6 +38,9 @@ describe("super-agent task state", () => {
       targetProject: "/repo",
       superAgentPort: null,
       childPort: null,
+      childWorkspaceId: null,
+      childInstanceId: null,
+      childSessionId: null,
       startedAt: null,
       finishedAt: null,
     });

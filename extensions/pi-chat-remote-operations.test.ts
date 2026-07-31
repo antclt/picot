@@ -9,7 +9,7 @@ import {
   formatRemoteModels,
   formatRemoteOperationsCommand,
   type RemoteOperationsPaths,
-} from "./pi-chat-src/remote-operations.ts";
+} from "./chat-inbox/remote-operations.ts";
 
 async function fixture(): Promise<RemoteOperationsPaths> {
   const root = await mkdtemp(join(tmpdir(), "pi-chat-operations-"));
