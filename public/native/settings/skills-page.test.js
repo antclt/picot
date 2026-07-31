@@ -193,15 +193,13 @@ describe("skills-page tree renderer", () => {
     expect(container.querySelectorAll(".skills-switch").length).toBe(4);
   });
 
-  it("wraps top-level single-skills in one card titled with the root basename", async () => {
+  it("renders top-level single-skills without an extra group header", async () => {
     const page = setupSkillsPage({ container, rpcCommand: mockRpc(makeInventoryWithTopSkill()) });
     await page.load("global");
     const card = container.querySelector("[data-skill-card]");
     expect(card).not.toBeNull();
-    expect(card.querySelector(".skills-group-name").textContent).toBe("skills");
-    // The sourceRoot itself is not toggleable: the card header has no switch,
-    // and the switch lives on the skill row inside the card.
-    expect(card.querySelector(".skills-group-header .skills-switch")).toBeNull();
+    expect(card.classList.contains("skills-flat-list")).toBe(true);
+    expect(card.querySelector(".skills-group-header")).toBeNull();
     expect(card.querySelector('[data-skill-toggle="topskill"]')).not.toBeNull();
   });
 
@@ -214,8 +212,7 @@ describe("skills-page tree renderer", () => {
     const cards = container.querySelectorAll("[data-skill-card]");
     expect(cards.length).toBe(1);
     const card = cards[0];
-    expect(card.querySelector(".skills-group-name").textContent).toBe("skills");
-    expect(card.querySelector(".skills-group-header .skills-switch")).toBeNull();
+    expect(card.querySelector(".skills-group-header")).toBeNull();
     expect(card.querySelectorAll("[data-skill-row]").length).toBe(2);
     expect(card.querySelector('[data-skill-toggle="alpha"]')).not.toBeNull();
     expect(card.querySelector('[data-skill-toggle="topskill"]')).not.toBeNull();
@@ -306,6 +303,15 @@ describe("skills-page tree renderer", () => {
     await page.load("project");
     expect(container.querySelector(".skills-notice")).not.toBeNull();
     expect(container.querySelector(".skills-switch").disabled).toBe(true);
+  });
+
+  it("hides the count summary when the selected scope has no skills", async () => {
+    const inventory = makeProjectInventory();
+    inventory.roots = [];
+    const page = setupSkillsPage({ container, rpcCommand: mockRpc(inventory) });
+    await page.load("project");
+    expect(container.querySelector(".skills-scope-meta")).toBeNull();
+    expect(container.querySelector(".skills-empty")).not.toBeNull();
   });
 
   it("renders an error state when the server returns failure", async () => {

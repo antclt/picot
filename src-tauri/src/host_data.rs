@@ -29,6 +29,22 @@ pub struct FileEntry {
     pub size: Option<u64>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileMentionCandidate {
+    pub value: String,
+    pub label: String,
+    pub description: String,
+    pub is_directory: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileMentionSearchResult {
+    pub items: Vec<FileMentionCandidate>,
+    pub truncated: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FileContent {
@@ -182,6 +198,7 @@ pub enum HostDataError {
     OutsideWorkspace,
     NotDirectory,
     NotFile,
+    InvalidMentionQuery,
     Io(String),
 }
 
@@ -299,6 +316,68 @@ impl HostDataPlane {
                 .then_with(|| left.name.to_lowercase().cmp(&right.name.to_lowercase()))
         });
         Ok(entries)
+    }
+
+    pub fn search_file_mentions(
+        &self,
+        workspace_id: &str,
+        query: &str,
+    ) -> Result<FileMentionSearchResult, HostDataError> {
+        let root = self.workspace_root(workspace_id)?;
+        if !query.starts_with('@') || query.contains('\0') {
+            return Err(HostDataError::InvalidMentionQuery);
+        }
+        let raw = query.strip_prefix('@').unwrap_or_default();
+        let (is_quoted, body) = if let Some(rest) = raw.strip_prefix('"') {
+            (true, rest.strip_suffix('"').unwrap_or(rest))
+        } else {
+            (false, raw)
+        };
+        let normalized = body.replace('\\', "/");
+        if normalized.starts_with('/') || normalized.split('/').any(|part| part == "..") {
+            return Err(HostDataError::InvalidMentionQuery);
+        }
+        let (display_base, fuzzy) = match normalized.rsplit_once('/') {
+            Some((base, fuzzy)) => (format!("{base}/"), fuzzy.to_owned()),
+            None => (String::new(), normalized.clone()),
+        };
+        if normalized
+            .split('/')
+            .filter(|part| !part.is_empty() && *part != ".")
+            .any(is_ignored_mention_dir)
+        {
+            return Ok(FileMentionSearchResult {
+                items: Vec::new(),
+                truncated: false,
+            });
+        }
+        let base_dir = match safe_join(&root, &display_base) {
+            Ok(path) => path,
+            Err(HostDataError::Io(_)) | Err(HostDataError::NotDirectory) => {
+                return Ok(FileMentionSearchResult {
+                    items: Vec::new(),
+                    truncated: false,
+                });
+            }
+            Err(error) => return Err(error),
+        };
+        let mut walk = FileMentionWalk::new(root.as_path(), fuzzy.to_lowercase(), is_quoted);
+        walk.collect(&base_dir, &display_base)?;
+        walk.collected.sort_by(|left, right| {
+            right
+                .0
+                .cmp(&left.0)
+                .then_with(|| left.1.description.cmp(&right.1.description))
+        });
+        Ok(FileMentionSearchResult {
+            items: walk
+                .collected
+                .into_iter()
+                .take(20)
+                .map(|(_, item)| item)
+                .collect(),
+            truncated: walk.truncated,
+        })
     }
 
     pub fn read_file_content(
@@ -1369,6 +1448,148 @@ struct PreviewFileClassification {
     mime_type: &'static str,
     kind: PreviewFileKind,
     editable: bool,
+}
+
+const IGNORED_MENTION_DIRS: &[&str] = &[
+    ".git",
+    "node_modules",
+    "dist",
+    "build",
+    "target",
+    ".next",
+    ".nuxt",
+    ".cache",
+    "coverage",
+    ".venv",
+    "venv",
+    "__pycache__",
+];
+
+fn is_ignored_mention_dir(name: &str) -> bool {
+    IGNORED_MENTION_DIRS.contains(&name)
+}
+
+struct FileMentionWalk<'a> {
+    root: &'a Path,
+    fuzzy: String,
+    is_quoted: bool,
+    visited: usize,
+    collected: Vec<(u16, FileMentionCandidate)>,
+    truncated: bool,
+}
+
+impl<'a> FileMentionWalk<'a> {
+    fn new(root: &'a Path, fuzzy: String, is_quoted: bool) -> Self {
+        Self {
+            root,
+            fuzzy,
+            is_quoted,
+            visited: 0,
+            collected: Vec::new(),
+            truncated: false,
+        }
+    }
+
+    fn collect(&mut self, dir: &Path, display_base: &str) -> Result<(), HostDataError> {
+        if self.visited >= 10_000 || self.collected.len() >= 200 {
+            self.truncated = true;
+            return Ok(());
+        }
+        let entries =
+            std::fs::read_dir(dir).map_err(|error| HostDataError::Io(error.to_string()))?;
+        for entry in entries.filter_map(Result::ok) {
+            if self.visited >= 10_000 || self.collected.len() >= 200 {
+                self.truncated = true;
+                return Ok(());
+            }
+            self.visited += 1;
+            let name = entry.file_name().to_string_lossy().into_owned();
+            let Ok(file_type) = entry.file_type() else {
+                continue;
+            };
+            let is_directory = file_type.is_dir();
+            if !is_directory && !file_type.is_file() {
+                continue;
+            }
+            if is_directory && is_ignored_mention_dir(&name) {
+                continue;
+            }
+            let display_path = format!("{display_base}{name}");
+            let score = score_mention(&display_path, &name, &self.fuzzy, is_directory);
+            if score > 0 {
+                self.collected.push((
+                    score,
+                    build_file_mention_candidate(
+                        &display_path,
+                        is_directory,
+                        is_quoted_display(self.is_quoted, &display_path),
+                    ),
+                ));
+            }
+            if is_directory {
+                let path = entry.path();
+                if path.starts_with(self.root) {
+                    self.collect(&path, &format!("{display_path}/"))?;
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+fn score_mention(display_path: &str, name: &str, fuzzy: &str, is_directory: bool) -> u16 {
+    let base = if fuzzy.is_empty() {
+        if is_directory { 11 } else { 1 }
+    } else {
+        let name = name.to_lowercase();
+        if name == fuzzy {
+            100
+        } else if name.starts_with(fuzzy) {
+            80
+        } else if name.contains(fuzzy) {
+            50
+        } else if display_path.to_lowercase().contains(fuzzy) {
+            30
+        } else {
+            0
+        }
+    };
+    if base > 0 && is_directory {
+        base + 10
+    } else {
+        base
+    }
+}
+
+fn is_quoted_display(was_quoted: bool, display_path: &str) -> bool {
+    was_quoted || display_path.contains(' ')
+}
+
+fn build_file_mention_candidate(
+    display_path: &str,
+    is_directory: bool,
+    needs_quotes: bool,
+) -> FileMentionCandidate {
+    let value_path = if is_directory {
+        format!("{display_path}/")
+    } else {
+        display_path.to_owned()
+    };
+    let value = if needs_quotes {
+        format!("@\"{value_path}\"")
+    } else {
+        format!("@{value_path}")
+    };
+    let label = Path::new(display_path)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or(display_path);
+    FileMentionCandidate {
+        value,
+        label: format!("{label}{}", if is_directory { "/" } else { "" }),
+        description: display_path.to_owned(),
+        is_directory,
+    }
 }
 
 fn safe_join(root: &Path, relative_path: &str) -> Result<PathBuf, HostDataError> {

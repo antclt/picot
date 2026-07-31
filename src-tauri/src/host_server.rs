@@ -159,6 +159,7 @@ impl HostServer {
                 get(read_file_content).put(write_file_content),
             )
             .route("/api/files/raw", get(raw_file_content))
+            .route("/api/file-mentions", get(file_mentions))
             .route("/v2/new-session", post(new_session))
             .route("/v2/resolve-workspace", post(resolve_workspace))
             .fallback_service(static_service)
@@ -394,6 +395,13 @@ struct FilePreviewQuery {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct FileMentionQuery {
+    workspace_id: String,
+    query: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct WriteFileContentRequest {
     workspace_id: String,
     path: String,
@@ -441,6 +449,19 @@ async fn raw_file_content(
         HeaderValue::from_static("sandbox; default-src 'none'; style-src 'unsafe-inline'"),
     );
     Ok(response)
+}
+
+async fn file_mentions(
+    State(state): State<Arc<HostState>>,
+    Query(query): Query<FileMentionQuery>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let result = state
+        .data
+        .search_file_mentions(&query.workspace_id, &query.query)
+        .map_err(host_data_http_error)?;
+    serde_json::to_value(result)
+        .map(Json)
+        .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "serialization_failed"))
 }
 
 async fn write_file_content(
@@ -1325,6 +1346,10 @@ fn host_data_error(error: HostDataError) -> (&'static str, String) {
             "Requested path is not a directory".into(),
         ),
         HostDataError::NotFile => ("not_a_file", "Requested path is not a file".into()),
+        HostDataError::InvalidMentionQuery => (
+            "invalid_mention_query",
+            "File mention query is invalid".into(),
+        ),
         HostDataError::Io(message) => ("file_access_failed", message),
     }
 }
@@ -1335,7 +1360,8 @@ fn host_data_http_error(error: HostDataError) -> (StatusCode, Json<Value>) {
         HostDataError::InvalidRelativePath
         | HostDataError::OutsideWorkspace
         | HostDataError::NotDirectory
-        | HostDataError::NotFile => StatusCode::BAD_REQUEST,
+        | HostDataError::NotFile
+        | HostDataError::InvalidMentionQuery => StatusCode::BAD_REQUEST,
         HostDataError::Io(_) => StatusCode::INTERNAL_SERVER_ERROR,
     };
     let (code, _) = host_data_error(error);

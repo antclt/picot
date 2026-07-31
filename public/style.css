@@ -22,6 +22,7 @@
 @import url("native/features/lan-qr.css");
 @import url("native/composer/composer-images.css");
 @import url("native/composer/composer-slash-menu.css");
+@import url("native/composer/at-file-mention.css");
 @import url("native/composer/queued-messages.css");
 @import url("native/features/rpiv-todo-mirror.css");
 @import url("native/features/terminal-panel.css");

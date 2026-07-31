@@ -138,7 +138,7 @@ export function setupSkillsPage({ container, rpcCommand, showSuccess, showError 
         el("span", { text: errorMessage }),
         el("button", {
           type: "button",
-          class: "skills-rescan",
+          class: "ui-button ui-button--secondary ui-button--sm skills-rescan",
           text: t("settings.skills.rescan"),
           onClick: () => void load(scope),
         }),
@@ -316,18 +316,15 @@ export function setupSkillsPage({ container, rpcCommand, showSuccess, showError 
 
   function renderTopSkillsCard(skills, parentDisabled, rootBasename) {
     // Skills directly under a sourceRoot are not a real group — the root
-    // directory itself cannot be enabled/disabled as a unit — so the card
-    // header carries only the folder name and no switch; each skill row has
-    // its own switch.
+    // directory itself cannot be enabled/disabled as a unit. Render them as a
+    // flat list instead of adding a redundant "skills" header layer.
     return el(
       "section",
-      { class: "skills-group skills-single-skill", dataset: { skillCard: rootBasename } },
+      {
+        class: "skills-group skills-flat-list skills-single-skill",
+        dataset: { skillCard: rootBasename },
+      },
       [
-        el("div", { class: "skills-group-header skills-group-header-readonly" }, [
-          el("div", { class: "skills-group-info" }, [
-            el("div", { class: "skills-group-name", text: rootBasename }),
-          ]),
-        ]),
         el(
           "div",
           { class: "skills-group-listing" },
@@ -452,7 +449,7 @@ export function setupSkillsPage({ container, rpcCommand, showSuccess, showError 
         ]),
         el("button", {
           type: "button",
-          class: "skills-rescan",
+          class: "ui-button ui-button--secondary ui-button--sm skills-rescan",
           text: t("settings.skills.rescan"),
           onClick: rescan,
         }),
@@ -467,11 +464,13 @@ export function setupSkillsPage({ container, rpcCommand, showSuccess, showError 
       );
     }
 
-    fragment.appendChild(
-      el("div", { class: "skills-scope-meta" }, [
-        el("span", { text: t("settings.skills.scopeSummary", { total, groups: groupCount }) }),
-      ]),
-    );
+    if (total > 0) {
+      fragment.appendChild(
+        el("div", { class: "skills-scope-meta" }, [
+          el("span", { text: t("settings.skills.scopeSummary", { total, groups: groupCount }) }),
+        ]),
+      );
+    }
 
     if (inventory.customRules && inventory.customRules.length > 0) {
       fragment.appendChild(
@@ -487,7 +486,11 @@ export function setupSkillsPage({ container, rpcCommand, showSuccess, showError 
     }
 
     if (visibleRoots.length === 0 || total === 0) {
-      fragment.appendChild(el("div", { class: "skills-empty", text: t("settings.skills.empty") }));
+      if (!untrusted) {
+        fragment.appendChild(
+          el("div", { class: "skills-empty", text: t("settings.skills.empty") }),
+        );
+      }
     } else {
       const list = el("div", { class: "skills-group-list" });
       for (const root of visibleRoots) list.appendChild(renderRoot(root, rootDisabled));

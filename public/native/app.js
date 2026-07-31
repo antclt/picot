@@ -8,6 +8,7 @@ import { selectSuperAgentStartupAction } from "../super-agent/startup-flow.js";
 import { buildTaskComposerPrompt, markTaskChildSessionBound } from "../super-agent/task-state.js";
 import { updateSuperAgentTask } from "../super-agent/task-store.js";
 import { applyTheme, getCurrentTheme } from "../themes.js";
+import { setupAtFileMention } from "../ui/at-file-mention.js";
 import { ConvNav } from "../ui/conv-nav.js";
 import { setupMessagesInsets } from "../ui/layout-insets.js";
 import { MessageRenderer } from "../ui/message-renderer.js";
@@ -104,6 +105,7 @@ const attachButton = document.getElementById("attach-btn");
 const imageInput = document.getElementById("image-input");
 const imagePreviews = document.getElementById("image-previews");
 const skillSlashMenu = document.getElementById("skill-slash-menu");
+const atFileMentionMenu = document.getElementById("at-file-mention-menu");
 const composerAutoResize = setupComposerAutoResize({ input });
 const queuedMessages = document.getElementById("queued-messages");
 const todoMirrorPanel = new RpivTodoMirrorPanel({
@@ -310,6 +312,23 @@ adapter.connect();
 setupSessionSidebar();
 sidebar?.load().catch(showError);
 setupSidebarToggle();
+if (atFileMentionMenu) {
+  // @-file mention completion must be wired before the Enter-to-send listener
+  // so it can intercept Enter/Tab/Escape while its listbox is open.
+  setupAtFileMention({
+    input,
+    container: atFileMentionMenu,
+    getWorkspaceRoot: () => target.workspaceId,
+    searchFiles: async (workspaceId, query, signal) => {
+      const url = new URL("/api/file-mentions", window.location.origin);
+      url.searchParams.set("workspaceId", workspaceId);
+      url.searchParams.set("query", query);
+      const response = await fetch(url, { signal });
+      if (!response.ok) throw new Error(`File mention search failed: ${response.status}`);
+      return response.json();
+    },
+  });
+}
 setupComposerSubmitHandling({
   input,
   form,
