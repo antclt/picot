@@ -91,6 +91,7 @@ function renderSelectPrompt(card, request, content, resolve) {
 
   const previewPanel = content.previews.length > 0 ? createPreviewPanel(content.previews) : null;
   const previewByNumber = new Map(content.previews.map((preview) => [preview.number, preview]));
+  const actions = createActions(() => finish({ cancelled: true }));
 
   for (const value of request.options ?? []) {
     const option = parseOption(value);
@@ -115,8 +116,6 @@ function renderSelectPrompt(card, request, content, resolve) {
   layout.appendChild(options);
   if (previewPanel) layout.appendChild(previewPanel);
   card.appendChild(layout);
-
-  const actions = createActions(() => finish({ cancelled: true }));
   card.appendChild(actions);
 
   function finish(result) {

@@ -314,14 +314,14 @@ export class SessionSidebar {
           </div>
         </div>`;
 
-      const cleanup = (result) => {
+      function onKeyDown(event) {
+        if (event.key === "Escape") cleanup(false);
+      }
+      function cleanup(result) {
         document.removeEventListener("keydown", onKeyDown);
         overlay.remove();
         resolve(result);
-      };
-      const onKeyDown = (event) => {
-        if (event.key === "Escape") cleanup(false);
-      };
+      }
       overlay.addEventListener("click", (event) => {
         if (event.target === overlay) cleanup(false);
       });

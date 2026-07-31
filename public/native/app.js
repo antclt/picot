@@ -65,6 +65,13 @@ import {
   spawnSessionViaHost,
 } from "./workspace/workspace-actions.js";
 
+// Declared before the first `await` in this module: `hydrateSnapshotOnce()`
+// is called both from the runtime-event subscriber and from the startup
+// try-block, either of which can run while the module is paused at a later
+// `await`. Declaring this variable after those awaits would leave it in the
+// TDZ and cause "Cannot access 'snapshotInFlight' before initialization" when
+// the handler fires before module evaluation reaches the `let` line.
+let snapshotInFlight = false;
 const route = parseAppRoute(window.location.pathname);
 if (route.name !== "session") throw new Error("Native Picot requires a session route");
 
@@ -292,7 +299,12 @@ runtime.subscribe((frame) => {
   const previous = store;
   store = reduceSessionState(store, frame);
   if (!previous.snapshotRequired && store.snapshotRequired) {
-    hydrateSnapshot().catch(showError);
+    // Use hydrateSnapshotOnce to deduplicate concurrent calls (e.g. when the
+    // subscriber fires at the same time as the startup try-block) and to
+    // silently retry on brief WebSocket disconnections that can occur during
+    // project switches, instead of rendering error messages that are quickly
+    // overwritten once the connection stabilises.
+    hydrateSnapshotOnce().catch(showError);
     return;
   }
   if (previous.queue !== store.queue) renderQueuedMessages(queuedMessages, store.queue);
@@ -471,7 +483,7 @@ try {
     input.focus();
   }
 
-  await hydrateSnapshot();
+  await hydrateSnapshotOnce();
   await Promise.all([
     loadCommands()
       .then(() => slashMenu.update())
@@ -547,6 +559,52 @@ async function hydrateSnapshot() {
   await hydrateFromSnapshot(snapshot);
   configGatewayTargetReady = true;
   signalConfigGatewayReady();
+}
+
+/**
+ * Returns true for errors that indicate a transient WebSocket disconnection
+ * rather than a permanent failure. These errors resolve on their own once the
+ * adapter reconnects, so they should not be surfaced as visible messages.
+ */
+function isTransientConnectionError(error) {
+  const msg = error?.message ?? "";
+  return (
+    msg.includes("Picot Host runtime is disconnected") ||
+    msg.includes("Runtime disconnected before the request completed") ||
+    msg.includes("Host disconnected before the")
+  );
+}
+
+/**
+ * Hydrate the session snapshot with deduplication and automatic retry on
+ * transient connection errors.
+ *
+ * - Deduplication: if a hydration is already in progress, the new call joins
+ *   it and returns without starting a second request.
+ * - Retry: if the adapter briefly disconnects (race during project switch),
+ *   wait for it to reconnect and try once more before giving up.
+ * - Errors: non-transient failures are re-thrown so callers can decide how to
+ *   handle them; transient failures on the retry are also re-thrown.
+ */
+async function hydrateSnapshotOnce() {
+  if (snapshotInFlight) return;
+  snapshotInFlight = true;
+  try {
+    await hydrateSnapshot();
+  } catch (error) {
+    if (isTransientConnectionError(error)) {
+      console.warn(
+        "[Session] Transient connection error during snapshot; retrying after reconnect:",
+        error.message,
+      );
+      await adapter.ready();
+      await hydrateSnapshot();
+    } else {
+      throw error;
+    }
+  } finally {
+    snapshotInFlight = false;
+  }
 }
 
 async function loadCommands() {
@@ -1076,7 +1134,7 @@ async function handleRuntimeEvent(event) {
     case "session_bound":
       await adoptTarget({ ...target, sessionId: event.sessionId });
       upsertActiveSessionFromUserMessage();
-      await hydrateSnapshot();
+      await hydrateSnapshotOnce();
       sidebar?.load({ quiet: true }).catch(showError);
       break;
   }
@@ -1120,6 +1178,9 @@ async function adoptTarget(nextTarget, { updateRoute = true } = {}) {
   }
   target = nextTarget;
   store = createSessionStore(target);
+  // Reset the in-flight guard whenever the target changes so a new session
+  // is never blocked from hydrating by a stale flag from the previous one.
+  snapshotInFlight = false;
   renderQueuedMessages(queuedMessages, store.queue);
   todoMirrorPanel.clear();
   streamingElement = null;

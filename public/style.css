@@ -163,6 +163,10 @@ body {
   resize: none;
 }
 
+.workspace-content > .app-side-panel {
+  margin-top: var(--workspace-header-offset, 36px);
+}
+
 .app-side-panel-resize-handle {
   position: absolute;
   top: 0;

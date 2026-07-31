@@ -28,7 +28,7 @@ describe("workspace header layout", () => {
     expect(ruleBody(".file-preview-panel")).toContain(
       "margin-top: var(--workspace-header-offset, 36px)",
     );
-    expect(ruleBody(".app-side-panel")).toContain(
+    expect(ruleBody(".workspace-content > .app-side-panel")).toContain(
       "margin-top: var(--workspace-header-offset, 36px)",
     );
   });

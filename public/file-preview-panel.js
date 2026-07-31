@@ -1505,9 +1505,9 @@ export class FilePreviewPanel {
         this.activeDialogCancel = null;
         resolve(action);
       };
-      const onKeyDown = (event) => {
+      function onKeyDown(event) {
         if (event.key === "Escape") finish(cancelAction);
-      };
+      }
       document.addEventListener("keydown", onKeyDown);
 
       for (const choice of choices) {
