@@ -20,11 +20,8 @@ src-tauri/resources/pi/
 .cache/terminal-fonts/
 .cache/cjk-fonts/
 
-# Generated terminal font assets (produced by scripts/fetch-terminal-font.js)
-public/fonts/terminal/
-
-# Generated CJK font assets (produced by scripts/fetch-cjk-font.js)
-public/fonts/cjk/
+# Vendored font assets live under public/fonts/.
+# Use scripts/fetch-terminal-font.js and scripts/fetch-cjk-font.js to update them.
 
 # husky internal scripts (managed by `bun run prepare`)
 .husky/_/
