@@ -26,19 +26,20 @@ describe("setupThinkingEffortControl", () => {
         </div>
         <div class="thinking-effort-track">
           <span class="thinking-effort-thumb" id="thinking-effort-marker"></span>
-          <button class="thinking-effort-dot" data-level="off" role="radio" aria-checked="true"></button>
-          <button class="thinking-effort-dot" data-level="minimal" role="radio" aria-checked="false"></button>
-          <button class="thinking-effort-dot" data-level="low" role="radio" aria-checked="false"></button>
-          <button class="thinking-effort-dot" data-level="medium" role="radio" aria-checked="false"></button>
-          <button class="thinking-effort-dot" data-level="high" role="radio" aria-checked="false"></button>
+          <input type="radio" class="thinking-effort-dot" data-level="off" name="thinking-effort-level" value="off" checked />
+          <input type="radio" class="thinking-effort-dot" data-level="minimal" name="thinking-effort-level" value="minimal" />
+          <input type="radio" class="thinking-effort-dot" data-level="low" name="thinking-effort-level" value="low" />
+          <input type="radio" class="thinking-effort-dot" data-level="medium" name="thinking-effort-level" value="medium" />
+          <input type="radio" class="thinking-effort-dot" data-level="high" name="thinking-effort-level" value="high" />
         </div>
       </div>
     `;
     document.body.appendChild(container);
   });
 
-  it("sets up click handlers on radio buttons", async () => {
-    const control = setupThinkingEffortControl({ runtime, getTarget, onError });
+  it("persists the default level and applies it to the current session", async () => {
+    const configGateway = { call: vi.fn().mockResolvedValue({ ok: true }) };
+    const control = setupThinkingEffortControl({ runtime, getTarget, configGateway, onError });
     expect(control).toBeTruthy();
 
     const buttons = document.querySelectorAll(".thinking-effort-dot");
@@ -46,11 +47,30 @@ describe("setupThinkingEffortControl", () => {
 
     lowButton.click();
     await vi.waitFor(() => {
+      expect(configGateway.call).toHaveBeenCalledWith("set_default_thinking_level", {
+        level: "low",
+        scope: "global",
+      });
       expect(runtime.request).toHaveBeenCalledWith(
         { type: "set_thinking_level", level: "low" },
         { sessionId: "test-session", instanceId: "test-instance" },
         { idempotencyKey: expect.any(String) },
       );
+    });
+  });
+
+  it("loads the saved default level from config", async () => {
+    const configGateway = {
+      call: vi.fn().mockResolvedValue({ ok: true, data: { level: "medium" } }),
+    };
+
+    setupThinkingEffortControl({ runtime, getTarget, configGateway, onError });
+
+    await vi.waitFor(() => {
+      expect(configGateway.call).toHaveBeenCalledWith("get_default_thinking_level", {
+        scope: "global",
+      });
+      expect(document.getElementById("thinking-effort-name").textContent).toBe("medium");
     });
   });
 
@@ -63,7 +83,7 @@ describe("setupThinkingEffortControl", () => {
     const mediumButton = Array.from(buttons).find((btn) => btn.dataset.level === "medium");
     const levelName = document.getElementById("thinking-effort-name");
 
-    expect(mediumButton.getAttribute("aria-checked")).toBe("true");
+    expect(mediumButton.checked).toBe(true);
     expect(levelName.textContent).toBe("medium");
   });
 

@@ -1,3 +1,4 @@
+import { t } from "../i18n.js";
 import { isSuperAgentEnabled, setSuperAgentEnabled } from "../super-agent/settings.js";
 
 /**
@@ -254,7 +255,9 @@ class ChatSettingsPanel extends HTMLElement {
   async _loadTelegramDoctor() {
     const runBtn = this.querySelector('[data-action="run-telegram-doctor"]');
     runBtn.disabled = true;
-    this._doctorSummaryEl.textContent = "Checking Telegram…";
+    this._doctorSummaryEl.textContent = t(
+      "migrated.components.chatSettingsPanel.textcontent.checkingTelegram",
+    );
     this._doctorChecksEl.innerHTML = "";
     try {
       const { report } = await telegramDoctor();
@@ -303,7 +306,9 @@ class ChatSettingsPanel extends HTMLElement {
       const dm = Object.values(account.channels || {}).find((channel) => channel?.dm === true);
       const botName = account.botUsername ? `@${account.botUsername}` : account.name || id;
       const authorizedUser = dm?.name || dm?.access?.allowedUserIds?.[0] || dm?.id || "Detected DM";
-      this._tokenInput.placeholder = "Paste a new token to reconnect";
+      this._tokenInput.placeholder = t(
+        "migrated.components.chatSettingsPanel.placeholder.pasteANewTokenToReconnect",
+      );
       this.querySelector('[data-action="connect-telegram"]').textContent = "Reconnect Telegram";
       this._accountsEl.innerHTML = `
         <div class="chat-account-card">

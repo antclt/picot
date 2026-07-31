@@ -37,11 +37,11 @@ describe("setupSettingsToggles", () => {
     const authBtn = document.getElementById("toggle-auth");
     const betaBtn = document.getElementById("toggle-beta-updates");
 
-    expect(autoCompactBtn.classList.contains("on")).toBe(false);
+    expect(autoCompactBtn.classList.contains("on")).toBe(true);
     expect(showThinkingBtn.classList.contains("on")).toBe(true);
     expect(authBtn.classList.contains("on")).toBe(false);
 
-    expect(autoCompactBtn.getAttribute("aria-checked")).toBe("false");
+    expect(autoCompactBtn.getAttribute("aria-checked")).toBe("true");
     expect(showThinkingBtn.getAttribute("aria-checked")).toBe("true");
     expect(authBtn.getAttribute("aria-checked")).toBe("false");
     expect(betaBtn.classList.contains("on")).toBe(false);
@@ -61,18 +61,25 @@ describe("setupSettingsToggles", () => {
     expect(showThinkingBtn.classList.contains("on")).toBe(false);
   });
 
-  it("toggles state on click", () => {
-    const control = setupSettingsToggles();
+  it("persists auto-compaction to config on click", async () => {
+    const configGateway = { call: vi.fn().mockResolvedValue({ ok: true }) };
+    const control = setupSettingsToggles({ configGateway });
 
     const autoCompactBtn = document.getElementById("toggle-auto-compact");
-    expect(autoCompactBtn.classList.contains("on")).toBe(false);
+    expect(autoCompactBtn.classList.contains("on")).toBe(true);
 
     autoCompactBtn.click();
+    await vi.waitFor(() => {
+      expect(configGateway.call).toHaveBeenCalledWith("set_default_auto_compaction", {
+        enabled: false,
+        scope: "global",
+      });
+    });
 
-    expect(autoCompactBtn.classList.contains("on")).toBe(true);
-    expect(autoCompactBtn.getAttribute("aria-checked")).toBe("true");
-    expect(localStorage.getItem("picot-settings-auto-compact")).toBe("true");
-    expect(control.getToggleState("auto-compact")).toBe(true);
+    expect(autoCompactBtn.classList.contains("on")).toBe(false);
+    expect(autoCompactBtn.getAttribute("aria-checked")).toBe("false");
+    expect(localStorage.getItem("picot-settings-auto-compact")).toBeNull();
+    expect(control.getToggleState("auto-compact")).toBe(false);
   });
 
   it("applies onChange callbacks", () => {
@@ -124,7 +131,7 @@ describe("setupSettingsToggles", () => {
 
     const autoCompactBtn = document.getElementById("toggle-auto-compact");
     expect(autoCompactBtn.classList.contains("on")).toBe(true);
-    expect(localStorage.getItem("picot-settings-auto-compact")).toBe("true");
+    expect(localStorage.getItem("picot-settings-auto-compact")).toBeNull();
     expect(document.body.dataset.autoCompact).toBe("on");
   });
 

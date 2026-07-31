@@ -1,4 +1,5 @@
 // Render logic for the Settings → Usage tab cost dashboard.
+import { t } from "../../i18n.js";
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -24,31 +25,30 @@ function formatCompact(value) {
   }).format(Number(value || 0));
 }
 
-function renderEmpty(target, message = "No data in selected range.") {
+function renderEmpty(target, message = t("cost.noDataInSelectedRange")) {
   target.innerHTML = `<div class="cost-dash-empty-state">${escapeHtml(message)}</div>`;
 }
 
 const STAT_ICONS = {
-  "Total cost": `<svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M8 1.5v13M11.5 4H6.75a2.25 2.25 0 0 0 0 4.5h2.5a2.25 2.25 0 0 1 0 4.5H4.5" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
-  Sessions: `<svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2 2.5A1.5 1.5 0 0 1 3.5 1h9A1.5 1.5 0 0 1 14 2.5v6A1.5 1.5 0 0 1 12.5 10H9l-3 3v-3H3.5A1.5 1.5 0 0 1 2 8.5v-6z" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round"/></svg>`,
-  Messages: `<svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1 3a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5l-4 4V3z" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round"/><circle cx="5.5" cy="6.5" r="1" fill="currentColor"/><circle cx="8" cy="6.5" r="1" fill="currentColor"/><circle cx="10.5" cy="6.5" r="1" fill="currentColor"/></svg>`,
-  "Total tokens": `<svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><ellipse cx="8" cy="4" rx="5.5" ry="2" stroke="currentColor" stroke-width="1.25"/><path d="M2.5 4v4c0 1.1 2.46 2 5.5 2s5.5-.9 5.5-2V4" stroke="currentColor" stroke-width="1.25"/><path d="M2.5 8v4c0 1.1 2.46 2 5.5 2s5.5-.9 5.5-2V8" stroke="currentColor" stroke-width="1.25"/></svg>`,
-  "Active days": `<svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="1" y="3" width="14" height="12" rx="2" stroke="currentColor" stroke-width="1.25"/><path d="M5 1v3M11 1v3M1 7h14" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/><circle cx="5" cy="10.5" r="1" fill="currentColor"/><circle cx="8" cy="10.5" r="1" fill="currentColor"/><circle cx="11" cy="10.5" r="1" fill="currentColor"/></svg>`,
-  "Current streak": `<svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M8 1S4 5 4 9a4 4 0 0 0 8 0c0-4-4-8-4-8z" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round"/><path d="M8 11.5c-.83 0-1.5-.67-1.5-1.5S8 7.5 8 7.5s1.5 1 1.5 2.5-.67 1.5-1.5 1.5z" fill="currentColor"/></svg>`,
-  "Longest streak": `<svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3.5 2.5h9v5.5a4.5 4.5 0 0 1-9 0V2.5z" stroke="currentColor" stroke-width="1.25"/><path d="M3.5 5.5H2a1.5 1.5 0 0 0 1.5 1.5M12.5 5.5H14a1.5 1.5 0 0 1-1.5 1.5" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/><path d="M8 12.5v2M5.5 14.5h5" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/></svg>`,
-  "Peak hour": `<svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.25"/><path d="M8 4v4l3 3" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
-  Input: `<svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M8 2v9M4.5 7.5 8 11l3.5-3.5" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/><path d="M2.5 13.5h11" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/></svg>`,
-  Output: `<svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M8 14V5M4.5 8.5 8 5l3.5 3.5" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/><path d="M2.5 2.5h11" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/></svg>`,
-  "Cache Read": `<svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M9.5 1.5 5 8.5h4.5L6.5 14.5l6-8.5H8l1.5-4.5z" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round"/></svg>`,
-  "Cache Write": `<svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2 4a2 2 0 0 1 2-2h6l4 4v6a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V4z" stroke="currentColor" stroke-width="1.25"/><path d="M5 2v3.5h5V2M5 15v-4h6v4" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/></svg>`,
-  "Tool Calls": `<svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10 1.5a3.5 3.5 0 0 1 .5 5.5L4 13.5a1.5 1.5 0 0 1-2-2L8.5 5A3.5 3.5 0 0 1 10 1.5z" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round"/><circle cx="10.5" cy="3.5" r="1" fill="currentColor"/></svg>`,
+  totalCost: `<svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M8 1.5v13M11.5 4H6.75a2.25 2.25 0 0 0 0 4.5h2.5a2.25 2.25 0 0 1 0 4.5H4.5" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  sessions: `<svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2 2.5A1.5 1.5 0 0 1 3.5 1h9A1.5 1.5 0 0 1 14 2.5v6A1.5 1.5 0 0 1 12.5 10H9l-3 3v-3H3.5A1.5 1.5 0 0 1 2 8.5v-6z" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round"/></svg>`,
+  messages: `<svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1 3a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5l-4 4V3z" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round"/><circle cx="5.5" cy="6.5" r="1" fill="currentColor"/><circle cx="8" cy="6.5" r="1" fill="currentColor"/><circle cx="10.5" cy="6.5" r="1" fill="currentColor"/></svg>`,
+  totalTokens: `<svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><ellipse cx="8" cy="4" rx="5.5" ry="2" stroke="currentColor" stroke-width="1.25"/><path d="M2.5 4v4c0 1.1 2.46 2 5.5 2s5.5-.9 5.5-2V4" stroke="currentColor" stroke-width="1.25"/><path d="M2.5 8v4c0 1.1 2.46 2 5.5 2s5.5-.9 5.5-2V8" stroke="currentColor" stroke-width="1.25"/></svg>`,
+  activeDays: `<svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="1" y="3" width="14" height="12" rx="2" stroke="currentColor" stroke-width="1.25"/><path d="M5 1v3M11 1v3M1 7h14" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/><circle cx="5" cy="10.5" r="1" fill="currentColor"/><circle cx="8" cy="10.5" r="1" fill="currentColor"/><circle cx="11" cy="10.5" r="1" fill="currentColor"/></svg>`,
+  currentStreak: `<svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M8 1S4 5 4 9a4 4 0 0 0 8 0c0-4-4-8-4-8z" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round"/><path d="M8 11.5c-.83 0-1.5-.67-1.5-1.5S8 7.5 8 7.5s1.5 1 1.5 2.5-.67 1.5-1.5 1.5z" fill="currentColor"/></svg>`,
+  longestStreak: `<svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3.5 2.5h9v5.5a4.5 4.5 0 0 1-9 0V2.5z" stroke="currentColor" stroke-width="1.25"/><path d="M3.5 5.5H2a1.5 1.5 0 0 0 1.5 1.5M12.5 5.5H14a1.5 1.5 0 0 1-1.5 1.5" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/><path d="M8 12.5v2M5.5 14.5h5" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/></svg>`,
+  input: `<svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M8 2v9M4.5 7.5 8 11l3.5-3.5" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/><path d="M2.5 13.5h11" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/></svg>`,
+  output: `<svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M8 14V5M4.5 8.5 8 5l3.5 3.5" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/><path d="M2.5 2.5h11" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/></svg>`,
+  cacheRead: `<svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M9.5 1.5 5 8.5h4.5L6.5 14.5l6-8.5H8l1.5-4.5z" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round"/></svg>`,
+  cacheWrite: `<svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2 4a2 2 0 0 1 2-2h6l4 4v6a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V4z" stroke="currentColor" stroke-width="1.25"/><path d="M5 2v3.5h5V2M5 15v-4h6v4" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/></svg>`,
+  toolCalls: `<svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10 1.5a3.5 3.5 0 0 1 .5 5.5L4 13.5a1.5 1.5 0 0 1-2-2L8.5 5A3.5 3.5 0 0 1 10 1.5z" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round"/><circle cx="10.5" cy="3.5" r="1" fill="currentColor"/></svg>`,
 };
 
-function buildStatCard(title, value, tone, extraClass = "") {
-  const icon = STAT_ICONS[title] || "";
+function buildStatCard(id, label, value, tone, extraClass = "") {
+  const icon = STAT_ICONS[id] || "";
   return `
     <article class="cost-dash-stat-card cost-dash-card-tone-${tone} ${extraClass}">
-      <div class="cost-dash-stat-title">${icon ? `<span class="cost-dash-stat-icon">${icon}</span>` : ""}${escapeHtml(title)}</div>
+      <div class="cost-dash-stat-title">${icon ? `<span class="cost-dash-stat-icon">${icon}</span>` : ""}${escapeHtml(label)}</div>
       <div class="cost-dash-stat-value">${escapeHtml(value)}</div>
     </article>
   `;
@@ -56,21 +56,35 @@ function buildStatCard(title, value, tone, extraClass = "") {
 
 function renderOverview(target, overview = {}, usage = {}) {
   const stats = [
-    ["Total cost", formatUsd(overview.totalCost), "green", ""],
-    ["Sessions", formatInt(overview.sessions), "blue", ""],
-    ["Messages", formatInt(overview.messages), "violet", ""],
-    ["Total tokens", formatCompact(overview.totalTokens), "teal", ""],
-    ["Active days", formatInt(overview.activeDays), "amber", ""],
-    ["Current streak", `${formatInt(overview.currentStreak)}d`, "blue", ""],
-    ["Longest streak", `${formatInt(overview.longestStreak)}d`, "violet", ""],
-    ["Input", formatCompact(usage.inputTokens), "teal", ""],
-    ["Output", formatCompact(usage.outputTokens), "green", ""],
-    ["Cache Read", formatCompact(usage.cacheRead), "amber", ""],
-    ["Cache Write", formatCompact(usage.cacheWrite), "violet", ""],
-    ["Tool Calls", formatInt(usage.toolCalls), "rose", ""],
+    ["totalCost", t("cost.stats.totalCost"), formatUsd(overview.totalCost), "green", ""],
+    ["sessions", t("cost.stats.sessions"), formatInt(overview.sessions), "blue", ""],
+    ["messages", t("cost.stats.messages"), formatInt(overview.messages), "violet", ""],
+    ["totalTokens", t("cost.stats.totalTokens"), formatCompact(overview.totalTokens), "teal", ""],
+    ["activeDays", t("cost.stats.activeDays"), formatInt(overview.activeDays), "amber", ""],
+    [
+      "currentStreak",
+      t("cost.stats.currentStreak"),
+      t("cost.daysShort", { count: formatInt(overview.currentStreak) }),
+      "blue",
+      "",
+    ],
+    [
+      "longestStreak",
+      t("cost.stats.longestStreak"),
+      t("cost.daysShort", { count: formatInt(overview.longestStreak) }),
+      "violet",
+      "",
+    ],
+    ["input", t("cost.stats.input"), formatCompact(usage.inputTokens), "teal", ""],
+    ["output", t("cost.stats.output"), formatCompact(usage.outputTokens), "green", ""],
+    ["cacheRead", t("cost.stats.cacheRead"), formatCompact(usage.cacheRead), "amber", ""],
+    ["cacheWrite", t("cost.stats.cacheWrite"), formatCompact(usage.cacheWrite), "violet", ""],
+    ["toolCalls", t("cost.stats.toolCalls"), formatInt(usage.toolCalls), "rose", ""],
   ];
   target.innerHTML = stats
-    .map(([title, value, tone, extraClass]) => buildStatCard(title, value, tone, extraClass))
+    .map(([id, label, value, tone, extraClass]) =>
+      buildStatCard(id, label, value, tone, extraClass),
+    )
     .join("");
 }
 
@@ -96,7 +110,7 @@ function renderModels(target, rows = [], payload = {}) {
                   <span class="cost-dash-model-legend-name">${escapeHtml(model.name)}</span>
                 </div>
                 <div class="cost-dash-model-legend-meta">
-                  <span>${formatCompact(model.inputTokens)} in · ${formatCompact(model.outputTokens)} out</span>
+                  <span>${escapeHtml(t("cost.modelTokens", { input: formatCompact(model.inputTokens), output: formatCompact(model.outputTokens) }))}</span>
                   <span>${percent}%</span>
                 </div>
               </div>
@@ -132,8 +146,8 @@ function renderProjects(target, rows = []) {
                   <div class="cost-dash-tool-legend-main">
                     <span class="cost-dash-tool-legend-dot" data-tool-color="${index}"></span>
                     <div>
-                      <div class="cost-dash-tool-legend-title">${escapeHtml(row.name || "unknown")}</div>
-                      <div class="cost-dash-tool-legend-subtitle">${formatInt(row.sessions || 0)} sessions</div>
+                      <div class="cost-dash-tool-legend-title">${escapeHtml(row.name || t("cost.unknown"))}</div>
+                      <div class="cost-dash-tool-legend-subtitle">${escapeHtml(t("cost.projectSessions", { count: formatInt(row.sessions || 0) }))}</div>
                     </div>
                   </div>
                   <div class="cost-dash-tool-legend-values">
@@ -154,7 +168,7 @@ function renderProjects(target, rows = []) {
 function renderToolCost(target, usage = {}, metaTarget = null) {
   const tools = Array.isArray(usage.tools) ? usage.tools : [];
   if (metaTarget) {
-    metaTarget.textContent = `${formatInt(tools.length)} tracked`;
+    metaTarget.textContent = t("cost.trackedTools", { count: formatInt(tools.length) });
   }
   target.innerHTML = `
     <div class="cost-dash-tool-cost-card">
@@ -175,8 +189,8 @@ function renderToolCost(target, usage = {}, metaTarget = null) {
                     <div class="cost-dash-tool-legend-main">
                       <span class="cost-dash-tool-legend-dot" data-tool-color="${index}"></span>
                       <div>
-                        <div class="cost-dash-tool-legend-title">${escapeHtml(row.name || "unknown")}</div>
-                        <div class="cost-dash-tool-legend-subtitle">${formatInt(row.count)} sessions</div>
+                        <div class="cost-dash-tool-legend-title">${escapeHtml(row.name || t("cost.unknown"))}</div>
+                        <div class="cost-dash-tool-legend-subtitle">${escapeHtml(t("cost.toolSessions", { count: formatInt(row.count) }))}</div>
                       </div>
                     </div>
                     <div class="cost-dash-tool-legend-values">
@@ -190,7 +204,7 @@ function renderToolCost(target, usage = {}, metaTarget = null) {
           </div>
         </div>
       `
-          : '<div class="cost-dash-empty-state">No tool usage in selected range.</div>'
+          : `<div class="cost-dash-empty-state">${escapeHtml(t("cost.noToolUsage"))}</div>`
       }
     </div>
   `;
@@ -209,7 +223,7 @@ function formatSessionDate(timeStr) {
 
 function renderSessionsPanel(target, sessions = []) {
   if (!Array.isArray(sessions) || sessions.length === 0) {
-    renderEmpty(target, "No recent sessions in selected range.");
+    renderEmpty(target, t("cost.noRecentSessions"));
     return;
   }
   target.innerHTML = `
@@ -217,12 +231,12 @@ function renderSessionsPanel(target, sessions = []) {
       <table class="cost-dash-sessions-table">
         <thead>
           <tr>
-            <th>Session</th>
-            <th>Model</th>
-            <th class="cost-dash-num">Tokens</th>
-            <th class="cost-dash-num">Tools</th>
-            <th class="cost-dash-num">Cost</th>
-            <th>Date</th>
+            <th>${escapeHtml(t("cost.table.session"))}</th>
+            <th>${escapeHtml(t("cost.table.model"))}</th>
+            <th class="cost-dash-num">${escapeHtml(t("cost.table.tokens"))}</th>
+            <th class="cost-dash-num">${escapeHtml(t("cost.table.tools"))}</th>
+            <th class="cost-dash-num">${escapeHtml(t("cost.table.cost"))}</th>
+            <th>${escapeHtml(t("cost.table.date"))}</th>
           </tr>
         </thead>
         <tbody>
@@ -231,7 +245,7 @@ function renderSessionsPanel(target, sessions = []) {
               (session) => `
             <tr>
               <td class="cost-dash-sessions-td-title">
-                <div class="cost-dash-sessions-title">${escapeHtml(session.title || "Untitled")}</div>
+                <div class="cost-dash-sessions-title">${escapeHtml(session.title || t("cost.untitled"))}</div>
                 ${session.workspace ? `<div class="cost-dash-sessions-workspace">${escapeHtml(session.workspace)}</div>` : ""}
               </td>
               <td class="cost-dash-sessions-td-model">${escapeHtml(session.model || "—")}</td>
@@ -334,6 +348,11 @@ function renderActivityPanel(target, payload) {
     { length: leadingEmptyDays },
     () => '<div class="cost-dash-activity-cell is-empty" aria-hidden="true"></div>',
   ).join("");
+  const weekdayMonday = escapeHtml(t("cost.activity.monday"));
+  const weekdayWednesday = escapeHtml(t("cost.activity.wednesday"));
+  const weekdayFriday = escapeHtml(t("cost.activity.friday"));
+  const activityLess = escapeHtml(t("cost.activity.less"));
+  const activityMore = escapeHtml(t("cost.activity.more"));
 
   target.innerHTML = `
     <div class="cost-dash-activity-calendar" style="--activity-columns:${weekColumns}">
@@ -348,11 +367,11 @@ function renderActivityPanel(target, payload) {
       <div class="cost-dash-activity-body">
         <div class="cost-dash-activity-weekdays" aria-hidden="true">
           <span></span>
-          <span>Mon</span>
+          <span>${weekdayMonday}</span>
           <span></span>
-          <span>Wed</span>
+          <span>${weekdayWednesday}</span>
           <span></span>
-          <span>Fri</span>
+          <span>${weekdayFriday}</span>
           <span></span>
         </div>
         <div class="cost-dash-activity-grid">
@@ -366,19 +385,19 @@ function renderActivityPanel(target, payload) {
                 else if (ratio >= 0.25) level = 2;
                 else if (ratio > 0) level = 1;
               }
-              return `<div class="cost-dash-activity-cell level-${level}" title="${day.key} · ${formatCompact(day.value)} tokens"></div>`;
+              return `<div class="cost-dash-activity-cell level-${level}" title="${escapeHtml(t("cost.activityCellTitle", { date: day.key, tokens: formatCompact(day.value) }))}"></div>`;
             })
             .join("")}
         </div>
       </div>
       <div class="cost-dash-activity-footer">
-        <span>Less</span>
+        <span>${activityLess}</span>
         <span class="cost-dash-activity-cell level-0" aria-hidden="true"></span>
         <span class="cost-dash-activity-cell level-1" aria-hidden="true"></span>
         <span class="cost-dash-activity-cell level-2" aria-hidden="true"></span>
         <span class="cost-dash-activity-cell level-3" aria-hidden="true"></span>
         <span class="cost-dash-activity-cell level-4" aria-hidden="true"></span>
-        <span>More</span>
+        <span>${activityMore}</span>
       </div>
     </div>
   `;
@@ -404,13 +423,13 @@ function buildActivityMonthLabels(days, leadingEmptyDays) {
 function renderOverviewNote(target, totalTokens) {
   const warAndPeaceTokens = 587000;
   const ratio = Math.max(1, Math.round(Number(totalTokens || 0) / warAndPeaceTokens));
-  target.textContent = `You've used ~${ratio}x more tokens than War and Peace.`;
+  target.textContent = t("cost.overviewNote", { ratio });
 }
 
 function buildModelSummary(rows, payload) {
   const sessions = Array.isArray(payload.sessions) ? payload.sessions : [];
   const topModels = rows.slice(0, 3).map((row) => ({
-    name: row.name || "unknown",
+    name: row.name || t("cost.unknown"),
     fraction: Number(row.fraction || 0),
     inputTokens: 0,
     outputTokens: 0,
@@ -419,7 +438,7 @@ function buildModelSummary(rows, payload) {
   const byDay = new Map();
 
   for (const session of sessions) {
-    const modelName = session.model || "unknown";
+    const modelName = session.model || t("cost.unknown");
     if (!modelNames.has(modelName)) continue;
     const time = new Date(session.time);
     if (!Number.isFinite(time.getTime())) continue;
@@ -513,7 +532,10 @@ function renderModelsChart(canvas, modelSummary) {
           tooltip: {
             callbacks: {
               label(context) {
-                return `${context.dataset.label}: ${formatCompact(context.raw)} tokens`;
+                return t("cost.chartTooltipTokens", {
+                  label: context.dataset.label,
+                  tokens: formatCompact(context.raw),
+                });
               },
             },
           },
@@ -569,7 +591,7 @@ function getToolChartPalette() {
 
 function renderProjectsChart(canvas, rows) {
   if (!canvas || !Array.isArray(rows) || rows.length === 0) return;
-  const labels = rows.map((row) => row.name || "unknown");
+  const labels = rows.map((row) => row.name || t("cost.unknown"));
   const data = rows.map((row) => Number(row.cost || 0));
   const colors = getToolChartPalette().slice(0, rows.length);
 
@@ -602,7 +624,10 @@ function renderProjectsChart(canvas, rows) {
           tooltip: {
             callbacks: {
               label(context) {
-                return `${context.label}: ${formatUsd(context.raw)}`;
+                return t("cost.chartTooltipCost", {
+                  label: context.label,
+                  cost: formatUsd(context.raw),
+                });
               },
             },
           },
@@ -622,7 +647,7 @@ function renderProjectsChart(canvas, rows) {
 
 function renderToolCostChart(canvas, tools) {
   if (!canvas || !Array.isArray(tools) || tools.length === 0) return;
-  const labels = tools.map((tool) => tool.name || "unknown");
+  const labels = tools.map((tool) => tool.name || t("cost.unknown"));
   const data = tools.map((tool) => Number(tool.cost || 0));
   const colors = getToolChartPalette().slice(0, tools.length);
 
@@ -655,7 +680,10 @@ function renderToolCostChart(canvas, tools) {
           tooltip: {
             callbacks: {
               label(context) {
-                return `${context.label}: ${formatUsd(context.raw)}`;
+                return t("cost.chartTooltipCost", {
+                  label: context.label,
+                  cost: formatUsd(context.raw),
+                });
               },
             },
           },

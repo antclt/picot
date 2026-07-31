@@ -1,3 +1,4 @@
+import { t } from "../../i18n.js";
 import { parseDialogContent, parseOption } from "./dialog.js";
 
 const MULTI_SELECT_HINT = "Enter the numbers of all that apply";
@@ -22,7 +23,10 @@ export function showInlineExtensionPrompt(
     const card = document.createElement("div");
     card.className = "inline-prompt-card";
     card.setAttribute("role", "group");
-    card.setAttribute("aria-label", "Extension question");
+    card.setAttribute(
+      "aria-label",
+      t("migrated.native.extensions.inlineExtensionPrompt.ariaLabel.extensionQuestion"),
+    );
 
     // Guard against double-settling: a dismissSignal (session switched away,
     // or the user hit Stop/Abort) and a user click can otherwise both try to
@@ -87,6 +91,7 @@ function renderSelectPrompt(card, request, content, resolve) {
 
   const previewPanel = content.previews.length > 0 ? createPreviewPanel(content.previews) : null;
   const previewByNumber = new Map(content.previews.map((preview) => [preview.number, preview]));
+  const actions = createActions(() => finish({ cancelled: true }));
 
   for (const value of request.options ?? []) {
     const option = parseOption(value);
@@ -111,8 +116,6 @@ function renderSelectPrompt(card, request, content, resolve) {
   layout.appendChild(options);
   if (previewPanel) layout.appendChild(previewPanel);
   card.appendChild(layout);
-
-  const actions = createActions(() => finish({ cancelled: true }));
   card.appendChild(actions);
 
   function finish(result) {
@@ -153,7 +156,9 @@ function renderCustomAnswerInSelect(card, layout, actions, sentinelValue, finish
   const input = document.createElement("input");
   input.className = "inline-prompt-input";
   input.type = "text";
-  input.placeholder = "Type a custom answer";
+  input.placeholder = t(
+    "migrated.native.extensions.inlineExtensionPrompt.placeholder.typeACustomAnswer",
+  );
   const customActions = document.createElement("div");
   customActions.className = "inline-prompt-actions";
 
@@ -169,7 +174,7 @@ function renderCustomAnswerInSelect(card, layout, actions, sentinelValue, finish
   const back = document.createElement("button");
   back.type = "button";
   back.className = "inline-prompt-cancel";
-  back.textContent = "Back";
+  back.textContent = t("workspace.back");
   back.addEventListener("click", () => {
     customPanel.remove();
     layout.hidden = false;
@@ -205,7 +210,9 @@ function renderMultiSelectInput(card, options, resolve) {
   const custom = document.createElement("input");
   custom.className = "inline-prompt-input";
   custom.type = "text";
-  custom.placeholder = "Type a custom answer";
+  custom.placeholder = t(
+    "migrated.native.extensions.inlineExtensionPrompt.placeholder.typeACustomAnswer",
+  );
   custom.addEventListener("input", () => {
     for (const checkbox of list.querySelectorAll("input[type='checkbox']")) {
       checkbox.disabled = custom.value.trim().length > 0;
@@ -274,7 +281,7 @@ function setPreview(panel, preview) {
   if (!preview) {
     const empty = document.createElement("div");
     empty.className = "inline-prompt-preview-empty";
-    empty.textContent = "No preview";
+    empty.textContent = t("migrated.native.extensions.inlineExtensionPrompt.textcontent.noPreview");
     panel.appendChild(empty);
     return;
   }
@@ -301,7 +308,7 @@ function createActions(onCancel, onSubmit) {
   const cancel = document.createElement("button");
   cancel.type = "button";
   cancel.className = "inline-prompt-cancel";
-  cancel.textContent = "Cancel";
+  cancel.textContent = t("migrated.index.text.cancel");
   cancel.addEventListener("click", onCancel);
   actions.appendChild(cancel);
   return actions;

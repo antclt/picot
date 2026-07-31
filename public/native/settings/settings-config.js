@@ -5,6 +5,7 @@
 // routes through the picot-bridge `/picot-config` command). All model-registry
 // access still happens inside pi via the bridge — this module only renders.
 
+import { onLocaleChange, t } from "../../i18n.js";
 import {
   clearSettingsSaveMessage,
   setSettingsSaveButtonSaving,
@@ -27,19 +28,21 @@ export function setupSettingsConfig({ configGateway, onModelConfigurationChanged
     const scrollContainer = options.preserveUi ? getSettingsScrollContainer() : null;
     const scrollTop = scrollContainer?.scrollTop ?? 0;
     if (!options.preserveUi) {
-      apiKeysContainer.innerHTML =
-        '<div class="settings-api-keys-loading">Loading providers…</div>';
+      const loading = document.createElement("div");
+      loading.className = "settings-api-keys-loading";
+      loading.textContent = t("settings.loadingProviders");
+      apiKeysContainer.replaceChildren(loading);
     }
     let data;
     try {
       data = await call("list_model_catalog");
     } catch (error) {
-      renderApiKeysPanelError(error?.message || "Failed to load providers.");
+      renderApiKeysPanelError(error?.message || t("settings.apiKeys.loadFailed"));
       restoreScroll(scrollContainer, scrollTop);
       return;
     }
     if (!data?.ok || !Array.isArray(data.data?.providers)) {
-      renderApiKeysPanelError(data?.error || "Failed to load providers.");
+      renderApiKeysPanelError(data?.error || t("settings.apiKeys.loadFailed"));
       restoreScroll(scrollContainer, scrollTop);
       return;
     }
@@ -76,7 +79,7 @@ export function setupSettingsConfig({ configGateway, onModelConfigurationChanged
   }
 
   function renderApiKeysPanelError(message) {
-    apiKeysContainer.innerHTML = "";
+    apiKeysContainer.replaceChildren();
     const wrap = document.createElement("div");
     wrap.className = "settings-api-keys-empty";
     const msg = document.createElement("div");
@@ -84,7 +87,7 @@ export function setupSettingsConfig({ configGateway, onModelConfigurationChanged
     const retry = document.createElement("button");
     retry.type = "button";
     retry.className = "ui-button ui-button--secondary config-editor-cancel";
-    retry.textContent = "Retry";
+    retry.textContent = t("actions.retry");
     retry.style.marginTop = "var(--space-2)";
     retry.addEventListener("click", () => loadApiKeysPanel());
     wrap.appendChild(msg);
@@ -93,9 +96,12 @@ export function setupSettingsConfig({ configGateway, onModelConfigurationChanged
   }
 
   function renderApiKeysPanel(providers) {
-    apiKeysContainer.innerHTML = "";
+    apiKeysContainer.replaceChildren();
     if (providers.length === 0) {
-      apiKeysContainer.innerHTML = '<div class="settings-api-keys-empty">No providers known.</div>';
+      const empty = document.createElement("div");
+      empty.className = "settings-api-keys-empty";
+      empty.textContent = t("settings.apiKeys.noProviders");
+      apiKeysContainer.appendChild(empty);
       return;
     }
     for (const p of [...providers].sort((a, b) => Number(b.configured) - Number(a.configured))) {
@@ -123,7 +129,10 @@ export function setupSettingsConfig({ configGateway, onModelConfigurationChanged
     const toggle = document.createElement("button");
     toggle.type = "button";
     toggle.className = "api-provider-toggle";
-    toggle.setAttribute("aria-label", `Toggle ${p.displayName || p.provider} models`);
+    toggle.setAttribute(
+      "aria-label",
+      t("settings.apiKeys.toggleModels", { provider: p.displayName || p.provider }),
+    );
     toggle.setAttribute("aria-expanded", "false");
     toggle.textContent = "▼";
 
@@ -138,7 +147,7 @@ export function setupSettingsConfig({ configGateway, onModelConfigurationChanged
     actions.className = "api-key-row-actions";
     const setBtn = document.createElement("button");
     setBtn.type = "button";
-    setBtn.textContent = p.configured ? "Update" : "Set key";
+    setBtn.textContent = p.configured ? t("actions.update") : t("actions.setKey");
     setBtn.addEventListener("click", () => openApiKeyEditor(row, p));
 
     const models = getProviderModels(p);
@@ -147,8 +156,8 @@ export function setupSettingsConfig({ configGateway, onModelConfigurationChanged
       const checkHealthBtn = document.createElement("button");
       checkHealthBtn.type = "button";
       checkHealthBtn.className = "api-model-check-visible";
-      checkHealthBtn.textContent = "Check health";
-      checkHealthBtn.disabled = !models.some((model) => model.available);
+      checkHealthBtn.textContent = t("settings.apiKeys.checkHealth");
+      checkHealthBtn.disabled = !models.some((model) => model.visible !== false && model.available);
       checkHealthBtn.addEventListener("click", () => checkModelHealth(p.provider));
       actions.appendChild(checkHealthBtn);
     }
@@ -157,7 +166,7 @@ export function setupSettingsConfig({ configGateway, onModelConfigurationChanged
       const removeBtn = document.createElement("button");
       removeBtn.type = "button";
       removeBtn.className = "danger";
-      removeBtn.textContent = "Remove";
+      removeBtn.textContent = t("actions.remove");
       removeBtn.addEventListener("click", () => removeApiKey(p));
       actions.appendChild(removeBtn);
     }
@@ -190,7 +199,10 @@ export function setupSettingsConfig({ configGateway, onModelConfigurationChanged
       info.classList.add("api-provider-title-toggle");
       info.tabIndex = 0;
       info.setAttribute("role", "button");
-      info.setAttribute("aria-label", `Toggle ${p.displayName || p.provider} models`);
+      info.setAttribute(
+        "aria-label",
+        t("settings.apiKeys.toggleModels", { provider: p.displayName || p.provider }),
+      );
       info.addEventListener("keydown", (event) => {
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
@@ -215,7 +227,7 @@ export function setupSettingsConfig({ configGateway, onModelConfigurationChanged
     columnLabels.className = "api-model-list-heading";
     const statusColumn = document.createElement("span");
     const modelColumn = document.createElement("span");
-    modelColumn.textContent = "Model";
+    modelColumn.textContent = t("settings.apiKeys.model");
 
     const actions = document.createElement("div");
     actions.className = "api-model-list-heading-actions";
@@ -228,7 +240,9 @@ export function setupSettingsConfig({ configGateway, onModelConfigurationChanged
     visibilityToggle.checked = allModelsEnabled;
     visibilityToggle.setAttribute(
       "aria-label",
-      `${allModelsEnabled ? "Deselect" : "Select"} all ${p.displayName || p.provider} models`,
+      t(allModelsEnabled ? "settings.apiKeys.deselectAll" : "settings.apiKeys.selectAll", {
+        provider: p.displayName || p.provider,
+      }),
     );
     visibilityToggle.addEventListener("change", () =>
       setProviderModelsVisibility(p.provider, visibilityToggle.checked),
@@ -314,7 +328,10 @@ export function setupSettingsConfig({ configGateway, onModelConfigurationChanged
     const visibility = document.createElement("input");
     visibility.type = "checkbox";
     visibility.className = "api-model-visibility-toggle";
-    visibility.setAttribute("aria-label", `Enable ${model.name || model.id}`);
+    visibility.setAttribute(
+      "aria-label",
+      t("settings.apiKeys.enableModel", { model: model.name || model.id }),
+    );
     visibility.checked = model.visible !== false;
     visibility.addEventListener("change", async () => {
       visibility.disabled = true;
@@ -342,7 +359,7 @@ export function setupSettingsConfig({ configGateway, onModelConfigurationChanged
 
   function describeModelStatus(model) {
     const parts = [];
-    if (!model.available) parts.push("No key available");
+    if (!model.available) parts.push(t("settings.apiKeys.noKeyAvailable"));
     parts.push(describeModelHealth(model.health || { status: "unknown" }));
     return parts.join(" · ");
   }
@@ -351,15 +368,19 @@ export function setupSettingsConfig({ configGateway, onModelConfigurationChanged
     const enabled = models.filter((model) => model.visible !== false).length;
     const healthy = models.filter((model) => model.health?.status === "healthy").length;
     const issues = models.filter((model) => model.health?.status === "unhealthy").length;
-    return `${enabled} enabled · ${healthy} healthy · ${issues} issues`;
+    return t("settings.apiKeys.summary", { enabled, healthy, issues });
   }
 
   function describeModelHealth(health) {
-    if (!health || health.status === "unknown") return "Health unknown";
+    if (!health || health.status === "unknown") return t("settings.apiKeys.healthUnknown");
     if (health.status === "healthy") {
-      return health.latencyMs ? `Healthy (${health.latencyMs}ms)` : "Healthy";
+      return health.latencyMs
+        ? t("settings.apiKeys.healthyLatency", { latency: health.latencyMs })
+        : t("settings.apiKeys.healthy");
     }
-    return health.error ? `Failed: ${health.error}` : "Failed";
+    return health.error
+      ? t("settings.apiKeys.failedWithMessage", { message: health.error })
+      : t("settings.apiKeys.failed");
   }
 
   function setModelRowChecking(row) {
@@ -368,16 +389,18 @@ export function setupSettingsConfig({ configGateway, onModelConfigurationChanged
     const status = row.querySelector(".api-model-health-status");
     if (dot) {
       dot.className = "api-model-health-dot checking";
-      dot.title = "Checking health";
+      dot.title = t("settings.apiKeys.checkingHealth");
     }
-    if (status) status.textContent = "Checking health...";
+    if (status) status.textContent = t("settings.apiKeys.checkingHealthEllipsis");
   }
 
   function setModelRowHealthError(row, message) {
     if (!row) return;
     const dot = row.querySelector(".api-model-health-dot");
     const status = row.querySelector(".api-model-health-status");
-    const text = `Failed: ${message || "Health check failed"}`;
+    const text = t("settings.apiKeys.failedWithMessage", {
+      message: message || t("settings.apiKeys.healthCheckFailed"),
+    });
     if (dot) {
       dot.className = "api-model-health-dot unknown";
       dot.title = text;
@@ -413,7 +436,7 @@ export function setupSettingsConfig({ configGateway, onModelConfigurationChanged
     if (resp?.ok && Array.isArray(resp.data?.results)) {
       for (const result of resp.data.results) applyHealthResult(result);
     } else {
-      const message = resp?.error || "Health check failed";
+      const message = resp?.error || t("settings.apiKeys.healthCheckFailed");
       for (const modelRow of getProviderModelRows(provider)) {
         const toggle = modelRow.querySelector(".api-model-visibility-toggle");
         if (toggle?.checked && modelRow.dataset.available !== "false") {
@@ -429,14 +452,16 @@ export function setupSettingsConfig({ configGateway, onModelConfigurationChanged
 
     const title = document.createElement("div");
     title.className = "api-key-row-name";
-    title.textContent = `${p.displayName || p.provider} API key`;
+    title.textContent = t("settings.apiKeys.editorTitle", {
+      provider: p.displayName || p.provider,
+    });
     editor.appendChild(title);
 
     const input = document.createElement("input");
     input.type = "password";
     input.autocomplete = "off";
     input.spellcheck = false;
-    input.placeholder = "Paste API key…";
+    input.placeholder = t("settings.apiKeys.pastePlaceholder");
     editor.appendChild(input);
 
     const err = document.createElement("div");
@@ -449,11 +474,11 @@ export function setupSettingsConfig({ configGateway, onModelConfigurationChanged
     const cancelBtn = document.createElement("button");
     cancelBtn.type = "button";
     cancelBtn.className = "ui-button ui-button--secondary config-editor-cancel";
-    cancelBtn.textContent = "Cancel";
+    cancelBtn.textContent = t("actions.cancel");
     const saveBtn = document.createElement("button");
     saveBtn.type = "button";
     saveBtn.className = "ui-button ui-button--primary";
-    saveBtn.textContent = "Save";
+    saveBtn.textContent = t("actions.save");
     actions.appendChild(cancelBtn);
     actions.appendChild(saveBtn);
     editor.appendChild(actions);
@@ -469,7 +494,7 @@ export function setupSettingsConfig({ configGateway, onModelConfigurationChanged
     const save = async () => {
       const key = input.value.trim();
       if (!key) {
-        err.textContent = "Key cannot be empty.";
+        err.textContent = t("settings.apiKeys.keyCannotBeEmpty");
         err.style.display = "";
         return;
       }
@@ -484,7 +509,7 @@ export function setupSettingsConfig({ configGateway, onModelConfigurationChanged
         await onModelConfigurationChanged?.();
         loadApiKeysPanel();
       } else {
-        err.textContent = resp?.error || "Failed to save key.";
+        err.textContent = resp?.error || t("settings.apiKeys.saveFailed");
         err.style.display = "";
         saveBtn.disabled = false;
       }
@@ -503,7 +528,9 @@ export function setupSettingsConfig({ configGateway, onModelConfigurationChanged
   }
 
   async function removeApiKey(p) {
-    const ok = confirm(`Remove stored API key for ${p.displayName || p.provider}?`);
+    const ok = confirm(
+      t("settings.apiKeys.removeConfirm", { provider: p.displayName || p.provider }),
+    );
     if (!ok) return;
     const resp = await call("remove_api_key", { provider: p.provider }).catch(() => null);
     if (resp?.ok) {
@@ -521,7 +548,10 @@ export function setupSettingsConfig({ configGateway, onModelConfigurationChanged
     if (!inlineConfigTextarea) return;
     inlineConfigError?.classList.add("hidden");
     inlineConfigTextarea.value = "";
-    if (inlineConfigPath) inlineConfigPath.textContent = "Loading…";
+    if (inlineConfigPath)
+      inlineConfigPath.textContent = t(
+        "migrated.native.settings.settingsConfig.textcontent.loading",
+      );
     try {
       const data = await call("read_agent_config");
       if (!data?.ok) throw new Error(data?.error || "Failed to load config");
@@ -600,7 +630,10 @@ export function setupSettingsConfig({ configGateway, onModelConfigurationChanged
     if (!inlineModelsTextarea) return;
     clearInlineModelsError();
     inlineModelsTextarea.value = "";
-    if (inlineModelsPath) inlineModelsPath.textContent = "Loading…";
+    if (inlineModelsPath)
+      inlineModelsPath.textContent = t(
+        "migrated.native.settings.settingsConfig.textcontent.loading",
+      );
     try {
       const data = await call("read_models_config");
       if (!data?.ok) throw new Error(data?.error || "Failed to load models.json");
@@ -666,6 +699,10 @@ export function setupSettingsConfig({ configGateway, onModelConfigurationChanged
     call("open_external", { url: MODELS_DOCS_URL }).catch(() => {
       window.open(MODELS_DOCS_URL, "_blank", "noopener,noreferrer");
     });
+  });
+
+  onLocaleChange(() => {
+    if (apiKeysContainer?.isConnected) void loadApiKeysPanel({ preserveUi: true });
   });
 
   return { loadApiKeysPanel, loadInlineConfigEditor, loadInlineModelsEditor };

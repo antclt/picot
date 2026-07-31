@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setupSettingsPanel } from "./settings-panel.js";
 
 function renderSettingsDom() {
@@ -9,6 +9,7 @@ function renderSettingsDom() {
       <aside class="settings-nav">
         <button class="settings-nav-item active" data-settings-tab="general">General</button>
         <button class="settings-nav-item" data-settings-tab="extensions">Extensions</button>
+        <button class="settings-nav-item" data-settings-tab="skills">Skills</button>
         <button class="settings-nav-item" data-settings-tab="usage">Usage</button>
         <button class="settings-nav-item" data-settings-tab="configuration">Configuration</button>
         <button class="settings-nav-back" id="settings-close">Back</button>
@@ -16,6 +17,7 @@ function renderSettingsDom() {
       <section class="settings-content">
         <div class="settings-tab active" data-settings-panel="general"></div>
         <div class="settings-tab" data-settings-panel="extensions"></div>
+        <div class="settings-tab" data-settings-panel="skills"><div id="settings-skills"></div></div>
         <div class="settings-tab" data-settings-panel="usage"></div>
         <div class="settings-tab" data-settings-panel="configuration"></div>
       </section>
@@ -83,5 +85,24 @@ describe("settings panel hash routing", () => {
     expect(document.getElementById("settings-panel").classList.contains("hidden")).toBe(false);
     const extensionsTab = document.querySelector('[data-settings-panel="extensions"]');
     expect(extensionsTab.classList.contains("active")).toBe(true);
+  });
+
+  it("opens the Skills tab through the Picot config gateway", async () => {
+    const configGateway = { call: vi.fn(async () => ({ ok: true, data: {} })) };
+    const getTarget = () => ({ workspaceId: "workspace-a", sessionId: "session-a", instanceId: 1 });
+
+    const panel = setupSettingsPanel({ configGateway, runtime: {}, getTarget });
+    panel.openSettings("skills");
+
+    expect(window.location.hash).toBe("#/settings/skills");
+    expect(
+      document.querySelector('[data-settings-panel="skills"]').classList.contains("active"),
+    ).toBe(true);
+    expect(configGateway.call).toHaveBeenCalledWith("list_skill_inventory", { scope: "global" });
+    await vi.waitFor(() => {
+      expect(document.getElementById("settings-skills").textContent).toContain(
+        "settings.skills.empty",
+      );
+    });
   });
 });

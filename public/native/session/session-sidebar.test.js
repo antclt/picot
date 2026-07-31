@@ -295,6 +295,43 @@ describe("SessionSidebar.render", () => {
     await vi.waitFor(() => expect(onCreateSession).toHaveBeenCalledWith("ws-1"));
   });
 
+  it("keeps show more and show less controls for non-current project groups", async () => {
+    const sessions = Array.from({ length: 12 }, (_, index) => ({
+      id: `other-${index}`,
+      timestamp: new Date(Date.now() - index * 1000).toISOString(),
+      name: `Other ${index}`,
+      projectPath: "/other",
+      projectName: "other",
+      isCurrentWorkspace: false,
+    }));
+    const { sidebar, container } = makeSidebar(sessions);
+
+    await sidebar.load();
+
+    let group = container.querySelector(".project-group");
+    expect(group.querySelectorAll(".session-item")).toHaveLength(8);
+    const showMore = group.querySelector(
+      ".project-sessions-toggle:not(.project-sessions-toggle-less)",
+    );
+    expect(showMore).toBeTruthy();
+    expect(group.querySelector(".project-sessions-toggle-less")).toBeNull();
+
+    showMore.click();
+
+    group = container.querySelector(".project-group");
+    expect(group.querySelectorAll(".session-item")).toHaveLength(12);
+    expect(
+      group.querySelector(".project-sessions-toggle:not(.project-sessions-toggle-less)"),
+    ).toBeNull();
+    expect(group.querySelector(".project-sessions-toggle-less")).toBeTruthy();
+
+    group.querySelector(".project-sessions-toggle-less").click();
+
+    expect(
+      container.querySelector(".project-group").querySelectorAll(".session-item"),
+    ).toHaveLength(8);
+  });
+
   it("groups favourites and archived into separate sections", async () => {
     const { sidebar, container } = makeSidebar([
       { id: "s-fav", timestamp: new Date().toISOString(), name: "Fav" },

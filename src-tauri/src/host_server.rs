@@ -1,16 +1,22 @@
 #![cfg_attr(not(test), allow(dead_code))]
 
-use crate::host_data::{HostDataError, HostDataPlane};
+use crate::host_data::{HostDataError, HostDataPlane, WriteFileResult};
 use crate::host_router::{HostRouter, RoutedAction, PROTOCOL_VERSION};
 use crate::native_pi_manager::NativePiManager;
 use crate::pi_launch::{list_installed_apps, open_external, open_in_app, PiLaunchResolver};
 use crate::remote_auth::RemoteAuth;
 use crate::runtime_coordinator::{RuntimeStatus, RuntimeTarget};
+use crate::terminal_manager::TerminalManager;
+use crate::terminal_registry::TerminalRegistry;
+use crate::terminal_state_store::TerminalStateStore;
+use crate::window_owner::OwnerId;
+use axum::body::Body;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::Query;
 use axum::extract::{DefaultBodyLimit, Json, State};
 #[cfg(debug_assertions)]
 use axum::http::header::{CACHE_CONTROL, PRAGMA};
+use axum::http::header::{CONTENT_LENGTH, CONTENT_SECURITY_POLICY, CONTENT_TYPE};
 #[cfg(debug_assertions)]
 use axum::http::HeaderValue;
 use axum::http::StatusCode;
@@ -44,6 +50,8 @@ struct HostState {
     data: HostDataPlane,
     pi_launch: PiLaunchResolver,
     port: u16,
+    terminal_manager: TerminalManager,
+    terminal_events: tokio::sync::broadcast::Sender<(OwnerId, Value)>,
 }
 
 pub struct HostServer {
@@ -102,6 +110,19 @@ impl HostServer {
         // 127.0.0.1 for the Tauri WebView origin — browsers reject 0.0.0.0 as
         // a destination address.
         let loopback_origin = format!("http://127.0.0.1:{}", address.port());
+        let (terminal_events, _) = tokio::sync::broadcast::channel(256);
+        let terminal_manager = TerminalManager::new(
+            TerminalRegistry::new(15),
+            TerminalStateStore::new(
+                dirs::config_dir()
+                    .unwrap_or_else(std::env::temp_dir)
+                    .join("picot"),
+            ),
+        );
+        let terminal_event_sender = terminal_events.clone();
+        terminal_manager.set_event_sink(Arc::new(move |owner, event| {
+            let _ = terminal_event_sender.send((owner.clone(), event));
+        }));
         let state = Arc::new(HostState {
             router: Mutex::new(HostRouter::new()),
             runtimes,
@@ -110,6 +131,8 @@ impl HostServer {
             data,
             pi_launch: PiLaunchResolver::new(static_dir.clone()),
             port: address.port(),
+            terminal_manager,
+            terminal_events,
         });
         let index = static_dir.join("index.html");
         let static_service = ServeDir::new(static_dir).fallback(ServeFile::new(index));
@@ -131,6 +154,12 @@ impl HostServer {
             .route("/v2/sessions", get(list_all_sessions_http))
             .route("/v2/auth/exchange", post(exchange_pairing))
             .route("/v2/lan-qr", get(lan_qr))
+            .route(
+                "/api/files/content",
+                get(read_file_content).put(write_file_content),
+            )
+            .route("/api/files/raw", get(raw_file_content))
+            .route("/api/file-mentions", get(file_mentions))
             .route("/v2/new-session", post(new_session))
             .route("/v2/resolve-workspace", post(resolve_workspace))
             .fallback_service(static_service)
@@ -176,6 +205,7 @@ impl HostServer {
     }
 
     pub fn stop(mut self) {
+        self.state.terminal_manager.kill_all();
         if let Some(shutdown) = self.shutdown.take() {
             let _ = shutdown.send(());
         }
@@ -184,6 +214,7 @@ impl HostServer {
 
 impl Drop for HostServer {
     fn drop(&mut self) {
+        self.state.terminal_manager.kill_all();
         if let Some(shutdown) = self.shutdown.take() {
             let _ = shutdown.send(());
         }
@@ -357,6 +388,116 @@ async fn bootstrap_target(
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct FilePreviewQuery {
+    workspace_id: String,
+    path: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct FileMentionQuery {
+    workspace_id: String,
+    query: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct WriteFileContentRequest {
+    workspace_id: String,
+    path: String,
+    content: String,
+    expected_mtime_ms: Option<f64>,
+    force: Option<bool>,
+}
+
+async fn read_file_content(
+    State(state): State<Arc<HostState>>,
+    Query(query): Query<FilePreviewQuery>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let content = state
+        .data
+        .read_file_content(&query.workspace_id, &query.path)
+        .map_err(host_data_http_error)?;
+    serde_json::to_value(content)
+        .map(Json)
+        .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "serialization_failed"))
+}
+
+async fn raw_file_content(
+    State(state): State<Arc<HostState>>,
+    Query(query): Query<FilePreviewQuery>,
+) -> Result<Response, (StatusCode, Json<Value>)> {
+    let raw = state
+        .data
+        .raw_file_content(&query.workspace_id, &query.path)
+        .map_err(host_data_http_error)?;
+    let mut response = Response::new(Body::from(raw.bytes));
+    *response.status_mut() = StatusCode::OK;
+    let headers = response.headers_mut();
+    headers.insert(
+        CONTENT_TYPE,
+        HeaderValue::from_str(&raw.mime_type)
+            .unwrap_or_else(|_| HeaderValue::from_static("application/octet-stream")),
+    );
+    headers.insert(
+        CONTENT_LENGTH,
+        HeaderValue::from_str(&raw.size.to_string())
+            .unwrap_or_else(|_| HeaderValue::from_static("0")),
+    );
+    headers.insert(
+        CONTENT_SECURITY_POLICY,
+        HeaderValue::from_static("sandbox; default-src 'none'; style-src 'unsafe-inline'"),
+    );
+    Ok(response)
+}
+
+async fn file_mentions(
+    State(state): State<Arc<HostState>>,
+    Query(query): Query<FileMentionQuery>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let result = state
+        .data
+        .search_file_mentions(&query.workspace_id, &query.query)
+        .map_err(host_data_http_error)?;
+    serde_json::to_value(result)
+        .map(Json)
+        .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "serialization_failed"))
+}
+
+async fn write_file_content(
+    State(state): State<Arc<HostState>>,
+    Json(body): Json<WriteFileContentRequest>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let force = body.force.unwrap_or(false);
+    let Some(expected_mtime_ms) = body.expected_mtime_ms.or(force.then_some(0.0)) else {
+        return Err(api_error(
+            StatusCode::BAD_REQUEST,
+            "expected_mtime_ms_required",
+        ));
+    };
+    match state
+        .data
+        .write_file_content(
+            &body.workspace_id,
+            &body.path,
+            &body.content,
+            expected_mtime_ms,
+            force,
+        )
+        .map_err(host_data_http_error)?
+    {
+        WriteFileResult::Saved { size, mtime_ms } => Ok(Json(json!({
+            "path": body.path,
+            "size": size,
+            "mtimeMs": mtime_ms,
+        }))),
+        WriteFileResult::Conflict => Err(api_error(StatusCode::CONFLICT, "conflict")),
+        WriteFileResult::Invalid => Err(api_error(StatusCode::BAD_REQUEST, "invalid_file")),
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct NewSessionRequest {
     workspace_id: String,
 }
@@ -490,6 +631,13 @@ async fn handle_websocket(mut socket: WebSocket, state: Arc<HostState>) {
         let _ = send_error(&mut socket, None, "handshake_rejected", &message).await;
         return;
     }
+    let desktop_owner = state
+        .router
+        .lock()
+        .ok()
+        .and_then(|router| router.client_kind(&client_id))
+        .filter(|kind| *kind == crate::host_router::ClientKind::Desktop)
+        .map(|_| OwnerId::from_client_id(&client_id));
     if socket
         .send(Message::Text(
             json!({ "type": "hello_ack", "protocolVersion": PROTOCOL_VERSION })
@@ -503,6 +651,7 @@ async fn handle_websocket(mut socket: WebSocket, state: Arc<HostState>) {
     }
 
     let mut runtime_events = state.runtimes.subscribe();
+    let mut terminal_events = state.terminal_events.subscribe();
     let mut subscriptions = HashSet::new();
     loop {
         tokio::select! {
@@ -600,6 +749,17 @@ async fn handle_websocket(mut socket: WebSocket, state: Arc<HostState>) {
                             break;
                         }
                     }
+                    Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+                }
+            }
+            event = terminal_events.recv() => {
+                match event {
+                    Ok((owner, outgoing)) if desktop_owner.as_ref() == Some(&owner) => {
+                        if socket.send(Message::Text(outgoing.to_string().into())).await.is_err() {
+                            break;
+                        }
+                    }
+                    Ok(_) | Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {}
                     Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
                 }
             }
@@ -842,6 +1002,32 @@ async fn dispatch(
                 "acceptance": "accepted",
                 "response": response,
             }))
+        }
+        RoutedAction::Terminal {
+            client_id,
+            request_id,
+            frame,
+        } => {
+            let workspace_id = frame
+                .get("workspaceId")
+                .and_then(Value::as_str)
+                .ok_or(("invalid_workspace", "workspaceId is required".into()))?;
+            let workspace_root = state
+                .data
+                .workspace_root_path(workspace_id)
+                .map_err(host_data_error)?;
+            let payload = frame
+                .get("payload")
+                .ok_or(("invalid_terminal_command", "payload is required".into()))?;
+            let owner = OwnerId::from_client_id(&client_id);
+            let mut response = state
+                .terminal_manager
+                .dispatch(&owner, &workspace_root, payload)
+                .map_err(|message| ("terminal_command_failed", message))?;
+            if let Some(object) = response.as_object_mut() {
+                object.insert("requestId".into(), Value::String(request_id));
+            }
+            Ok(response)
         }
         RoutedAction::Auth {
             request_id, frame, ..
@@ -1159,6 +1345,11 @@ fn host_data_error(error: HostDataError) -> (&'static str, String) {
             "not_a_directory",
             "Requested path is not a directory".into(),
         ),
+        HostDataError::NotFile => ("not_a_file", "Requested path is not a file".into()),
+        HostDataError::InvalidMentionQuery => (
+            "invalid_mention_query",
+            "File mention query is invalid".into(),
+        ),
         HostDataError::Io(message) => ("file_access_failed", message),
     }
 }
@@ -1168,7 +1359,9 @@ fn host_data_http_error(error: HostDataError) -> (StatusCode, Json<Value>) {
         HostDataError::UnknownWorkspace => StatusCode::NOT_FOUND,
         HostDataError::InvalidRelativePath
         | HostDataError::OutsideWorkspace
-        | HostDataError::NotDirectory => StatusCode::BAD_REQUEST,
+        | HostDataError::NotDirectory
+        | HostDataError::NotFile
+        | HostDataError::InvalidMentionQuery => StatusCode::BAD_REQUEST,
         HostDataError::Io(_) => StatusCode::INTERNAL_SERVER_ERROR,
     };
     let (code, _) = host_data_error(error);

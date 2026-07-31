@@ -1,3 +1,5 @@
+import { t } from "../../i18n.js";
+
 const DEFAULT_DURATION_MS = 8000;
 
 function normalizeNotification(input) {
@@ -50,7 +52,10 @@ export function createNotificationCenter({
     const close = document.createElement("button");
     close.type = "button";
     close.className = "native-notification-close";
-    close.setAttribute("aria-label", "Dismiss notification");
+    close.setAttribute(
+      "aria-label",
+      t("migrated.native.notifications.notificationCenter.ariaLabel.dismissNotification"),
+    );
     close.textContent = "×";
 
     card.appendChild(content);

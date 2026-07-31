@@ -1,3 +1,5 @@
+import { FilePreviewPanel } from "../file-preview-panel.js";
+import { initI18n, onLocaleChange, t } from "../i18n.js";
 import { reconcileSnapshotTarget } from "../session/bootstrap-target.js";
 import { dispatchSuperAgentTaskNative } from "../super-agent/native-dispatch.js";
 import { isSuperAgentProjectPath } from "../super-agent/session.js";
@@ -6,10 +8,13 @@ import { selectSuperAgentStartupAction } from "../super-agent/startup-flow.js";
 import { buildTaskComposerPrompt, markTaskChildSessionBound } from "../super-agent/task-state.js";
 import { updateSuperAgentTask } from "../super-agent/task-store.js";
 import { applyTheme, getCurrentTheme } from "../themes.js";
+import { setupAtFileMention } from "../ui/at-file-mention.js";
 import { ConvNav } from "../ui/conv-nav.js";
 import { setupMessagesInsets } from "../ui/layout-insets.js";
 import { MessageRenderer } from "../ui/message-renderer.js";
+import { setupResizablePanel } from "../ui/resizable-panel.js";
 import { ToolCardRenderer } from "../ui/tool-card.js";
+import { setupComposerAutoResize } from "./composer/composer-autoresize.js";
 import { setupComposerImageAttachments } from "./composer/composer-images.js";
 import { setupComposerSlashMenu } from "./composer/composer-slash-menu.js";
 import { setupComposerSubmitHandling } from "./composer/composer-submit.js";
@@ -27,6 +32,7 @@ import {
   isRpivTodoWidgetRequest,
   RpivTodoMirrorPanel,
 } from "./features/rpiv-todo-mirror.js";
+import { setupTerminalPanel } from "./features/terminal-panel-integration.js";
 import { createNotificationCenter } from "./notifications/notification-center.js";
 import { createSessionSelectionHandler } from "./session/session-navigation.js";
 import { setupSessionSearchDialog } from "./session/session-search-dialog.js";
@@ -59,10 +65,18 @@ import {
   spawnSessionViaHost,
 } from "./workspace/workspace-actions.js";
 
+// Declared before the first `await` in this module: `hydrateSnapshotOnce()`
+// is called both from the runtime-event subscriber and from the startup
+// try-block, either of which can run while the module is paused at a later
+// `await`. Declaring this variable after those awaits would leave it in the
+// TDZ and cause "Cannot access 'snapshotInFlight' before initialization" when
+// the handler fires before module evaluation reaches the `let` line.
+let snapshotInFlight = false;
 const route = parseAppRoute(window.location.pathname);
 if (route.name !== "session") throw new Error("Native Picot requires a session route");
 
 applyTheme(getCurrentTheme());
+await initI18n();
 document.body.dataset.runtime = "native";
 
 const messagesElement = document.getElementById("messages");
@@ -80,6 +94,7 @@ setupMessagesInsets({
   messages: messagesElement,
   header: document.querySelector(".header"),
   inputArea: document.querySelector(".input-area"),
+  workspaceContent: document.querySelector(".workspace-content"),
 });
 const messageRenderer = new MessageRenderer(messagesElement);
 const toolRenderer = new ToolCardRenderer(messagesElement);
@@ -98,6 +113,8 @@ const attachButton = document.getElementById("attach-btn");
 const imageInput = document.getElementById("image-input");
 const imagePreviews = document.getElementById("image-previews");
 const skillSlashMenu = document.getElementById("skill-slash-menu");
+const atFileMentionMenu = document.getElementById("at-file-mention-menu");
+const composerAutoResize = setupComposerAutoResize({ input });
 const queuedMessages = document.getElementById("queued-messages");
 const todoMirrorPanel = new RpivTodoMirrorPanel({
   container: document.querySelector(".input-area"),
@@ -111,6 +128,13 @@ const modelDropdownMenu = document.getElementById("model-dropdown-menu");
 const modelDropdownToolbar = modelDropdown?.closest(".composer-toolbar");
 const thinkingBtn = document.getElementById("thinking-btn");
 const THINKING_LEVELS = ["off", "minimal", "low", "medium", "high"];
+
+function formatThinkingLevelLabel(level) {
+  const normalizedLevel = level || "off";
+  const key = `settings.thinkingLevels.${normalizedLevel}`;
+  const label = t(key);
+  return label === key ? normalizedLevel : label;
+}
 let currentThinkingLevel = "off";
 let currentModelId = null;
 let currentModelContextWindow = 0;
@@ -164,9 +188,14 @@ const remoteAuth = await resolveRemoteAuth();
 
 const adapter = new HostRuntimeAdapter({
   url: resolveHostWebSocketUrl(window),
-  clientId: `${remoteAuth.clientType}-${randomId()}`,
+  clientId: sessionScopedClientId(remoteAuth.clientType),
   clientType: remoteAuth.clientType,
   deviceToken: remoteAuth.deviceToken,
+});
+setupTerminalPanel({
+  adapter,
+  getWorkspaceId: () => target.workspaceId,
+  native: remoteAuth.clientType === "desktop",
 });
 const runtime = new RuntimeGateway(adapter);
 const data = new HostDataGateway(adapter, { fetchImpl: window.fetch.bind(window) });
@@ -174,6 +203,7 @@ const control = new HostControlGateway(adapter);
 const config = new ConfigGateway({ runtime, getTarget: () => target });
 window.__picotConfigCall = (op, params, options) => config.call(op, params, options);
 const contextUsage = setupContextUsage();
+const filePreviewPanel = setupFilePreviewPanel();
 const sessionCostEl = document.getElementById("session-cost");
 let sessionTotalCost = 0;
 
@@ -223,6 +253,7 @@ const extensionUi = new ExtensionUiHost({
     },
     editorText: (request) => {
       input.value = request.text || "";
+      composerAutoResize.sync();
       input.focus();
     },
     widget: (request) => {
@@ -268,7 +299,12 @@ runtime.subscribe((frame) => {
   const previous = store;
   store = reduceSessionState(store, frame);
   if (!previous.snapshotRequired && store.snapshotRequired) {
-    hydrateSnapshot().catch(showError);
+    // Use hydrateSnapshotOnce to deduplicate concurrent calls (e.g. when the
+    // subscriber fires at the same time as the startup try-block) and to
+    // silently retry on brief WebSocket disconnections that can occur during
+    // project switches, instead of rendering error messages that are quickly
+    // overwritten once the connection stabilises.
+    hydrateSnapshotOnce().catch(showError);
     return;
   }
   if (previous.queue !== store.queue) renderQueuedMessages(queuedMessages, store.queue);
@@ -289,6 +325,23 @@ adapter.connect();
 setupSessionSidebar();
 sidebar?.load().catch(showError);
 setupSidebarToggle();
+if (atFileMentionMenu) {
+  // @-file mention completion must be wired before the Enter-to-send listener
+  // so it can intercept Enter/Tab/Escape while its listbox is open.
+  setupAtFileMention({
+    input,
+    container: atFileMentionMenu,
+    getWorkspaceRoot: () => target.workspaceId,
+    searchFiles: async (workspaceId, query, signal) => {
+      const url = new URL("/api/file-mentions", window.location.origin);
+      url.searchParams.set("workspaceId", workspaceId);
+      url.searchParams.set("query", query);
+      const response = await fetch(url, { signal });
+      if (!response.ok) throw new Error(`File mention search failed: ${response.status}`);
+      return response.json();
+    },
+  });
+}
 setupComposerSubmitHandling({
   input,
   form,
@@ -306,6 +359,7 @@ messagesElement.addEventListener("messagefork", async (event) => {
     const data = result?.response?.data;
     if (!data?.cancelled && data?.text != null) {
       input.value = data.text;
+      composerAutoResize.sync();
       input.focus();
     }
   } catch (error) {
@@ -429,7 +483,7 @@ try {
     input.focus();
   }
 
-  await hydrateSnapshot();
+  await hydrateSnapshotOnce();
   await Promise.all([
     loadCommands()
       .then(() => slashMenu.update())
@@ -463,6 +517,19 @@ function provisionalTargetFromRoute(currentRoute) {
   };
 }
 
+function sessionScopedClientId(clientType) {
+  const key = "picot:host-client-id";
+  try {
+    const existing = sessionStorage.getItem(key);
+    if (existing) return existing;
+    const created = `${clientType}-${randomId()}`;
+    sessionStorage.setItem(key, created);
+    return created;
+  } catch {
+    return `${clientType}-${randomId()}`;
+  }
+}
+
 async function loadBootstrapTarget(currentRoute) {
   return resolveBootstrapTarget({
     route: currentRoute,
@@ -492,6 +559,52 @@ async function hydrateSnapshot() {
   await hydrateFromSnapshot(snapshot);
   configGatewayTargetReady = true;
   signalConfigGatewayReady();
+}
+
+/**
+ * Returns true for errors that indicate a transient WebSocket disconnection
+ * rather than a permanent failure. These errors resolve on their own once the
+ * adapter reconnects, so they should not be surfaced as visible messages.
+ */
+function isTransientConnectionError(error) {
+  const msg = error?.message ?? "";
+  return (
+    msg.includes("Picot Host runtime is disconnected") ||
+    msg.includes("Runtime disconnected before the request completed") ||
+    msg.includes("Host disconnected before the")
+  );
+}
+
+/**
+ * Hydrate the session snapshot with deduplication and automatic retry on
+ * transient connection errors.
+ *
+ * - Deduplication: if a hydration is already in progress, the new call joins
+ *   it and returns without starting a second request.
+ * - Retry: if the adapter briefly disconnects (race during project switch),
+ *   wait for it to reconnect and try once more before giving up.
+ * - Errors: non-transient failures are re-thrown so callers can decide how to
+ *   handle them; transient failures on the retry are also re-thrown.
+ */
+async function hydrateSnapshotOnce() {
+  if (snapshotInFlight) return;
+  snapshotInFlight = true;
+  try {
+    await hydrateSnapshot();
+  } catch (error) {
+    if (isTransientConnectionError(error)) {
+      console.warn(
+        "[Session] Transient connection error during snapshot; retrying after reconnect:",
+        error.message,
+      );
+      await adapter.ready();
+      await hydrateSnapshot();
+    } else {
+      throw error;
+    }
+  } finally {
+    snapshotInFlight = false;
+  }
 }
 
 async function loadCommands() {
@@ -648,6 +761,7 @@ function insertTaskPrompt(task) {
   if (!task) return;
   const draft = input.value.trim();
   input.value = `${buildTaskComposerPrompt(task)}${draft ? `\n${draft}` : ""}`;
+  composerAutoResize.sync();
   input.focus();
 }
 
@@ -796,6 +910,72 @@ function setupSidebarToggle() {
     e.preventDefault();
     setCollapsed(true);
   });
+
+  setupResizablePanel(sidebarEl, {
+    storageKey: "pi-studio-sidebar-width",
+    defaultWidth: 272,
+    minWidth: 200,
+    maxWidth: 480,
+    side: "left",
+  });
+}
+
+function setupFilePreviewPanel() {
+  const panel = document.getElementById("file-preview-panel");
+  const resizer = document.getElementById("file-preview-resizer");
+  const tabBar = document.getElementById("file-preview-tabs");
+  const content = document.getElementById("file-preview-content");
+  const mainContainer = document.querySelector(".main");
+  if (!panel || !resizer || !tabBar || !content || !mainContainer) return null;
+
+  const fileApi = createNativeFilePreviewApi({ workspaceId: () => target.workspaceId });
+  return new FilePreviewPanel({
+    panel,
+    resizer,
+    tabBar,
+    content,
+    mainContainer,
+    fileApi,
+    onOpenDesktop: (relativePath) => openWorkspaceRelativePath(relativePath).catch(showError),
+  });
+}
+
+function createNativeFilePreviewApi({ workspaceId }) {
+  const buildUrl = (path, endpoint) => {
+    const url = new URL(endpoint, window.location.origin);
+    url.searchParams.set("workspaceId", workspaceId());
+    url.searchParams.set("path", path);
+    return url;
+  };
+  return {
+    readFileContent(path, { signal } = {}) {
+      return fetch(buildUrl(path, "/api/files/content"), { signal });
+    },
+    writeFileContent({ path, content, expectedMtimeMs, force }) {
+      return fetch("/api/files/content", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workspaceId: workspaceId(),
+          path,
+          content,
+          expectedMtimeMs,
+          force,
+        }),
+      });
+    },
+    rawUrlForPath(path) {
+      return buildUrl(path, "/api/files/raw").toString();
+    },
+  };
+}
+
+async function openWorkspaceRelativePath(relativePath = "") {
+  const info = await data.workspaceInfo(target.workspaceId);
+  const root = info?.path ?? "";
+  const normalizedRelative = String(relativePath || "").replace(/^\/+/, "");
+  const absolutePath = normalizedRelative ? `${root}/${normalizedRelative}` : root;
+  await control.openInApp(absolutePath);
 }
 
 function setupFileBrowser() {
@@ -808,6 +988,15 @@ function setupFileBrowser() {
   if (upBtn) upBtn.disabled = true; // disabled until we've navigated into a subdir
 
   const browser = new NativeFileBrowser(fileList, pathEl, data, target.workspaceId, {
+    onFileOpen(entry) {
+      openWorkspaceRelativePath(entry.relativePath).catch(showError);
+    },
+    onFileSelect(entry) {
+      filePreviewPanel?.openFile(entry.relativePath, {
+        fileName: entry.name,
+        size: entry.size,
+      });
+    },
     onPathChange(path) {
       // Enable the up button only when we're inside a subdirectory.
       if (upBtn) upBtn.disabled = path === "";
@@ -816,17 +1005,26 @@ function setupFileBrowser() {
 
   document.getElementById("file-sidebar-finder")?.addEventListener("click", async () => {
     try {
-      const info = await data.workspaceInfo(target.workspaceId);
-      const root = info?.path ?? "";
       const current = browser.currentPath ?? "";
-      const absolutePath = current ? `${root}/${current}` : root;
-      await control.openInApp(absolutePath);
+      await openWorkspaceRelativePath(current);
     } catch (error) {
       showError(error);
     }
   });
 
-  document.getElementById("file-sidebar-toggle")?.addEventListener("click", () => {
+  const toggleBtn = document.getElementById("file-sidebar-toggle");
+  toggleBtn?.addEventListener("click", () => {
+    const isCollapsed = sidebar.classList.toggle("collapsed");
+    if (!isCollapsed && browser.currentPath === null) browser.load().catch(showError);
+  });
+  if (toggleBtn) {
+    const shortcutLabel = isMacOS() ? "⌘B" : "Ctrl+B";
+    const baseTitle = toggleBtn.title || "Files";
+    toggleBtn.title = `${baseTitle} (${shortcutLabel})`;
+  }
+  document.addEventListener("keydown", (event) => {
+    if (!isFilePanelShortcut(event)) return;
+    event.preventDefault();
     const isCollapsed = sidebar.classList.toggle("collapsed");
     if (!isCollapsed && browser.currentPath === null) browser.load().catch(showError);
   });
@@ -855,11 +1053,13 @@ async function sendComposerInput({ altKey }) {
   }
   input.value = "";
   input.scrollTop = 0;
+  composerAutoResize.sync();
   imageAttachments.clear();
   try {
     await runtime.request(intent.command, target, { idempotencyKey: randomId() });
   } catch (error) {
     input.value = value;
+    composerAutoResize.sync();
     imageAttachments.setImages(images);
     throw error;
   }
@@ -934,7 +1134,7 @@ async function handleRuntimeEvent(event) {
     case "session_bound":
       await adoptTarget({ ...target, sessionId: event.sessionId });
       upsertActiveSessionFromUserMessage();
-      await hydrateSnapshot();
+      await hydrateSnapshotOnce();
       sidebar?.load({ quiet: true }).catch(showError);
       break;
   }
@@ -978,6 +1178,9 @@ async function adoptTarget(nextTarget, { updateRoute = true } = {}) {
   }
   target = nextTarget;
   store = createSessionStore(target);
+  // Reset the in-flight guard whenever the target changes so a new session
+  // is never blocked from hydrating by a stale flag from the previous one.
+  snapshotInFlight = false;
   renderQueuedMessages(queuedMessages, store.queue);
   todoMirrorPanel.clear();
   streamingElement = null;
@@ -1106,12 +1309,11 @@ function updateComposerModel(model) {
 function updateComposerThinking(level) {
   currentThinkingLevel = level ?? "off";
   if (thinkingBtn) {
-    thinkingBtn.textContent = `Think ${currentThinkingLevel}`;
+    const levelLabel = formatThinkingLevelLabel(currentThinkingLevel);
+    thinkingBtn.textContent = t("settings.thinkingCompact", { level: levelLabel });
     thinkingBtn.className = `thinking-tag${currentThinkingLevel === "off" ? " off" : ""}`;
-    thinkingBtn.setAttribute(
-      "aria-label",
-      `Thinking effort: ${currentThinkingLevel}. Click to cycle reasoning depth.`,
-    );
+    thinkingBtn.title = t("settings.thinkingTitle");
+    thinkingBtn.setAttribute("aria-label", t("settings.thinkingAriaLabel", { level: levelLabel }));
   }
   // Sync settings panel radio group
   settingsPanel?.thinkingControl?.updateUI(level);
@@ -1172,15 +1374,15 @@ function renderEmptyModelDropdown(container) {
 
   const title = document.createElement("div");
   title.className = "model-dropdown-empty-title";
-  title.textContent = "No models available";
+  title.textContent = t("models.emptyTitle");
 
   const message = document.createElement("div");
-  message.textContent = "No API keys configured. Set a key in Settings → Configuration.";
+  message.textContent = t("models.emptyHelp");
 
   const settingsButton = document.createElement("button");
   settingsButton.type = "button";
   settingsButton.className = "btn-primary model-dropdown-empty-action";
-  settingsButton.textContent = "Open Settings";
+  settingsButton.textContent = t("migrated.native.app.textcontent.openSettings");
   settingsButton.addEventListener("click", () => {
     closeModelDropdown();
     settingsPanel?.openSettings("configuration");
@@ -1245,7 +1447,7 @@ function renderModelDropdownItems(container, filter = "") {
   if (matchingModels.length === 0) {
     const empty = document.createElement("div");
     empty.className = "model-dropdown-empty";
-    empty.textContent = "No models match your search.";
+    empty.textContent = t("migrated.native.app.textcontent.noModelsMatchYourSearch");
     container.appendChild(empty);
     return;
   }
@@ -1261,7 +1463,7 @@ function renderModelDropdownMenu() {
 
   const search = document.createElement("input");
   search.className = "model-dropdown-search";
-  search.placeholder = "Search models…";
+  search.placeholder = t("models.searchPlaceholder");
   search.type = "text";
   modelDropdownMenu.appendChild(search);
 
@@ -1317,6 +1519,10 @@ document.addEventListener("click", (event) => {
   if (!event.target.closest("#model-dropdown")) closeModelDropdown();
 });
 
+onLocaleChange(() => {
+  updateComposerThinking(currentThinkingLevel);
+});
+
 if (thinkingBtn) {
   thinkingBtn.addEventListener("click", async () => {
     const idx = THINKING_LEVELS.indexOf(currentThinkingLevel);
@@ -1330,6 +1536,23 @@ if (thinkingBtn) {
       showError(error);
     }
   });
+}
+
+function isMacOS() {
+  return navigator.platform.startsWith("Mac") || navigator.userAgent.includes("Macintosh");
+}
+
+function isFilePanelShortcut(event) {
+  if (event.defaultPrevented || event.isComposing) return false;
+  if (isFilePanelShortcutTypingTarget(event.target)) return false;
+  if (event.altKey || event.shiftKey || event.key.toLowerCase() !== "b") return false;
+  return event.metaKey || event.ctrlKey;
+}
+
+function isFilePanelShortcutTypingTarget(target) {
+  if (!(target instanceof Element)) return false;
+  if (target.closest("input, textarea, select")) return true;
+  return target.closest('[contenteditable="true"]') !== null;
 }
 
 window.__picotNative = {

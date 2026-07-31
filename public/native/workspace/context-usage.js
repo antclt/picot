@@ -1,3 +1,4 @@
+import { t } from "../../i18n.js";
 import { formatTokens, setupContextViz } from "../../ui/context-viz.js";
 
 export function setupContextUsage({
@@ -41,7 +42,7 @@ export function setupContextUsage({
     tokenUsageEl?.classList.remove("visible", "warning", "critical");
     if (tokenUsageEl) {
       tokenUsageEl.textContent = "";
-      tokenUsageEl.title = "Context usage";
+      tokenUsageEl.title = t("usage.contextTitle");
     }
     viz.hide();
   }
@@ -54,7 +55,7 @@ export function setupContextUsage({
     if (used <= 0) {
       tokenUsageEl.classList.remove("visible");
       tokenUsageEl.textContent = "";
-      tokenUsageEl.title = "Context usage";
+      tokenUsageEl.title = t("usage.contextTitle");
       viz.hide();
       return;
     }

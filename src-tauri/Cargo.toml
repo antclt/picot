@@ -33,11 +33,19 @@ percent-encoding = "2"
 rusqlite = { version = "0.32", features = ["bundled"] }
 sha2 = "0.10"
 uuid = { version = "1", features = ["v4"] }
-qrcode = { version = "0.14", default-features = false, features = ["svg"] }
-base64 = "0.22"
 axum = { version = "0.8", features = ["ws"] }
+qrcode = { version = "0.14", default-features = false, features = ["svg"] }
 tower = "0.5"
 tower-http = { version = "0.6", features = ["fs", "set-header"] }
+base64 = "0.22"
+rand = "0.8"
+subtle = "2"
+tempfile = "3"
+portable-pty = "0.9"
+libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = ["Win32_System_JobObjects", "Win32_System_Threading", "Win32_Foundation", "Win32_Security"] }
 
 [profile.dev]
 incremental = true

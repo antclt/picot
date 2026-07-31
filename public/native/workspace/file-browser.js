@@ -10,6 +10,8 @@ export class NativeFileBrowser {
   #gateway;
   #workspaceId;
   #requestId = 0;
+  #onFileOpen;
+  #onFileSelect;
   #onPathChange;
   currentPath = null;
 
@@ -18,13 +20,25 @@ export class NativeFileBrowser {
    * @param {HTMLElement} pathEl - breadcrumb text element
    * @param {object} gateway - data gateway with listFiles()
    * @param {string} workspaceId
-   * @param {{ onPathChange?: (path: string) => void }} [options]
+   * @param {{
+   *   onFileOpen?: (entry: object) => void,
+   *   onFileSelect?: (entry: object) => void,
+   *   onPathChange?: (path: string) => void,
+   * }} [options]
    */
-  constructor(container, pathEl, gateway, workspaceId, { onPathChange } = {}) {
+  constructor(
+    container,
+    pathEl,
+    gateway,
+    workspaceId,
+    { onFileOpen, onFileSelect, onPathChange } = {},
+  ) {
     this.#container = container;
     this.#pathEl = pathEl;
     this.#gateway = gateway;
     this.#workspaceId = workspaceId;
+    this.#onFileOpen = onFileOpen ?? null;
+    this.#onFileSelect = onFileSelect ?? null;
     this.#onPathChange = onPathChange ?? null;
   }
 
@@ -93,6 +107,9 @@ export class NativeFileBrowser {
 
       if (isDirectory) {
         item.addEventListener("click", () => this.load(entry.relativePath));
+      } else {
+        item.addEventListener("click", () => this.#onFileSelect?.(entry));
+        item.addEventListener("dblclick", () => this.#onFileOpen?.(entry));
       }
       this.#container.append(item);
     }

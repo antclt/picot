@@ -54,6 +54,11 @@ pub enum RoutedAction {
         request_id: String,
         target: Value,
     },
+    Terminal {
+        client_id: String,
+        request_id: String,
+        frame: Value,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -137,6 +142,27 @@ impl HostRouter {
             .to_owned();
 
         match frame_type {
+            "terminal_command" => {
+                if client_kind != ClientKind::Desktop {
+                    return Err(RouterError::new(
+                        "remote_operation_forbidden",
+                        "Remote clients cannot use local terminals",
+                    ));
+                }
+                if frame.get("workspaceId").and_then(Value::as_str).is_none()
+                    || !frame.get("payload").is_some_and(Value::is_object)
+                {
+                    return Err(RouterError::new(
+                        "invalid_terminal_command",
+                        "workspaceId and payload are required",
+                    ));
+                }
+                Ok(RoutedAction::Terminal {
+                    client_id: client_id.to_owned(),
+                    request_id,
+                    frame: frame.clone(),
+                })
+            }
             "runtime_subscribe" => {
                 let target = frame.get("target").cloned().ok_or_else(|| {
                     RouterError::new("invalid_target", "Runtime target is required")
@@ -355,5 +381,36 @@ mod tests {
                 )
                 .is_err());
         }
+    }
+
+    #[test]
+    fn routes_terminal_commands_only_for_desktop_clients() {
+        let mut router = HostRouter::new();
+        for (client_id, client_type) in [("window", "desktop"), ("phone", "remote")] {
+            router
+                .connect(
+                    client_id,
+                    &json!({
+                        "type": "hello",
+                        "protocolVersion": 2,
+                        "clientType": client_type,
+                    }),
+                )
+                .unwrap();
+        }
+        let command = json!({
+            "type": "terminal_command",
+            "requestId": "terminal-1",
+            "workspaceId": "workspace-a",
+            "payload": { "type": "terminal_list" },
+        });
+        assert!(matches!(
+            router.route("window", &command),
+            Ok(RoutedAction::Terminal { .. })
+        ));
+        assert_eq!(
+            router.route("phone", &command).unwrap_err().code,
+            "remote_operation_forbidden"
+        );
     }
 }

@@ -29,50 +29,17 @@ Picot ships a known-good build of the `pi` runtime **inside the .app bundle**, s
 
 ## Install
 
-You **do not** need to install the `pi` CLI separately — Picot bundles its own pi runtime.
-
-### One-liner install (recommended)
-
-**macOS / Linux:**
-```bash
-curl -fsSL https://raw.githubusercontent.com/shixin-guo/picot/main/scripts/install.sh | bash
-```
-
-**Windows (PowerShell):**
-```powershell
-irm https://raw.githubusercontent.com/shixin-guo/picot/main/scripts/install.ps1 | iex
-```
-
-The script auto-detects your OS and architecture, downloads the right package, installs it, and on macOS automatically clears the Gatekeeper quarantine bit — so the app opens directly without any "Open Anyway" prompt.
-
-To install a specific version:
-```bash
-# macOS / Linux
-curl -fsSL https://raw.githubusercontent.com/shixin-guo/picot/main/scripts/install.sh | bash -s -- --version v0.3.0
-
-# Windows — enterprise MSI deployment
-& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/shixin-guo/picot/main/scripts/install.ps1'))) -Version v0.3.0 -MSI
-```
-
-### Manual download
-
 [Download from GitHub Releases](https://github.com/shixin-guo/picot/releases)
 
-| Platform | File |
-|----------|------|
-| macOS Apple Silicon | `Picot_*_aarch64.dmg` |
-| macOS Intel | `Picot_*_x64.dmg` |
-| Linux x86\_64 (Debian/Ubuntu) | `Picot_*_amd64.deb` |
-| Linux arm64 (Debian/Ubuntu) | `Picot_*_arm64.deb` |
-| Linux x86\_64 (RHEL/Fedora) | `Picot-*-1.x86_64.rpm` |
-| Linux arm64 (RHEL/Fedora) | `Picot-*-1.aarch64.rpm` |
-| Windows x64 | `Picot_*_x64-setup.exe` |
-| Windows arm64 | `Picot_*_arm64-setup.exe` |
+You **do not** need to install the `pi` CLI separately — Picot bundles its own pi runtime.
 
 ### macOS unsigned release notice
 
-Picot currently ships macOS builds without Apple Developer ID signing/notarization.
-The one-liner install script handles this automatically. If you install manually:
+Picot currently ships macOS builds without Apple Developer ID signing/notarization. Expected Gatekeeper behavior:
+
+`"Picot" cannot be opened because the developer cannot be verified.`
+
+**To allow it:**
 
 1. Drag `Picot.app` into `/Applications`
 2. Right-click → **Open**
@@ -96,7 +63,7 @@ Then click **Done**:
 2. Click a project bubble or pick a folder
 3. Start chatting — the embedded pi agent starts automatically
 
-Provide your model credentials via `pi /login` inside any workspace, or by writing `~/.pi/agent/auth.json` directly. Picot doesn't manage credentials itself.
+Provide your model credentials via `pi /login` inside any workspace, or by writing `~/.pi/agent/auth.json` directly. Picot doesn't manage credentials itself. The interface is available in English and Chinese.
 
 ---
 
@@ -119,9 +86,19 @@ Provide your model credentials via `pi /login` inside any workspace, or by writi
 - Copy any message with one click
 - Scroll-to-bottom button with unread indicator
 - **Message queuing** — type while the agent is working; messages queue as pills and auto-send when ready
+- **`@` file mentions** — type `@` in any composer to search and insert a file-path reference (workspace, `../`, `~/`, or absolute); shared across Main, Side, and Quick Chat
 - **Conversation turn navigator** — Codex-style dot rail beside the chat; hover a dot for a preview, click to jump to that turn
 - **Command palette** — quick access to Compact, Expand/Collapse All Tools, Settings, and Help
 - **Fork from any message** — branch a new session off any point in the conversation
+
+</details>
+
+<details>
+<summary><strong>⚡ Temporary chats</strong></summary>
+
+- **Side Chat** keeps tools available in an isolated, unsaved Pi process for the current workspace; open up to five as tabs alongside file tabs in the right panel — the panel stays open while any Side Chat tab remains, and collapses only when both file and Side Chat tabs are closed.
+- **Quick Chat** is a single non-modal, tool-free, unsaved chat. Open it from the icon directly after the sidebar search field.
+- Both compose with the same model selector, thinking-level control, voice input, and icon controls as the primary chat. They are available only in authenticated desktop windows, never through mobile or LAN access.
 
 </details>
 
@@ -133,6 +110,9 @@ Provide your model credentials via `pi /login` inside any workspace, or by writi
 - Full-text search across all session history with highlighted snippets
 - Sessions sorted by creation time; live session marked with a green dot
 - Inline session rename, favourites, tags, and filtering
+- **Workspace Focus** — use the arrow on the current workspace to switch the left sidebar into a task view, including before a new task has created its first saved session
+- **Safe individual deletion** — delete a session from Focus or ARCHIVED; running sessions are refused by the server
+- **RECENT** — a cross-workspace, most-recently-used list keeps the last five visited sessions at the top of the sidebar
 
 </details>
 
@@ -206,6 +186,7 @@ Provide your model credentials via `pi /login` inside any workspace, or by writi
 - Frosted-glass header and input bar (`backdrop-filter: blur`)
 - Native macOS title bar overlay integration
 - **Window dragging** from the header area — feels like a native app
+- **Language** — switch the live interface between English, Simplified Chinese, or the system preference
 
 </details>
 
@@ -218,11 +199,14 @@ Provide your model credentials via `pi /login` inside any workspace, or by writi
 </details>
 
 <details>
-<summary><strong>🗄️ File Browser</strong></summary>
+<summary><strong>🗄️ File Browser, Preview & Editor</strong></summary>
 
-- Right sidebar with lazy-loaded file tree
-- Navigate directories, open files natively
-- Drag files onto the input to insert their path
+- Right sidebar with a lazy-loaded workspace file tree
+- Click a file to open it in a resizable, tabbed preview panel; tabs are restored separately for each workspace
+- Preview Markdown, images, PDF documents, and source files; Markdown is sanitized before rendering
+- Edit supported text files in the built-in CodeMirror editor with syntax highlighting, line wrapping, search, go-to-line, auto-save, and external-change conflict protection
+- Double-click to open a file in its native desktop application
+- Drag a file from the tree onto the chat input to insert a workspace-relative `@path` reference
 
 </details>
 
@@ -237,6 +221,7 @@ Provide your model credentials via `pi /login` inside any workspace, or by writi
 - Thinking level toggle (off / low / medium / high)
 - Auto and manual **context compaction** with status display
 - Push notification toggle
+- **Skills management** — Settings → Skills: browse every discovered skill per source root and toggle individual skills or whole groups using Pi's `!`/`+`/`-` rule semantics (takes effect on next session/restart)
 - **Auto-updater** — Settings → General → Updates for one-click in-app updates
 
 </details>

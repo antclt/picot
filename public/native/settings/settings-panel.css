@@ -221,6 +221,10 @@
   border-color: var(--border-hover);
 }
 
+.settings-language-select {
+  width: min(220px, 48%);
+}
+
 .settings-static-value {
   max-width: 56%;
   overflow: hidden;

@@ -15,14 +15,17 @@
 @import url("ui/conv-nav.css");
 @import url("native/session/session-sidebar.css");
 @import url("native/workspace/file-browser.css");
+@import url("native/workspace/file-preview-panel.css");
 @import url("native/session/session-search-dialog.css");
 @import url("native/workspace/header-open-app.css");
 @import url("native/extensions/command-palette.css");
 @import url("native/features/lan-qr.css");
 @import url("native/composer/composer-images.css");
 @import url("native/composer/composer-slash-menu.css");
+@import url("native/composer/at-file-mention.css");
 @import url("native/composer/queued-messages.css");
 @import url("native/features/rpiv-todo-mirror.css");
+@import url("native/features/terminal-panel.css");
 @import url("native/notifications/notification-center.css");
 @import url("native/extensions/dialog.css");
 @import url("native/extensions/inline-extension-prompt.css");
@@ -32,6 +35,7 @@
 @import url("native/messages.css");
 @import url("native/composer.css");
 @import url("native/settings/package-browse.css");
+@import url("native/settings/skills-page.css");
 @import url("components/chat-settings-panel.css");
 @import url("native/settings/settings-panel.css");
 @import url("native/settings/settings-config.css");
@@ -67,6 +71,48 @@ select:focus-visible {
 }
 
 /* Theme variables moved to style-theme.css */
+
+@font-face {
+  font-family: "Picot Mono Nerd";
+  src: url("./fonts/terminal/FiraCodeNerdFontMono-Regular.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Picot Mono Nerd";
+  src: url("./fonts/terminal/FiraCodeNerdFontMono-Bold.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Picot CJK";
+  src: url("./fonts/cjk/LXGWWenKaiLite-Regular.gb2312.woff2") format("woff2");
+  unicode-range: U+3000-303F, U+4E00-9FFF, U+FF00-FFEF;
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+.message.assistant .message-content,
+.message.user .message-content,
+.file-markdown-preview {
+  font-family:
+    "Picot CJK", -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text",
+    "Helvetica Neue", sans-serif;
+}
+
+.file-code-editor .cm-editor,
+.file-code-editor .cm-scroller,
+.file-code-editor .cm-content,
+.file-code-editor .cm-gutters {
+  font-family:
+    "Picot Mono Nerd", ui-monospace, SFMono-Regular, Menlo, Monaco, "Cascadia Mono", Consolas,
+    "Liberation Mono", monospace;
+}
 
 /* touch-action: manipulation on all interactive elements prevents 300ms tap
    delay on mobile and disables double-tap-to-zoom on buttons/links. */
@@ -117,6 +163,10 @@ body {
   resize: none;
 }
 
+.workspace-content > .app-side-panel {
+  margin-top: var(--workspace-header-offset, 36px);
+}
+
 .app-side-panel-resize-handle {
   position: absolute;
   top: 0;
@@ -142,6 +192,17 @@ body {
 .app-side-panel-resize-handle:hover::after,
 body.is-resizing-side-panel .app-side-panel-resize-handle::after {
   background: var(--accent);
+}
+
+/* Variant for left-edge panels (drag handle sits on the right border) */
+.app-side-panel-resize-handle--right-edge {
+  left: auto;
+  right: -4px;
+}
+
+.app-side-panel-resize-handle--right-edge::after {
+  left: auto;
+  right: 3px;
 }
 
 body.is-resizing-side-panel {

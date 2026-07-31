@@ -29,50 +29,17 @@ Picot 将 `pi` 运行时**直接打包进 .app**，无需单独安装 `pi`，无
 
 ## 安装
 
-**无需单独安装 `pi` CLI** — Picot 内置了自己的 pi 运行时。
-
-### 一键安装（推荐）
-
-**macOS / Linux：**
-```bash
-curl -fsSL https://raw.githubusercontent.com/shixin-guo/picot/main/scripts/install.sh | bash
-```
-
-**Windows（PowerShell）：**
-```powershell
-irm https://raw.githubusercontent.com/shixin-guo/picot/main/scripts/install.ps1 | iex
-```
-
-脚本会自动识别系统和架构，下载对应安装包并完成安装。macOS 下还会自动清除 Gatekeeper 检疫属性，无需手动点击「仍要打开」。
-
-安装指定版本：
-```bash
-# macOS / Linux
-curl -fsSL https://raw.githubusercontent.com/shixin-guo/picot/main/scripts/install.sh | bash -s -- --version v0.3.0
-
-# Windows — 企业 MSI 部署
-& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/shixin-guo/picot/main/scripts/install.ps1'))) -Version v0.3.0 -MSI
-```
-
-### 手动下载
-
 [从 GitHub Releases 下载](https://github.com/shixin-guo/picot/releases)
 
-| 平台 | 文件 |
-|------|------|
-| macOS Apple Silicon | `Picot_*_aarch64.dmg` |
-| macOS Intel | `Picot_*_x64.dmg` |
-| Linux x86\_64（Debian/Ubuntu） | `Picot_*_amd64.deb` |
-| Linux arm64（Debian/Ubuntu） | `Picot_*_arm64.deb` |
-| Linux x86\_64（RHEL/Fedora） | `Picot-*-1.x86_64.rpm` |
-| Linux arm64（RHEL/Fedora） | `Picot-*-1.aarch64.rpm` |
-| Windows x64 | `Picot_*_x64-setup.exe` |
-| Windows arm64 | `Picot_*_arm64-setup.exe` |
+**无需单独安装 `pi` CLI** — Picot 内置了自己的 pi 运行时。
 
 ### macOS 未签名提示
 
-Picot 目前发布的 macOS 版本未经 Apple 开发者 ID 签名/公证。
-使用一键安装脚本会自动处理此问题。如需手动安装：
+Picot 目前发布的 macOS 版本未经 Apple 开发者 ID 签名/公证，系统可能弹出：
+
+`"Picot" 无法打开，因为无法验证开发者。`
+
+**解决方法：**
 
 1. 将 `Picot.app` 拖入 `/Applications`
 2. 右键点击 → **打开**
@@ -96,7 +63,7 @@ Picot 目前发布的 macOS 版本未经 Apple 开发者 ID 签名/公证。
 2. 点击项目气泡或选择一个文件夹
 3. 开始对话 — 嵌入的 pi Agent 会自动在该工作区启动
 
-通过任意工作区内的 `pi /login` 提供模型凭证，或直接写入 `~/.pi/agent/auth.json`。Picot 本身不管理凭证。
+通过任意工作区内的 `pi /login` 提供模型凭证，或直接写入 `~/.pi/agent/auth.json`。Picot 本身不管理凭证。界面提供英文和中文。
 
 ---
 
@@ -119,9 +86,19 @@ Picot 目前发布的 macOS 版本未经 Apple 开发者 ID 签名/公证。
 - 一键复制任意消息
 - 滚动到底部按钮，含未读消息提示
 - **消息队列** — Agent 工作时可继续输入，消息以气泡形式排队，完成后自动依序发送
+- **`@` 文件提及** — 在任意输入框输入 `@` 即可搜索并插入文件路径引用（工作区、`../`、`~/` 或绝对路径）；主聊天、Side Chat、Quick Chat 通用
 - **对话轮次导航条** — 聊天区旁的 Codex 风格圆点轨道，悬浮预览、点击跳转到对应轮次
 - **命令面板** — 快速执行压缩上下文、展开/折叠所有工具卡片、打开设置、查看帮助
 - **从任意消息分叉** — 从对话中任意一点分叉出新会话
+
+</details>
+
+<details>
+<summary><strong>⚡ 临时对话</strong></summary>
+
+- **Side Chat** 在当前工作区启动独立且不保存的 Pi 进程，保留工具能力；可与文件标签共用右侧面板，最多打开五个——只要还有 Side Chat 标签，关闭最后一个文件标签也不会收起面板，仅在文件与 Side Chat 标签都关闭后才收起。
+- **Quick Chat** 是单个非模态、禁用工具且不保存的对话；从侧栏搜索框后紧邻的图标打开。
+- 两者都与主聊天共用模型选择、思考等级、语音输入和图标控件；仅在已认证的桌面窗口可用，移动端与局域网访问中不会显示。
 
 </details>
 
@@ -133,6 +110,9 @@ Picot 目前发布的 macOS 版本未经 Apple 开发者 ID 签名/公证。
 - 跨所有会话历史**全文搜索**，高亮匹配片段
 - 会话按创建时间排序，活跃会话显示绿点
 - 内联重命名、收藏、标签和筛选
+- **工作区 Focus** — 点击当前工作区的箭头，将左侧栏切换为任务视图；即使新任务尚未创建第一个保存的会话也可进入
+- **安全单条删除** — 可从 Focus 或「已归档」删除会话；运行中的会话会被服务端拒绝
+- **最近访问** — 跨工作区的最近使用列表固定显示最后访问的五个会话
 
 </details>
 
@@ -206,6 +186,7 @@ Picot 目前发布的 macOS 版本未经 Apple 开发者 ID 签名/公证。
 - 毛玻璃头部和输入栏（`backdrop-filter: blur`）
 - macOS 原生标题栏 overlay 集成
 - 支持从顶部**拖动窗口**，媲美原生 App 体验
+- **语言** — 可在英文、简体中文和跟随系统之间即时切换
 
 </details>
 
@@ -218,11 +199,14 @@ Picot 目前发布的 macOS 版本未经 Apple 开发者 ID 签名/公证。
 </details>
 
 <details>
-<summary><strong>🗄️ 文件浏览器</strong></summary>
+<summary><strong>🗄️ 文件浏览、预览与编辑</strong></summary>
 
-- 右侧边栏懒加载文件树
-- 浏览目录，原生方式打开文件
-- 拖拽文件到输入框以插入路径
+- 右侧边栏提供懒加载的工作区文件树
+- 单击文件即可在可调整宽度的标签预览面板中打开；每个工作区独立恢复标签
+- 可预览 Markdown、图片、PDF 文档和源代码；Markdown 渲染前会经过安全清理
+- 内置 CodeMirror 编辑器可编辑受支持的文本文件，提供语法高亮、自动换行、搜索、跳转行、自动保存和外部修改冲突保护
+- 双击文件可使用系统默认桌面应用打开
+- 将文件从树中拖到聊天输入框，可插入工作区相对的 `@path` 引用
 
 </details>
 
@@ -237,6 +221,7 @@ Picot 目前发布的 macOS 版本未经 Apple 开发者 ID 签名/公证。
 - 思考级别切换（关闭 / 低 / 中 / 高）
 - 自动和手动**上下文压缩**，含状态显示
 - 推送通知开关
+- **技能管理** — 设置 → 技能：按 source root 浏览所有发现的技能，用 Pi 的 `!`/`+`/`-` 规则语义启用/禁用单个技能或整组（下次会话/重启后生效）
 - **自动更新** — 设置 → 通用 → 更新，一键应用内升级
 
 </details>

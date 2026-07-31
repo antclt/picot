@@ -1,6 +1,6 @@
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Component, Path, PathBuf};
 use std::process::Command;
 use std::sync::{Arc, RwLock};
@@ -27,6 +27,50 @@ pub struct FileEntry {
     pub kind: FileKind,
     /// Byte size of the file; `None` for directories or when metadata is unavailable.
     pub size: Option<u64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileMentionCandidate {
+    pub value: String,
+    pub label: String,
+    pub description: String,
+    pub is_directory: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileMentionSearchResult {
+    pub items: Vec<FileMentionCandidate>,
+    pub truncated: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileContent {
+    pub path: String,
+    pub content: String,
+    pub size: u64,
+    pub mtime_ms: f64,
+    pub mime_type: String,
+    pub is_binary: bool,
+    pub truncated: bool,
+    pub editable: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RawFileContent {
+    pub bytes: Vec<u8>,
+    pub mime_type: String,
+    pub size: u64,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum WriteFileResult {
+    Saved { size: u64, mtime_ms: f64 },
+    Conflict,
+    Invalid,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -153,6 +197,8 @@ pub enum HostDataError {
     InvalidRelativePath,
     OutsideWorkspace,
     NotDirectory,
+    NotFile,
+    InvalidMentionQuery,
     Io(String),
 }
 
@@ -270,6 +316,224 @@ impl HostDataPlane {
                 .then_with(|| left.name.to_lowercase().cmp(&right.name.to_lowercase()))
         });
         Ok(entries)
+    }
+
+    pub fn search_file_mentions(
+        &self,
+        workspace_id: &str,
+        query: &str,
+    ) -> Result<FileMentionSearchResult, HostDataError> {
+        let root = self.workspace_root(workspace_id)?;
+        if !query.starts_with('@') || query.contains('\0') {
+            return Err(HostDataError::InvalidMentionQuery);
+        }
+        let raw = query.strip_prefix('@').unwrap_or_default();
+        let (is_quoted, body) = if let Some(rest) = raw.strip_prefix('"') {
+            (true, rest.strip_suffix('"').unwrap_or(rest))
+        } else {
+            (false, raw)
+        };
+        let normalized = body.replace('\\', "/");
+        if normalized.starts_with('/') || normalized.split('/').any(|part| part == "..") {
+            return Err(HostDataError::InvalidMentionQuery);
+        }
+        let (display_base, fuzzy) = match normalized.rsplit_once('/') {
+            Some((base, fuzzy)) => (format!("{base}/"), fuzzy.to_owned()),
+            None => (String::new(), normalized.clone()),
+        };
+        if normalized
+            .split('/')
+            .filter(|part| !part.is_empty() && *part != ".")
+            .any(is_ignored_mention_dir)
+        {
+            return Ok(FileMentionSearchResult {
+                items: Vec::new(),
+                truncated: false,
+            });
+        }
+        let base_dir = match safe_join(&root, &display_base) {
+            Ok(path) => path,
+            Err(HostDataError::Io(_)) | Err(HostDataError::NotDirectory) => {
+                return Ok(FileMentionSearchResult {
+                    items: Vec::new(),
+                    truncated: false,
+                });
+            }
+            Err(error) => return Err(error),
+        };
+        let mut walk = FileMentionWalk::new(root.as_path(), fuzzy.to_lowercase(), is_quoted);
+        walk.collect(&base_dir, &display_base)?;
+        walk.collected.sort_by(|left, right| {
+            right
+                .0
+                .cmp(&left.0)
+                .then_with(|| left.1.description.cmp(&right.1.description))
+        });
+        Ok(FileMentionSearchResult {
+            items: walk
+                .collected
+                .into_iter()
+                .take(20)
+                .map(|(_, item)| item)
+                .collect(),
+            truncated: walk.truncated,
+        })
+    }
+
+    pub fn read_file_content(
+        &self,
+        workspace_id: &str,
+        relative_path: &str,
+    ) -> Result<FileContent, HostDataError> {
+        let root = self.workspace_root(workspace_id)?;
+        let path = safe_join(&root, relative_path)?;
+        let metadata =
+            std::fs::metadata(&path).map_err(|error| HostDataError::Io(error.to_string()))?;
+        if !metadata.is_file() {
+            return Err(HostDataError::NotFile);
+        }
+
+        let mut file =
+            std::fs::File::open(&path).map_err(|error| HostDataError::Io(error.to_string()))?;
+        let mut prefix = [0_u8; BINARY_PREFIX_BYTES];
+        let prefix_len = file
+            .read(&mut prefix)
+            .map_err(|error| HostDataError::Io(error.to_string()))?;
+        let classification = classify_preview_file(&path, &prefix[..prefix_len]);
+        let mtime_ms = file_mtime_ms(&metadata)?;
+
+        if matches!(
+            classification.kind,
+            PreviewFileKind::Image | PreviewFileKind::Pdf
+        ) {
+            return Ok(FileContent {
+                path: relative_path.to_owned(),
+                content: String::new(),
+                size: metadata.len(),
+                mtime_ms,
+                mime_type: classification.mime_type.to_owned(),
+                is_binary: false,
+                truncated: false,
+                editable: false,
+            });
+        }
+
+        if classification.kind != PreviewFileKind::Text {
+            return Ok(FileContent {
+                path: relative_path.to_owned(),
+                content: String::new(),
+                size: metadata.len(),
+                mtime_ms,
+                mime_type: classification.mime_type.to_owned(),
+                is_binary: true,
+                truncated: false,
+                editable: false,
+            });
+        }
+
+        let read_len = metadata.len().min(TEXT_READ_LIMIT as u64) as usize;
+        let mut file =
+            std::fs::File::open(&path).map_err(|error| HostDataError::Io(error.to_string()))?;
+        let mut buf = vec![0_u8; read_len];
+        let bytes_read = file
+            .read(&mut buf)
+            .map_err(|error| HostDataError::Io(error.to_string()))?;
+        buf.truncate(bytes_read);
+        let is_binary = is_binary_by_prefix(&buf);
+        Ok(FileContent {
+            path: relative_path.to_owned(),
+            content: String::from_utf8_lossy(&buf).into_owned(),
+            size: metadata.len(),
+            mtime_ms,
+            mime_type: classification.mime_type.to_owned(),
+            is_binary,
+            truncated: metadata.len() > TEXT_READ_LIMIT as u64,
+            editable: classification.editable
+                && !is_binary
+                && metadata.len() <= EDIT_SIZE_LIMIT as u64,
+        })
+    }
+
+    pub fn raw_file_content(
+        &self,
+        workspace_id: &str,
+        relative_path: &str,
+    ) -> Result<RawFileContent, HostDataError> {
+        let root = self.workspace_root(workspace_id)?;
+        let path = safe_join(&root, relative_path)?;
+        let metadata =
+            std::fs::metadata(&path).map_err(|error| HostDataError::Io(error.to_string()))?;
+        if !metadata.is_file() {
+            return Err(HostDataError::NotFile);
+        }
+        let mut file =
+            std::fs::File::open(&path).map_err(|error| HostDataError::Io(error.to_string()))?;
+        let mut prefix = [0_u8; BINARY_PREFIX_BYTES];
+        let prefix_len = file
+            .read(&mut prefix)
+            .map_err(|error| HostDataError::Io(error.to_string()))?;
+        let classification = classify_preview_file(&path, &prefix[..prefix_len]);
+        if !matches!(
+            classification.kind,
+            PreviewFileKind::Image | PreviewFileKind::Pdf
+        ) {
+            return Err(HostDataError::NotFile);
+        }
+        let bytes = std::fs::read(&path).map_err(|error| HostDataError::Io(error.to_string()))?;
+        Ok(RawFileContent {
+            bytes,
+            mime_type: classification.mime_type.to_owned(),
+            size: metadata.len(),
+        })
+    }
+
+    pub fn write_file_content(
+        &self,
+        workspace_id: &str,
+        relative_path: &str,
+        content: &str,
+        expected_mtime_ms: f64,
+        force: bool,
+    ) -> Result<WriteFileResult, HostDataError> {
+        if content.len() > EDIT_SIZE_LIMIT {
+            return Ok(WriteFileResult::Invalid);
+        }
+        let root = self.workspace_root(workspace_id)?;
+        let path = safe_join(&root, relative_path)?;
+        let metadata =
+            std::fs::metadata(&path).map_err(|error| HostDataError::Io(error.to_string()))?;
+        if !metadata.is_file() || metadata.len() > EDIT_SIZE_LIMIT as u64 {
+            return Ok(WriteFileResult::Invalid);
+        }
+        let mut file =
+            std::fs::File::open(&path).map_err(|error| HostDataError::Io(error.to_string()))?;
+        let mut prefix = [0_u8; BINARY_PREFIX_BYTES];
+        let prefix_len = file
+            .read(&mut prefix)
+            .map_err(|error| HostDataError::Io(error.to_string()))?;
+        if classify_preview_file(&path, &prefix[..prefix_len]).kind != PreviewFileKind::Text {
+            return Ok(WriteFileResult::Invalid);
+        }
+        let current_mtime_ms = file_mtime_ms(&metadata)?;
+        if !force && (current_mtime_ms - expected_mtime_ms).abs() > 1.0 {
+            return Ok(WriteFileResult::Conflict);
+        }
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .truncate(true)
+            .open(&path)
+            .map_err(|error| HostDataError::Io(error.to_string()))?;
+        file.write_all(content.as_bytes())
+            .map_err(|error| HostDataError::Io(error.to_string()))?;
+        file.sync_all()
+            .map_err(|error| HostDataError::Io(error.to_string()))?;
+        let metadata = file
+            .metadata()
+            .map_err(|error| HostDataError::Io(error.to_string()))?;
+        Ok(WriteFileResult::Saved {
+            size: metadata.len(),
+            mtime_ms: file_mtime_ms(&metadata)?,
+        })
     }
 
     /// Return the registered filesystem root (working directory) for a
@@ -1167,6 +1431,167 @@ fn message_text(content: Option<&serde_json::Value>) -> Option<String> {
     }
 }
 
+const TEXT_READ_LIMIT: usize = 2 * 1024 * 1024;
+const EDIT_SIZE_LIMIT: usize = 1024 * 1024;
+const BINARY_PREFIX_BYTES: usize = 512;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PreviewFileKind {
+    Text,
+    Image,
+    Pdf,
+    Binary,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct PreviewFileClassification {
+    mime_type: &'static str,
+    kind: PreviewFileKind,
+    editable: bool,
+}
+
+const IGNORED_MENTION_DIRS: &[&str] = &[
+    ".git",
+    "node_modules",
+    "dist",
+    "build",
+    "target",
+    ".next",
+    ".nuxt",
+    ".cache",
+    "coverage",
+    ".venv",
+    "venv",
+    "__pycache__",
+];
+
+fn is_ignored_mention_dir(name: &str) -> bool {
+    IGNORED_MENTION_DIRS.contains(&name)
+}
+
+struct FileMentionWalk<'a> {
+    root: &'a Path,
+    fuzzy: String,
+    is_quoted: bool,
+    visited: usize,
+    collected: Vec<(u16, FileMentionCandidate)>,
+    truncated: bool,
+}
+
+impl<'a> FileMentionWalk<'a> {
+    fn new(root: &'a Path, fuzzy: String, is_quoted: bool) -> Self {
+        Self {
+            root,
+            fuzzy,
+            is_quoted,
+            visited: 0,
+            collected: Vec::new(),
+            truncated: false,
+        }
+    }
+
+    fn collect(&mut self, dir: &Path, display_base: &str) -> Result<(), HostDataError> {
+        if self.visited >= 10_000 || self.collected.len() >= 200 {
+            self.truncated = true;
+            return Ok(());
+        }
+        let entries =
+            std::fs::read_dir(dir).map_err(|error| HostDataError::Io(error.to_string()))?;
+        for entry in entries.filter_map(Result::ok) {
+            if self.visited >= 10_000 || self.collected.len() >= 200 {
+                self.truncated = true;
+                return Ok(());
+            }
+            self.visited += 1;
+            let name = entry.file_name().to_string_lossy().into_owned();
+            let Ok(file_type) = entry.file_type() else {
+                continue;
+            };
+            let is_directory = file_type.is_dir();
+            if !is_directory && !file_type.is_file() {
+                continue;
+            }
+            if is_directory && is_ignored_mention_dir(&name) {
+                continue;
+            }
+            let display_path = format!("{display_base}{name}");
+            let score = score_mention(&display_path, &name, &self.fuzzy, is_directory);
+            if score > 0 {
+                self.collected.push((
+                    score,
+                    build_file_mention_candidate(
+                        &display_path,
+                        is_directory,
+                        is_quoted_display(self.is_quoted, &display_path),
+                    ),
+                ));
+            }
+            if is_directory {
+                let path = entry.path();
+                if path.starts_with(self.root) {
+                    self.collect(&path, &format!("{display_path}/"))?;
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+fn score_mention(display_path: &str, name: &str, fuzzy: &str, is_directory: bool) -> u16 {
+    let base = if fuzzy.is_empty() {
+        if is_directory { 11 } else { 1 }
+    } else {
+        let name = name.to_lowercase();
+        if name == fuzzy {
+            100
+        } else if name.starts_with(fuzzy) {
+            80
+        } else if name.contains(fuzzy) {
+            50
+        } else if display_path.to_lowercase().contains(fuzzy) {
+            30
+        } else {
+            0
+        }
+    };
+    if base > 0 && is_directory {
+        base + 10
+    } else {
+        base
+    }
+}
+
+fn is_quoted_display(was_quoted: bool, display_path: &str) -> bool {
+    was_quoted || display_path.contains(' ')
+}
+
+fn build_file_mention_candidate(
+    display_path: &str,
+    is_directory: bool,
+    needs_quotes: bool,
+) -> FileMentionCandidate {
+    let value_path = if is_directory {
+        format!("{display_path}/")
+    } else {
+        display_path.to_owned()
+    };
+    let value = if needs_quotes {
+        format!("@\"{value_path}\"")
+    } else {
+        format!("@{value_path}")
+    };
+    let label = Path::new(display_path)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or(display_path);
+    FileMentionCandidate {
+        value,
+        label: format!("{label}{}", if is_directory { "/" } else { "" }),
+        description: display_path.to_owned(),
+        is_directory,
+    }
+}
+
 fn safe_join(root: &Path, relative_path: &str) -> Result<PathBuf, HostDataError> {
     let relative = Path::new(relative_path);
     if relative.is_absolute()
@@ -1184,6 +1609,126 @@ fn safe_join(root: &Path, relative_path: &str) -> Result<PathBuf, HostDataError>
         return Err(HostDataError::OutsideWorkspace);
     }
     Ok(canonical)
+}
+
+fn file_mtime_ms(metadata: &std::fs::Metadata) -> Result<f64, HostDataError> {
+    let modified = metadata
+        .modified()
+        .map_err(|error| HostDataError::Io(error.to_string()))?;
+    let duration = modified
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|error| HostDataError::Io(error.to_string()))?;
+    Ok(duration.as_secs_f64() * 1000.0)
+}
+
+fn preview_extension(path: &Path) -> String {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .and_then(|name| {
+            name.rsplit_once('.')
+                .map(|(_, ext)| ext.to_ascii_lowercase())
+        })
+        .unwrap_or_default()
+}
+
+fn is_binary_by_prefix(prefix: &[u8]) -> bool {
+    prefix
+        .iter()
+        .take(BINARY_PREFIX_BYTES)
+        .any(|byte| *byte == 0)
+}
+
+fn classify_preview_file(path: &Path, prefix: &[u8]) -> PreviewFileClassification {
+    let ext = preview_extension(path);
+    if ext == "pdf" || prefix.starts_with(b"%PDF") {
+        return PreviewFileClassification {
+            mime_type: "application/pdf",
+            kind: PreviewFileKind::Pdf,
+            editable: false,
+        };
+    }
+    if let Some(mime_type) = image_mime_type(&ext) {
+        return PreviewFileClassification {
+            mime_type,
+            kind: PreviewFileKind::Image,
+            editable: false,
+        };
+    }
+    if matches!(
+        ext.as_str(),
+        "mbox"
+            | "doc"
+            | "docx"
+            | "rtf"
+            | "odt"
+            | "ppt"
+            | "pptx"
+            | "odp"
+            | "xls"
+            | "xlsx"
+            | "ods"
+            | "eml"
+            | "msg"
+    ) {
+        return PreviewFileClassification {
+            mime_type: "application/octet-stream",
+            kind: PreviewFileKind::Binary,
+            editable: false,
+        };
+    }
+    if is_binary_by_prefix(prefix) {
+        return PreviewFileClassification {
+            mime_type: "application/octet-stream",
+            kind: PreviewFileKind::Binary,
+            editable: false,
+        };
+    }
+    PreviewFileClassification {
+        mime_type: text_mime_type(&ext),
+        kind: PreviewFileKind::Text,
+        editable: true,
+    }
+}
+
+fn image_mime_type(ext: &str) -> Option<&'static str> {
+    match ext {
+        "png" => Some("image/png"),
+        "jpg" | "jpeg" => Some("image/jpeg"),
+        "gif" => Some("image/gif"),
+        "webp" => Some("image/webp"),
+        "svg" => Some("image/svg+xml"),
+        "ico" => Some("image/x-icon"),
+        "bmp" => Some("image/bmp"),
+        _ => None,
+    }
+}
+
+fn text_mime_type(ext: &str) -> &'static str {
+    match ext {
+        "js" | "jsx" | "mjs" | "cjs" => "text/javascript",
+        "ts" | "tsx" | "mts" | "cts" => "text/typescript",
+        "json" | "jsonc" => "application/json",
+        "yaml" | "yml" => "text/yaml",
+        "toml" => "application/toml",
+        "xml" => "text/xml",
+        "html" | "htm" => "text/html",
+        "css" | "scss" | "sass" | "less" => "text/css",
+        "md" | "markdown" | "mdown" | "mkd" => "text/markdown",
+        "py" | "pyw" | "pyi" => "text/x-python",
+        "r" => "text/x-r-source",
+        "rb" => "text/x-ruby",
+        "go" => "text/x-go",
+        "rs" => "text/x-rust",
+        "c" | "h" => "text/x-c",
+        "cpp" | "hpp" | "cc" => "text/x-c++",
+        "sh" | "bash" | "zsh" => "application/x-sh",
+        "sql" => "application/sql",
+        "csv" => "text/csv",
+        "tsv" => "text/tab-separated-values",
+        "log" | "env" | "conf" | "ini" | "cfg" => "text/plain",
+        "diff" | "patch" => "text/x-diff",
+        _ => "text/plain",
+    }
 }
 
 #[cfg(test)]

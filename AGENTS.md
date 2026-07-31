@@ -1,10 +1,23 @@
-# Picot
+# Picot agent guide
 
-## Product
+This file contains repository-wide development rules. Product architecture,
+feature invariants, transport paths, security boundaries, and module ownership
+live in [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
-**Picot** is a local desktop GUI for the Pi coding agent. It is a Tauri app that bundles its own `pi` runtime — there is no separate install of `pi` to manage.
+## Read first
 
-### Architecture
+- Read the applicable `ARCHITECTURE.md` section and its linked design documents
+  before changing UI behavior, persistence, workspace I/O, or cross-process
+  communication.
+- For Quick Chat or Side Chat work, read
+  [`docs/superpowers/specs/2026-07-15-quick-and-side-chat-design.md`](docs/superpowers/specs/2026-07-15-quick-and-side-chat-design.md)
+  and the temporary-chat architecture section.
+- Before changing a browser/server adapter, popup/overlay, or shared-state
+  rerender behavior, read and apply [`docs/engineering-lessons.md`](docs/engineering-lessons.md).
+- Update `ARCHITECTURE.md` when an implementation materially changes its
+  architecture, invariants, lifecycle, security boundary, or validation
+  contract. Changes to LAN access, cross-platform paths, or static serving also
+  require the corresponding architecture update.
 
 Tauri wraps the web UI. Rust starts a native `HostServer` plus a managed `pi --mode rpc` subprocess using the embedded pi binary shipped in `src-tauri/resources/pi/` (downloaded by `scripts/fetch-pi-binary.js` from pi-mono releases at the version pinned in `scripts/pi-version.json`). The WebView talks to the Rust host over `/v2/ws`; the host bridges runtime requests to Pi over stdio RPC.
 
@@ -210,27 +223,64 @@ Net effect: there is no path that ships a Picot release without the embedded pi 
 After every edit under `src-tauri/` (or any Rust fix), run the lint+check script before declaring the work done. It catches compile-time errors (e.g. `E0282`, `E0061`, Tauri v1→v2 API drift, deprecated APIs) without producing a binary, so it is much faster than `tauri build`.
 
 ```bash
+bun install --frozen-lockfile
+bun run dev
+bun run test
+bun run check
 bun run check:rust
-# or directly
-bash scripts/check-rust.sh
+bun run build:extensions
 ```
 
-`scripts/check-rust.sh` runs, in order:
+Useful focused test form:
 
-1. `cargo check --all-targets` — type/borrow/API signature check (~1–5s).
-2. `cargo clippy --all-targets -- -D warnings` — lints, warnings as errors.
-3. `cargo fmt --check` — advisory only; prints a hint if formatting drifts, but does not fail the script.
+```bash
+bun run vitest run public/settings-save-status.test.js
+```
 
-### Rules
+## Frontend and extension checks
 
-- **Never** run `tauri build` / `cargo build` just to verify a fix — use `bun run check:rust` instead. Per project policy, full builds are not used for verification.
-- After editing any `*.rs` file under `src-tauri/`, run `bun run check:rust` and only mark the task complete if it exits 0.
-- When upgrading Tauri or its plugins, run the script first to surface any deprecation warnings before touching feature code.
+Biome is the JS/TS formatter and linter.
 
-## Auto-updater
+```bash
+bun run check       # lint, format, and design check
+bun run check:fix   # safe automatic fixes
+bun run lint
+bun run format
+bun run format:fix
+```
+
+After editing `.js` or `.ts` under `public/` or `extensions/`, run `bun run check`.
 
 Picot uses the Tauri v2 updater plugin to fetch new releases from GitHub. The build side is wired into `.github/workflows/release.yml` via the `TAURI_SIGNING_PRIVATE_KEY` / `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` secrets. See `docs/AUTO_UPDATER.md` for the one-time signing-key setup and how `latest.json` flows from CI → GitHub release → installed app.
 
-## Tests
+## Module discipline
 
-Vitest tests live in `public/` as `*.test.js` files (jsdom environment). The full `bun run test` also runs `scripts/check-tauri-permissions.js` to validate Tauri capability permissions.
+The WebView is vanilla JavaScript with no framework.
+
+- Keep one concern per file; do not add unrelated logic for convenience.
+- Keep `app.js` as an orchestrator. Put new feature logic in a dedicated module
+  and import it explicitly.
+- Extract a feature adding roughly 50 lines or more into its own module.
+- Do not mutate shared state as an import side effect.
+- Use kebab-case filenames that describe one responsibility.
+- For loopback access, filesystem paths, static assets, or locale coverage,
+  run the full `bun run test` suite before completion.
+
+## Verification
+
+- After Rust edits, run `bun run check:rust`; do not use `tauri build` or
+  `cargo build` merely to verify a fix.
+- After frontend or extension edits, run `bun run check`; run the focused test
+  first, then the relevant broader suite.
+- `bun run test` includes Vitest and Tauri capability validation.
+- Do not claim completion with failing tests or undocumented intentional
+  warnings.
+
+## Embedded Pi version
+
+The embedded binary is the only Pi runtime Picot launches; do not rely on a
+user-installed `pi` from `$PATH`. To upgrade it, follow the verified procedure
+in [`ARCHITECTURE.md`](ARCHITECTURE.md#如何读这个仓库): change
+`scripts/pi-version.json`, run `bun run fetch:pi`, smoke-test the embedded
+binary and `bun run dev`, then commit only the version pin—not
+`src-tauri/resources/pi/`.

@@ -1,3 +1,5 @@
+import { t } from "../i18n.js";
+
 export function setupContextViz({
   tokenUsageEl,
   contextViz,
@@ -28,9 +30,9 @@ export function setupContextViz({
     const free = Math.max(0, total - totalUsed);
 
     const segments = [
-      { key: "cache", label: "Cached (reused)", tokens: cacheRead, color: "cache" },
-      { key: "input", label: "Uncached", tokens: input, color: "input" },
-      { key: "free", label: "Available", tokens: free, color: "free" },
+      { key: "cache", label: t("context.cached"), tokens: cacheRead, color: "cache" },
+      { key: "input", label: t("context.input"), tokens: input, color: "input" },
+      { key: "free", label: t("context.available"), tokens: free, color: "free" },
     ];
 
     if (contextBar) {
@@ -40,7 +42,10 @@ export function setupContextViz({
         const element = document.createElement("div");
         element.className = `context-bar-segment ${segment.color}`;
         element.style.width = `${(segment.tokens / total) * 100}%`;
-        element.title = `${segment.label}: ${formatTokens(segment.tokens)}`;
+        element.title = t("context.tooltip", {
+          label: segment.label,
+          tokens: formatTokens(segment.tokens),
+        });
         contextBar.appendChild(element);
       }
     }
@@ -68,10 +73,28 @@ export function setupContextViz({
     }
 
     const percent = Math.round((totalUsed / total) * 100);
-    if (contextVizUsed) contextVizUsed.textContent = `${percent}% used`;
+    if (contextVizUsed) contextVizUsed.textContent = t("context.used", { pct: percent });
     if (contextVizTotal) {
       contextVizTotal.textContent = `${formatTokens(totalUsed)} / ${formatTokens(total)}`;
     }
+  }
+
+  // Portal the popover to <body> so it escapes the header's stacking context
+  // (z-index: 10). Without this, the file preview panel covers it. We move
+  // the element once at setup and re-position it with fixed coordinates on
+  // every open so it tracks the button even if the header layout shifts.
+  if (contextViz.parentElement && contextViz.parentElement !== document.body) {
+    document.body.appendChild(contextViz);
+  }
+
+  function positionAndShow() {
+    const rect = tokenUsageEl.getBoundingClientRect();
+    contextViz.style.position = "fixed";
+    contextViz.style.top = `${rect.bottom + 8}px`;
+    // Right-align the popover's right edge with the button's right edge.
+    contextViz.style.right = `${window.innerWidth - rect.right}px`;
+    contextViz.style.left = "auto";
+    contextViz.classList.remove("hidden");
   }
 
   function hide() {
@@ -82,7 +105,7 @@ export function setupContextViz({
     event.stopPropagation();
     if (contextViz.classList.contains("hidden")) {
       updateContextViz();
-      contextViz.classList.remove("hidden");
+      positionAndShow();
     } else {
       hide();
     }
