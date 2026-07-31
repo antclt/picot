@@ -134,6 +134,10 @@
   scrollbar-width: none;
 }
 
+.composer-toolbar.model-menu-open {
+  overflow: visible;
+}
+
 .composer-toolbar::-webkit-scrollbar {
   display: none;
 }

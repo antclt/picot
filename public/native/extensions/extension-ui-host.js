@@ -4,7 +4,7 @@ export class ExtensionUiHost {
   #foregroundSessionId = null;
   #hooks;
   #queues = new Map();
-  #inFlight = new Map(); // sessionId → abort()
+  #inFlight = new Map(); // sessionId → { abort(), target, request }
   #runtime;
   #showDialog;
   #showInlinePrompt;
@@ -45,8 +45,42 @@ export class ExtensionUiHost {
    */
   cancelForeground() {
     const sessionId = this.#foregroundSessionId;
-    const abort = this.#inFlight.get(sessionId);
-    if (abort) abort({ cancel: true });
+    const inFlight = this.#inFlight.get(sessionId);
+    if (inFlight) inFlight.abort({ cancel: true });
+
+    const queue = this.#queues.get(sessionId) ?? [];
+    this.#queues.delete(sessionId);
+    for (const pending of queue) {
+      this.#runtime
+        .request(
+          { type: "extension_ui_response", id: pending.request.id, cancelled: true },
+          pending.target,
+        )
+        .catch(() => {});
+    }
+  }
+
+  /**
+   * Move the currently displayed foreground prompt back into the foreground
+   * queue without answering it. Call this before a full chat history re-render:
+   * renderHistory() clears the messages container, so an inline prompt that is
+   * still in-flight would otherwise lose its clickable DOM while the tool call
+   * stays blocked forever.
+   *
+   * @returns {boolean} true when an in-flight prompt was asked to re-queue.
+   */
+  requeueForegroundPrompt() {
+    const sessionId = this.#foregroundSessionId;
+    const inFlight = this.#inFlight.get(sessionId);
+    if (!inFlight) return false;
+    const queue = this.#queues.get(sessionId) ?? [];
+    queue.unshift({
+      target: structuredClone(inFlight.target),
+      request: structuredClone(inFlight.request),
+    });
+    this.#queues.set(sessionId, queue);
+    inFlight.abort({ cancel: false, requeuedNow: true });
+    return true;
   }
 
   /**
@@ -66,8 +100,8 @@ export class ExtensionUiHost {
     // Abort any in-flight dialog for the previous session so it gets re-queued
     // and shown again when the user returns to that session.
     if (oldId && oldId !== sessionId) {
-      const abort = this.#inFlight.get(oldId);
-      if (abort) abort({ cancel: false });
+      const inFlight = this.#inFlight.get(oldId);
+      if (inFlight) inFlight.abort({ cancel: false });
     }
     if (flush) await this.flushForegroundQueue();
   }
@@ -148,11 +182,16 @@ export class ExtensionUiHost {
     // Track whether this dialog was aborted because the session switched
     // away (re-queue for later) or explicitly cancelled (finalize now — e.g.
     // the user hit Stop/Abort).
-    let requeued = false;
-    this.#inFlight.set(target.sessionId, ({ cancel = false } = {}) => {
-      requeued = !cancel;
-      triggerDismiss();
-    });
+    let disposition = "respond";
+    const inFlight = {
+      target: structuredClone(target),
+      request: structuredClone(request),
+      abort: ({ cancel = false, requeuedNow = false } = {}) => {
+        disposition = requeuedNow ? "requeuedNow" : cancel ? "respond" : "requeueAfter";
+        triggerDismiss();
+      },
+    };
+    this.#inFlight.set(target.sessionId, inFlight);
     let result;
     try {
       const inlineResult = this.#showInlinePrompt(structuredClone(request), { dismissSignal });
@@ -162,8 +201,11 @@ export class ExtensionUiHost {
     } catch {
       result = { cancelled: true };
     }
-    this.#inFlight.delete(target.sessionId);
-    if (requeued) {
+    if (this.#inFlight.get(target.sessionId) === inFlight) {
+      this.#inFlight.delete(target.sessionId);
+    }
+    if (disposition === "requeuedNow") return;
+    if (disposition === "requeueAfter") {
       // Re-queue the request; it will be shown when the session regains focus.
       const queue = this.#queues.get(target.sessionId) ?? [];
       queue.unshift({ target: structuredClone(target), request: structuredClone(request) });

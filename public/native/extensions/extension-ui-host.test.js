@@ -165,4 +165,44 @@ describe("ExtensionUiHost", () => {
       targetA,
     );
   });
+
+  it("re-queues an in-flight prompt so history re-renders can recreate the clickable UI", async () => {
+    const runtime = { request: vi.fn().mockResolvedValue({}) };
+    let shown = 0;
+    const host = new ExtensionUiHost({
+      runtime,
+      showInlinePrompt: (_request, { dismissSignal }) => {
+        shown += 1;
+        if (shown === 1) {
+          return new Promise((resolve) => {
+            dismissSignal.then(() => resolve({ cancelled: true }));
+          });
+        }
+        return Promise.resolve({ value: "1. A — Alpha" });
+      },
+    });
+    host.setForegroundSession("a");
+
+    const handled = host.handle(targetA, {
+      type: "extension_ui_request",
+      id: "inline-1",
+      method: "select",
+      title: "[Choice] Pick one",
+      options: ["1. A — Alpha"],
+    });
+    expect(shown).toBe(1);
+
+    expect(host.requeueForegroundPrompt()).toBe(true);
+
+    expect(runtime.request).not.toHaveBeenCalled();
+
+    await host.flushForegroundQueue();
+    await handled;
+
+    expect(shown).toBe(2);
+    expect(runtime.request).toHaveBeenCalledWith(
+      { type: "extension_ui_response", id: "inline-1", value: "1. A — Alpha" },
+      targetA,
+    );
+  });
 });

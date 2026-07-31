@@ -108,6 +108,7 @@ const modelDropdown = document.getElementById("model-dropdown");
 const modelDropdownBtn = document.getElementById("model-dropdown-btn");
 const modelDropdownLabel = document.getElementById("model-dropdown-label");
 const modelDropdownMenu = document.getElementById("model-dropdown-menu");
+const modelDropdownToolbar = modelDropdown?.closest(".composer-toolbar");
 const thinkingBtn = document.getElementById("thinking-btn");
 const THINKING_LEVELS = ["off", "minimal", "low", "medium", "high"];
 let currentThinkingLevel = "off";
@@ -419,9 +420,10 @@ try {
       .catch(() => null);
     const diskMessages = diskResult?.messages ?? [];
     if (diskMessages.length > 0) {
-      renderHistory(diskMessages);
+      const hadInFlightPrompt = renderHistory(diskMessages);
       convNav.rebuild();
       setStatus("Connected");
+      if (hadInFlightPrompt) await extensionUi.flushForegroundQueue();
     }
   } else {
     input.focus();
@@ -580,9 +582,10 @@ async function switchSession(sessionId) {
   // Phase 2: render history from disk immediately — user sees messages right
   // away without waiting for the Pi process to warm up.
   const diskMessages = diskResult?.messages ?? [];
-  renderHistory(diskMessages);
+  const hadInFlightPrompt = renderHistory(diskMessages);
   convNav.rebuild();
   setStatus("Connected");
+  if (hadInFlightPrompt) await extensionUi.flushForegroundQueue();
 
   // Phase 3: get the authoritative snapshot from Pi (Pi may still be starting).
   // When it arrives, re-render with the live state (model, thinking level,
@@ -984,12 +987,13 @@ async function adoptTarget(nextTarget, { updateRoute = true } = {}) {
 }
 
 function renderHistory(messages) {
+  const hadInFlightPrompt = extensionUi.requeueForegroundPrompt();
   messageRenderer.clear();
   toolRenderer.clear();
   if (messages.length === 0) {
     messageRenderer.renderWelcome();
     applyActiveSearchHighlight({ scrollToFirst: false });
-    return;
+    return hadInFlightPrompt;
   }
 
   // Pre-index tool results by toolCallId for O(1) lookup
@@ -1024,6 +1028,7 @@ function renderHistory(messages) {
   }
   const highlighted = applyActiveSearchHighlight();
   if (highlighted === 0) messageRenderer.forceScrollToBottom();
+  return hadInFlightPrompt;
 }
 
 function applyActiveSearchHighlight({ scrollToFirst = true } = {}) {
@@ -1283,6 +1288,7 @@ function openModelDropdown() {
   renderModelDropdownMenu();
   modelDropdownMenu.classList.remove("hidden");
   modelDropdown?.classList.add("open");
+  modelDropdownToolbar?.classList.add("model-menu-open");
   modelDropdownBtn?.setAttribute("aria-expanded", "true");
   requestAnimationFrame(() => modelDropdownMenu.querySelector(".model-dropdown-search")?.focus());
 }
@@ -1290,6 +1296,7 @@ function openModelDropdown() {
 function closeModelDropdown() {
   modelDropdownMenu?.classList.add("hidden");
   modelDropdown?.classList.remove("open");
+  modelDropdownToolbar?.classList.remove("model-menu-open");
   modelDropdownBtn?.setAttribute("aria-expanded", "false");
 }
 
