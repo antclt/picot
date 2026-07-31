@@ -2,7 +2,9 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-const stylesheet = readFileSync(join(process.cwd(), "public", "style.css"), "utf8");
+const stylesheet = ["public/style.css", "public/components/super-agent-runtime.css"]
+  .map((p) => readFileSync(join(process.cwd(), p), "utf8"))
+  .join("\n");
 
 describe("Super Agent runtime task layout", () => {
   it("keeps hidden quick actions out of the pending title's flex layout", () => {

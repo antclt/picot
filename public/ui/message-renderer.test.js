@@ -152,6 +152,16 @@ describe("MessageRenderer streaming markdown preview", () => {
     expect(el.querySelector("a").getAttribute("href")).toBeNull();
   });
 
+  it("renders a fork action for user messages with an entry id", () => {
+    const events = [];
+    container.addEventListener("messagefork", (event) => events.push(event.detail));
+
+    renderer.renderUserMessage({ content: "Try this path", entryId: "entry-user-1" }, true);
+    container.querySelector(".message-fork-btn").click();
+
+    expect(events).toEqual([{ entryId: "entry-user-1" }]);
+  });
+
   it("highlights keyword matches across rendered messages", () => {
     renderer.renderUserMessage({ content: "Alpha beta gamma" }, true);
     renderer.renderAssistantMessage({ content: "Beta appears twice: beta." }, false, true);
@@ -176,6 +186,23 @@ describe("MessageRenderer streaming markdown preview", () => {
 
     expect(count).toBe(1);
     expect(scrolled).toBe(true);
+  });
+
+  it("can force-scroll after rendering session history", async () => {
+    const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
+    globalThis.requestAnimationFrame = (callback) => {
+      callback();
+      return 0;
+    };
+    Object.defineProperty(container, "scrollHeight", { configurable: true, value: 1200 });
+
+    try {
+      renderer.forceScrollToBottom();
+
+      expect(container.scrollTop).toBe(1200);
+    } finally {
+      globalThis.requestAnimationFrame = originalRequestAnimationFrame;
+    }
   });
 });
 

@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { initI18n } from "../i18n.js";
-import { renderPackageInstallFailure, summarizePackageError } from "./install-status.js";
+import {
+  getPackageInstallFailure,
+  renderPackageInstallFailure,
+  summarizePackageError,
+} from "./install-status.js";
 
 beforeEach(async () => {
   global.fetch = vi.fn(async (url) => {
@@ -58,6 +62,14 @@ describe("package install failure status", () => {
     expect(summarizePackageError("EACCES: permission denied, open ~/.pi/agent/npm")).toBe(
       "Permission denied in ~/.pi/agent/npm (check owner/permissions).",
     );
+  });
+
+  test("returns reusable failure content for notifications", () => {
+    expect(getPackageInstallFailure(new Error("remove failed"), "uninstall")).toEqual({
+      title: "Uninstall failed",
+      note: "Picot could not remove this extension package. Check the error details, then try again.",
+      detail: "remove failed",
+    });
   });
 
   test("does not truncate unknown install errors", () => {

@@ -1,7 +1,7 @@
 // @vitest-environment node
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { syncTelegramCommandMenu } from "./pi-chat-src/live/telegram.ts";
+import { syncTelegramCommandMenu } from "./chat-inbox/live/telegram.ts";
 
 afterEach(() => vi.unstubAllGlobals());
 

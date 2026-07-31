@@ -1,17 +1,15 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 const root = resolve(import.meta.dir, "..");
+const { version: piVersion } = await Bun.file(join(root, "scripts", "pi-version.json")).json();
 const binary = join(
   root,
   "src-tauri",
   "resources",
   "pi",
   process.platform === "win32" ? "pi.exe" : "pi",
-);
-const { version: piVersion } = JSON.parse(
-  await readFile(join(root, "scripts", "pi-version.json"), "utf8"),
 );
 const fixtureDir = join(root, "tests", "fixtures", "pi-rpc", piVersion);
 const update = process.argv.includes("--update");

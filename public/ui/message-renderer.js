@@ -5,7 +5,44 @@
  */
 
 import { onLocaleChange, t } from "../i18n.js";
+import { initImageLightbox } from "./image-lightbox.js";
 import { renderMarkdown, renderStreamingMarkdown, renderUserMarkdown } from "./markdown.js";
+
+/**
+ * Detect and clean up pi-chat transcript format.
+ *
+ * Old format: `- [ISO-timestamp] [uid:ID] name: text`
+ * New format:  `- [uid:ID] name: text`
+ *
+ * Returns the cleaned text (just `name: text` per line, deduplicated when
+ * all lines share the same speaker), or null if the content doesn't look
+ * like a chat transcript.
+ */
+function cleanChatTranscript(text) {
+  if (!text || typeof text !== "string") return null;
+  const lineRe = /^- (?:\[[\dT:.Z+-]+\] )?\[uid:[^\]]+\] ([^:]+): (.*)$/;
+  const lines = text.split("\n").filter((line) => line.trim());
+  if (lines.length === 0) return null;
+  const parsed = lines.map((line) => {
+    const match = line.match(lineRe);
+    return match ? { name: match[1].trim(), text: match[2] } : null;
+  });
+  if (parsed.some((line) => line === null)) return null;
+  const names = [...new Set(parsed.map((line) => line.name))];
+  if (names.length === 1) {
+    return parsed.map((line) => line.text).join("\n");
+  }
+  return parsed.map((line) => `**${line.name}**: ${line.text}`).join("\n\n");
+}
+
+const COPY_ICON =
+  '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+const FORK_ICON =
+  '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>';
+const CHEVRON_ICON =
+  '<svg width="8" height="8" viewBox="0 0 8 8" fill="currentColor" aria-hidden="true"><path d="M2 1l4 3-4 3z"/></svg>';
+const BRAIN_ICON =
+  '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px" aria-hidden="true"><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/><path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/><path d="M12 5v13"/><path d="M6.5 9h11"/><path d="M7 13h10"/></svg>';
 
 export class MessageRenderer {
   constructor(container) {
@@ -14,8 +51,8 @@ export class MessageRenderer {
     this.lastWelcomeOptions = null;
     this._destroyed = false;
 
-    // Track scroll position for smart auto-scroll. Store the handler so destroy()
-    // can remove it; an anonymous listener would leak across view recreations.
+    initImageLightbox(this.container);
+
     this._scrollHandler = () => {
       const threshold = 100;
       this.isNearBottom =
@@ -24,8 +61,6 @@ export class MessageRenderer {
     };
     this.container.addEventListener("scroll", this._scrollHandler);
 
-    // Update already-rendered DOM when the locale changes without re-rendering
-    // streaming content.
     this.unsubscribeLocaleChange = onLocaleChange(() => {
       if (!this.container) return;
       this.container.querySelectorAll(".message-copy-btn").forEach((btn) => {
@@ -44,9 +79,6 @@ export class MessageRenderer {
   clear() {
     if (!this.container) return;
     this.container.replaceChildren();
-    // Session switches reuse the same renderer instance. If the previous session
-    // left the viewport away from bottom, keep new renders from inheriting that
-    // stale anchor state (which can suppress auto-scroll until the user scrolls).
     this.isNearBottom = true;
   }
 
@@ -130,26 +162,30 @@ export class MessageRenderer {
 
     const shortcuts = document.createElement("div");
     shortcuts.className = "shortcuts-hint";
-    shortcuts.appendChild(this._textElement("span", `/ ${t("shortcuts.focusInput")}`));
-    shortcuts.appendChild(this._textElement("span", `Esc ${t("shortcuts.abort")}`));
+    shortcuts.setAttribute("aria-label", "Keyboard shortcuts");
+    const focusShortcut = this._textElement("span", "");
+    this._appendMarkup(focusShortcut, `<kbd>/</kbd> ${this.escapeHtml(t("shortcuts.focusInput"))}`);
+    const abortShortcut = this._textElement("span", "");
+    this._appendMarkup(abortShortcut, `<kbd>Esc</kbd> ${this.escapeHtml(t("shortcuts.abort"))}`);
+    shortcuts.append(focusShortcut, abortShortcut);
     welcome.appendChild(shortcuts);
     this.container.replaceChildren(welcome);
   }
 
-  renderUserMessage(message, isHistory = false) {
-    // Remove welcome message if present
+  renderUserMessage(message, isHistory = false, { entryId = null } = {}) {
     const welcome = this.container.querySelector(".welcome");
     if (welcome) welcome.remove();
 
     const div = document.createElement("div");
     div.className = `message user${isHistory ? " history" : ""}`;
 
+    const imageItems = this._collectImageItems(message);
     const content = document.createElement("div");
     content.className = "message-content";
-    if (message.images?.length > 0) {
+    if (imageItems.length > 0) {
       const images = document.createElement("div");
       images.className = "message-images";
-      for (const image of message.images) {
+      for (const image of imageItems) {
         const imageElement = document.createElement("img");
         imageElement.className = "message-image";
         imageElement.src = this._imageSource(image);
@@ -158,18 +194,31 @@ export class MessageRenderer {
       }
       content.appendChild(images);
     }
-    this._appendMarkup(content, renderUserMarkdown(message.content));
+
+    const rawContent = this._textContentFromMessageContent(message.content);
+    const displayContent = cleanChatTranscript(rawContent) ?? rawContent;
+    this._appendMarkup(content, renderUserMarkdown(displayContent));
     div.appendChild(content);
-    div.appendChild(this._createCopyButton());
+
+    const footer = document.createElement("div");
+    footer.className = "message-footer";
+    footer.appendChild(this._createCopyButton());
+    const forkEntryId = entryId ?? message.entryId ?? message.entry_id ?? null;
+    if (forkEntryId) {
+      div.dataset.entryId = forkEntryId;
+      footer.appendChild(this._createForkButton());
+    }
+    div.appendChild(footer);
+
     this.container.appendChild(div);
     this._setupCodeCopyButtons(div);
     this._setupCopyBtn(div);
+    if (forkEntryId) this._setupForkBtn(div);
     if (!isHistory) this.scrollToBottom();
     return div;
   }
 
   renderAssistantMessage(message, isStreaming = false, isHistory = false) {
-    // Remove welcome message if present
     const welcome = this.container.querySelector(".welcome");
     if (welcome) welcome.remove();
 
@@ -180,6 +229,7 @@ export class MessageRenderer {
     let contentHtml = "";
     let usageHtml = "";
     let rawStreamingText = "";
+    let hasThinking = false;
 
     if (typeof message.content === "string") {
       rawStreamingText = message.content;
@@ -194,18 +244,18 @@ export class MessageRenderer {
             ? renderStreamingMarkdown(block.text)
             : renderMarkdown(block.text);
         } else if (block.type === "thinking") {
-          contentHtml += this.renderThinkingBlock(block.thinking);
+          hasThinking = true;
+          contentHtml += this.renderThinkingBlock(block.thinking, message.usage?.cost?.total);
         }
       }
     }
-    // Markdown is rendered live during streaming, so the raw text (with its
-    // syntax markers) can't be recovered from the DOM at finalize time.
+
     if (isStreaming) {
       div._streamingRawText = rawStreamingText;
     }
 
-    // Usage/cost info
-    if (message.usage?.cost) {
+    const hasText = rawStreamingText.trim().length > 0;
+    if (message.usage?.cost && !hasThinking) {
       const cost = message.usage.cost.total;
       if (cost > 0) {
         usageHtml = `<span class="message-usage">$${cost.toFixed(4)}</span>`;
@@ -214,30 +264,35 @@ export class MessageRenderer {
 
     const streamingClass = isStreaming ? " streaming" : "";
 
-    const markup = `
-      <div class="message-content${streamingClass}">${contentHtml}</div>
-      ${usageHtml}
-      ${!isStreaming ? `<button class="message-copy-btn" aria-label="${this.escapeHtml(t("messages.copyMessage"))}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>` : ""}
-    `;
-    this._replaceMarkup(div, markup);
+    if (!isStreaming && isHistory && !contentHtml) return null;
+
+    const showFooter = !isStreaming && (hasText || usageHtml);
+    const footerHtml = showFooter
+      ? `<div class="message-footer">${hasText ? `<button class="message-copy-btn" aria-label="${this.escapeHtml(t("messages.copyMessage"))}" title="${this.escapeHtml(t("messages.copyMessage"))}">${COPY_ICON}</button>` : ""}${usageHtml}</div>`
+      : "";
+
+    this._replaceMarkup(
+      div,
+      `<div class="message-content${streamingClass}">${contentHtml}</div>${footerHtml}`,
+    );
 
     this._setupThinkingToggles(div);
     this._setupCodeCopyButtons(div);
-    if (!isStreaming) this._setupCopyBtn(div);
+    if (!isStreaming && hasText) this._setupCopyBtn(div);
     this.container.appendChild(div);
     if (!isHistory) this.scrollToBottom();
 
     return div;
   }
 
-  renderThinkingBlock(thinking) {
-    return `<div class="thinking-block">
-<div class="thinking-toggle" data-thinking-toggle="true" role="button" tabindex="0">
-<span class="chevron"><svg width="8" height="8" viewBox="0 0 8 8" fill="currentColor"><path d="M2 1l4 3-4 3z"/></svg></span>
-<span class="thinking-label"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/><path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/><path d="M12 5v13"/><path d="M6.5 9h11"/><path d="M7 13h10"/></svg> <span class="thinking-label-text">${this.escapeHtml(t("messages.thinking"))}</span></span>
-</div>
-<div class="thinking-content">${this.escapeHtml(thinking)}</div>
-</div>`;
+  renderThinkingBlock(thinking, cost) {
+    const costHtml = this._thinkingCostHtml(cost);
+    return `<div class="thinking-block"><div class="thinking-toggle" data-thinking-toggle="true" role="button" tabindex="0"><span class="chevron">${CHEVRON_ICON}</span><span class="thinking-label">${BRAIN_ICON} <span class="thinking-label-text">${this.escapeHtml(t("messages.thinking"))}</span></span>${costHtml}</div><div class="thinking-content">${this.escapeHtml(thinking)}</div></div>`;
+  }
+
+  _thinkingCostHtml(cost) {
+    if (!(cost > 0)) return "";
+    return `<span class="thinking-usage" title="Total cost for this response">$${cost.toFixed(4)}</span>`;
   }
 
   _setupThinkingToggles(root) {
@@ -247,7 +302,9 @@ export class MessageRenderer {
     root.querySelectorAll("[data-thinking-toggle]").forEach((toggle) => {
       if (toggle.dataset.bound === "true") return;
       const toggleThinking = () => {
-        toggle.nextElementSibling?.classList.toggle("expanded");
+        const block = toggle.closest(".thinking-block");
+        const content = block?.querySelector(".thinking-content");
+        content?.classList.toggle("expanded");
         toggle.classList.toggle("expanded");
       };
       toggle.addEventListener("click", toggleThinking);
@@ -268,13 +325,10 @@ export class MessageRenderer {
       if (!contentDiv) return;
       thinkingDiv = document.createElement("div");
       thinkingDiv.className = "thinking-block streaming-thinking";
-      const markup = `
-        <div class="thinking-toggle expanded" data-thinking-toggle="true" role="button" tabindex="0">
-          <span class="chevron"><svg width="8" height="8" viewBox="0 0 8 8" fill="currentColor"><path d="M2 1l4 3-4 3z"/></svg></span>
-          <span class="thinking-label"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/><path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 0 2.526 5.77 4 4 0 0 0-.556 6.588A4 4 0 1 1 12 18Z"/><path d="M12 5v13"/><path d="M6.5 9h11"/><path d="M7 13h10"/></svg> <span class="thinking-label-text"></span></span>
-        </div>
-        <div class="thinking-content expanded"></div>`;
-      this._appendMarkup(thinkingDiv, markup);
+      this._appendMarkup(
+        thinkingDiv,
+        `<div class="thinking-toggle expanded" data-thinking-toggle="true" role="button" tabindex="0"><span class="chevron">${CHEVRON_ICON}</span><span class="thinking-label">${BRAIN_ICON} <span class="thinking-label-text">${this.escapeHtml(t("messages.thinking"))}</span></span></div><div class="thinking-content expanded"></div>`,
+      );
       contentDiv.prepend(thinkingDiv);
       this._setupThinkingToggles(thinkingDiv);
     }
@@ -287,34 +341,47 @@ export class MessageRenderer {
 
   updateStreamingMessage(messageElement, content) {
     const contentDiv = messageElement.querySelector(".message-content");
-    if (contentDiv) {
-      messageElement._streamingRawText = content;
-      // Keep any thinking block, update only the text part
-      const thinkingBlock = contentDiv.querySelector(".streaming-thinking");
-      const rendered = renderStreamingMarkdown(content);
-      if (thinkingBlock) {
-        // Remove everything after the thinking block and re-add text
-        let textNode = contentDiv.querySelector(".streaming-text");
-        if (!textNode) {
-          textNode = document.createElement("div");
-          textNode.className = "streaming-text";
-          contentDiv.appendChild(textNode);
-        }
-        this._replaceMarkup(textNode, rendered);
-      } else {
-        this._replaceMarkup(contentDiv, rendered);
+    if (!contentDiv) return;
+
+    const { text, thinking } = this.splitStreamingContent(content);
+
+    if (thinking) this.updateStreamingThinking(messageElement, thinking);
+
+    messageElement._streamingRawText = text;
+    const thinkingBlock = contentDiv.querySelector(".streaming-thinking");
+    const rendered = renderStreamingMarkdown(text);
+    if (thinkingBlock) {
+      let textNode = contentDiv.querySelector(".streaming-text");
+      if (!textNode) {
+        textNode = document.createElement("div");
+        textNode.className = "streaming-text";
+        contentDiv.appendChild(textNode);
       }
-      this._setupCodeCopyButtons(contentDiv);
-      this.scrollToBottom();
+      this._replaceMarkup(textNode, rendered);
+    } else {
+      this._replaceMarkup(contentDiv, rendered);
     }
+    this._setupCodeCopyButtons(contentDiv);
+    this.scrollToBottom();
+  }
+
+  splitStreamingContent(content) {
+    if (typeof content === "string") return { text: content, thinking: "" };
+    if (!Array.isArray(content)) return { text: "", thinking: "" };
+    let text = "";
+    let thinking = "";
+    for (const block of content) {
+      if (block?.type === "text") text += block.text ?? "";
+      else if (block?.type === "thinking") thinking += block.thinking ?? "";
+    }
+    return { text, thinking };
   }
 
   finalizeStreamingMessage(messageElement, usage = null, thinking = "") {
     const contentDiv = messageElement.querySelector(".message-content");
+    let finalThinking = "";
     if (contentDiv) {
       contentDiv.classList.remove("streaming");
-      // Prefer the raw text stashed during streaming — the DOM now holds
-      // rendered markdown, so textContent has lost the syntax markers.
       const streamingText = contentDiv.querySelector(".streaming-text");
       const domText = streamingText ? streamingText.textContent : contentDiv.textContent;
       const rawText =
@@ -323,10 +390,14 @@ export class MessageRenderer {
           : domText;
       messageElement._streamingRawText = null;
 
-      // Rebuild with thinking block (if any) + markdown text
+      finalThinking =
+        thinking ||
+        contentDiv.querySelector(".streaming-thinking .thinking-content")?.textContent ||
+        "";
+
       let html = "";
-      if (thinking) {
-        html += this.renderThinkingBlock(thinking);
+      if (finalThinking) {
+        html += this.renderThinkingBlock(finalThinking, usage?.cost?.total);
       }
       html += renderMarkdown(rawText);
       this._replaceMarkup(contentDiv, html);
@@ -334,30 +405,28 @@ export class MessageRenderer {
       this._setupCodeCopyButtons(contentDiv);
     }
 
-    // Add copy button only when there is visible (non-thinking) text to copy.
-    if (
-      this._copyableText(messageElement).trim() &&
-      !messageElement.querySelector(".message-copy-btn")
-    ) {
-      const btn = document.createElement("button");
-      btn.className = "message-copy-btn";
-      btn.setAttribute("aria-label", t("messages.copyMessage"));
-      this._appendMarkup(
-        btn,
-        '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>',
-      );
-      messageElement.appendChild(btn);
-      this._setupCopyBtn(messageElement);
-    }
+    if (!messageElement.querySelector(".message-footer")) {
+      const copyableText = this.getCopyableText(messageElement);
+      const hasUsage = Boolean(usage?.cost && usage.cost.total > 0 && !finalThinking);
+      if (!copyableText && !hasUsage) {
+        messageElement.remove();
+        return;
+      }
 
-    // Add usage info if available
-    if (usage?.cost && usage.cost.total > 0) {
-      if (!messageElement.querySelector(".message-usage")) {
+      const footer = document.createElement("div");
+      footer.className = "message-footer";
+
+      if (copyableText) footer.appendChild(this._createCopyButton());
+
+      if (hasUsage) {
         const span = document.createElement("span");
         span.className = "message-usage";
         span.textContent = `$${usage.cost.total.toFixed(4)}`;
-        messageElement.appendChild(span);
+        footer.appendChild(span);
       }
+
+      messageElement.appendChild(footer);
+      this._setupCopyBtn(messageElement);
     }
   }
 
@@ -377,31 +446,31 @@ export class MessageRenderer {
     this.scrollToBottom();
   }
 
-  /**
-   * Returns the user-visible text of a message, excluding private thinking
-   * blocks so copying an assistant message keeps only the answer.
-   */
-  _copyableText(messageEl) {
-    const content = messageEl.querySelector(".message-content");
-    if (!content) return "";
-    const clone = content.cloneNode(true);
-    clone.querySelectorAll(".thinking-block, .streaming-thinking").forEach((el) => {
-      el.remove();
+  _setupForkBtn(messageEl) {
+    const btn = messageEl.querySelector(".message-fork-btn");
+    if (!btn) return;
+    const entryId = messageEl.dataset.entryId;
+    if (!entryId) return;
+    btn.addEventListener("click", () => {
+      messageEl.dispatchEvent(
+        new CustomEvent("messagefork", {
+          bubbles: true,
+          detail: { entryId },
+        }),
+      );
     });
-    return clone.textContent || "";
   }
 
   _setupCopyBtn(messageEl) {
     const btn = messageEl.querySelector(".message-copy-btn");
     if (!btn) return;
     btn.addEventListener("click", () => {
-      const text = this._copyableText(messageEl);
+      const text = this.getCopyableText(messageEl);
       if (!text) return;
-      // Fallback for non-HTTPS (LAN access)
-      const copyText = (t) => {
-        if (navigator.clipboard) return navigator.clipboard.writeText(t);
+      const copyText = (value) => {
+        if (navigator.clipboard) return navigator.clipboard.writeText(value);
         const ta = document.createElement("textarea");
-        ta.value = t;
+        ta.value = value;
         ta.style.cssText = "position:fixed;left:-9999px";
         document.body.appendChild(ta);
         ta.select();
@@ -418,6 +487,16 @@ export class MessageRenderer {
     });
   }
 
+  getCopyableText(messageEl) {
+    const content = messageEl.querySelector(".message-content");
+    if (!content) return "";
+    const clone = content.cloneNode(true);
+    clone.querySelectorAll(".thinking-block, .streaming-thinking").forEach((el) => {
+      el.remove();
+    });
+    return (clone.textContent || "").trim();
+  }
+
   _textElement(tagName, text, className = "") {
     const element = document.createElement(tagName);
     if (className) element.className = className;
@@ -429,11 +508,44 @@ export class MessageRenderer {
     const button = document.createElement("button");
     button.className = "message-copy-btn";
     button.setAttribute("aria-label", t("messages.copyMessage"));
-    this._appendMarkup(
-      button,
-      '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9v1"/></svg>',
-    );
+    button.title = t("messages.copyMessage");
+    this._appendMarkup(button, COPY_ICON);
     return button;
+  }
+
+  _createForkButton() {
+    const button = document.createElement("button");
+    button.className = "message-fork-btn";
+    button.setAttribute("aria-label", "Fork session from here");
+    button.title = "Fork session from here";
+    this._appendMarkup(button, FORK_ICON);
+    return button;
+  }
+
+  _collectImageItems(message) {
+    const imageItems = [];
+    if (message.images?.length > 0) imageItems.push(...message.images);
+    if (Array.isArray(message.content)) {
+      for (const block of message.content) {
+        if (block?.type === "image" && block.data) imageItems.push(block);
+      }
+    }
+    if (message.attachments?.length > 0) {
+      for (const attachment of message.attachments) {
+        if (attachment.type === "image" && attachment.content) {
+          imageItems.push({ data: attachment.content, mimeType: attachment.mimeType });
+        }
+      }
+    }
+    return imageItems;
+  }
+
+  _textContentFromMessageContent(content) {
+    if (!Array.isArray(content)) return content;
+    return content
+      .filter((block) => block?.type === "text")
+      .map((block) => block.text)
+      .join("\n");
   }
 
   _imageSource(image) {
@@ -574,15 +686,16 @@ export class MessageRenderer {
 
   scrollToBottom() {
     if (this.isNearBottom && this.container) {
-      requestAnimationFrame(() => {
-        if (this.container) this.container.scrollTop = this.container.scrollHeight;
-      });
+      this.forceScrollToBottom();
     }
   }
 
-  // Tear down listeners and release the container reference. Idempotent:
-  // hiding/deactivating a view must NOT destroy it; only an explicit destroy()
-  // removes the scroll + locale listeners so a recreated view stays clean.
+  forceScrollToBottom() {
+    requestAnimationFrame(() => {
+      if (this.container) this.container.scrollTop = this.container.scrollHeight;
+    });
+  }
+
   destroy() {
     if (this._destroyed) return;
     this._destroyed = true;

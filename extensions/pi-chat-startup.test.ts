@@ -1,7 +1,7 @@
 // @vitest-environment node
 
 import { describe, expect, it } from "vitest";
-import { selectStartupConversationId } from "./pi-chat-src/startup.ts";
+import { selectStartupConversationId } from "./chat-inbox/startup.ts";
 
 describe("pi-chat startup conversation selection", () => {
   it("auto-selects the only configured conversation when no flag or persisted state exists", () => {

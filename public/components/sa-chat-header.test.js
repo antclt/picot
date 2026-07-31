@@ -11,6 +11,7 @@ describe("sa-chat-header", () => {
   beforeEach(() => {
     document.body.innerHTML =
       '<super-agent-runtime class="super-agent-runtime collapsed"></super-agent-runtime>';
+    delete window.__picotConfigCall;
     vi.restoreAllMocks();
   });
 
@@ -88,6 +89,8 @@ describe("sa-chat-header", () => {
     document.body.appendChild(header);
     await Promise.resolve();
     await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
 
     const telegram = header.querySelector('[data-action="telegram"]');
 
@@ -95,8 +98,42 @@ describe("sa-chat-header", () => {
     expect(telegram.classList.contains("connected")).toBe(true);
   });
 
+  it("reloads service status when the native config gateway becomes ready", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue({ ok: false });
+
+    const Header = customElements.get("sa-chat-header");
+    const header = new Header();
+    document.body.appendChild(header);
+    await Promise.resolve();
+
+    window.__picotConfigCall = vi.fn().mockResolvedValue({
+      ok: true,
+      data: {
+        content: JSON.stringify({
+          accounts: {
+            "telegram-main": {
+              service: "telegram",
+              botToken: "token",
+              channels: {},
+            },
+          },
+        }),
+      },
+    });
+    window.dispatchEvent(new CustomEvent("picot-config-gateway-ready"));
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const telegram = header.querySelector('[data-action="telegram"]');
+    expect(window.__picotConfigCall).toHaveBeenCalledWith("read_chat_config");
+    expect(telegram.disabled).toBe(false);
+    expect(telegram.classList.contains("connected")).toBe(true);
+  });
+
   it("keeps the base header measurable while super agent mode is active", () => {
-    const css = fs.readFileSync(path.join(__dirname, "../style.css"), "utf8");
+    const css = ["../style.css", "../components/super-agent-runtime.css"]
+      .map((p) => fs.readFileSync(path.join(__dirname, p), "utf8"))
+      .join("\n");
 
     expect(css).not.toMatch(/body\.super-agent-active\s+\.header\s*\{[^}]*display:\s*none/i);
     expect(css).toMatch(
@@ -105,7 +142,9 @@ describe("sa-chat-header", () => {
   });
 
   it("keeps the files panel out of the Super Agent right rail", () => {
-    const css = fs.readFileSync(path.join(__dirname, "../style.css"), "utf8");
+    const css = ["../style.css", "../components/super-agent-runtime.css"]
+      .map((p) => fs.readFileSync(path.join(__dirname, p), "utf8"))
+      .join("\n");
 
     expect(css).toMatch(/body\.super-agent-active\s+\.file-sidebar\s*\{[^}]*display:\s*none/i);
   });

@@ -8,10 +8,21 @@ export function summarizePackageError(err) {
   return raw;
 }
 
-export function renderPackageInstallFailure(status, err, operation = "install") {
-  if (!status) return;
+export function getPackageInstallFailure(err, operation = "install") {
   const fullMessage = String(err?.message || err || "unknown error");
   const isUninstall = operation === "uninstall";
+  return {
+    title: isUninstall ? t("extensions.uninstallFailed") : t("extensions.installFailed"),
+    note: isUninstall
+      ? t("extensions.uninstallFailedNote")
+      : t("extensions.installFailedNote"),
+    detail: summarizePackageError(fullMessage),
+  };
+}
+
+export function renderPackageInstallFailure(status, err, operation = "install") {
+  if (!status) return;
+  const failure = getPackageInstallFailure(err, operation);
   status.hidden = false;
   status.classList.add("is-error");
   status.title = "";
@@ -19,18 +30,16 @@ export function renderPackageInstallFailure(status, err, operation = "install") 
 
   const title = document.createElement("div");
   title.className = "settings-extension-status-title";
-  title.textContent = isUninstall ? t("extensions.uninstallFailed") : t("extensions.installFailed");
+  title.textContent = failure.title;
   status.appendChild(title);
 
   const npmNote = document.createElement("div");
   npmNote.className = "settings-extension-status-note";
-  npmNote.textContent = isUninstall
-    ? t("extensions.uninstallFailedNote")
-    : t("extensions.installFailedNote");
+  npmNote.textContent = failure.note;
   status.appendChild(npmNote);
 
   const detail = document.createElement("div");
   detail.className = "settings-extension-status-detail";
-  detail.textContent = summarizePackageError(fullMessage);
+  detail.textContent = failure.detail;
   status.appendChild(detail);
 }
