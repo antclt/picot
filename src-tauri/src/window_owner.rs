@@ -77,6 +77,11 @@ impl OwnerId {
     pub fn as_str(&self) -> &str {
         &self.0
     }
+
+    #[allow(dead_code)]
+    pub(crate) fn from_string(value: String) -> Self {
+        Self(value)
+    }
 }
 
 impl WindowOwnerRegistry {

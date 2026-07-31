@@ -13,6 +13,7 @@ mod pi_rpc_bridge;
 mod remote_auth;
 mod runtime_coordinator;
 mod settings_store;
+mod skill_source_registry;
 mod terminal_manager;
 mod terminal_output;
 mod terminal_profiles;
@@ -27,6 +28,7 @@ use pi_launch::PiLaunchResolver;
 use remote_auth::RemoteAuth;
 use runtime_coordinator::RuntimeTarget;
 use serde_json::Value;
+use skill_source_registry::SkillSourceRegistry;
 use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::{BufRead, BufReader, Write};
@@ -40,6 +42,7 @@ use tauri_plugin_dialog::MessageDialogKind;
 use tauri_plugin_updater::UpdaterExt;
 
 type NativePiManagerState = NativePiManager;
+type SkillSourceRegistryState = Arc<SkillSourceRegistry>;
 
 const MENU_NEW_SESSION_ID: &str = "picot-new-session";
 const BETA_UPDATE_ENDPOINT: &str =
