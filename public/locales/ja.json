@@ -177,7 +177,8 @@
         "installWindows": "py -3 -m pip install \"markitdown[docx,pptx,xlsx,xls,outlook]\"",
         "remoteImageHidden": "リモート画像は非表示です"
       },
-      "conflictMessage": "{name}がディスク上で変更されました。再読み込みしますか、それともディスクバージョンを上書きしますか？"
+      "conflictMessage": "{name}がディスク上で変更されました。再読み込みしますか、それともディスクバージョンを上書きしますか？",
+      "tabpanelLabel": "ファイルプレビュー"
     },
     "unsaved": {
       "title": "未保存の変更",

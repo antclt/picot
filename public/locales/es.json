@@ -177,7 +177,8 @@
         "installWindows": "py -3 -m pip install \"markitdown[docx,pptx,xlsx,xls,outlook]\"",
         "remoteImageHidden": "Imagen remota oculta"
       },
-      "conflictMessage": "{name} fue modificado en disco. ¿Recargar o sobreescribir la versión del disco?"
+      "conflictMessage": "{name} fue modificado en disco. ¿Recargar o sobreescribir la versión del disco?",
+      "tabpanelLabel": "Vista previa de archivo"
     },
     "unsaved": {
       "title": "Cambios sin guardar",
