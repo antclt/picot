@@ -14,9 +14,7 @@ use axum::body::Body;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::Query;
 use axum::extract::{DefaultBodyLimit, Json, State};
-#[cfg(debug_assertions)]
-use axum::http::header::{CACHE_CONTROL, PRAGMA};
-use axum::http::header::{CONTENT_LENGTH, CONTENT_SECURITY_POLICY, CONTENT_TYPE};
+use axum::http::header::{CACHE_CONTROL, CONTENT_LENGTH, CONTENT_SECURITY_POLICY, CONTENT_TYPE, PRAGMA};
 use axum::http::HeaderValue;
 use axum::http::StatusCode;
 use axum::response::Response;
@@ -32,10 +30,8 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::sync::oneshot;
-#[cfg(debug_assertions)]
 use tower::ServiceBuilder;
 use tower_http::services::{ServeDir, ServeFile};
-#[cfg(debug_assertions)]
 use tower_http::set_header::SetResponseHeaderLayer;
 
 const MAX_HTTP_BODY_BYTES: usize = 1024 * 1024;
@@ -135,7 +131,11 @@ impl HostServer {
         });
         let index = static_dir.join("index.html");
         let static_service = ServeDir::new(static_dir).fallback(ServeFile::new(index));
-        #[cfg(debug_assertions)]
+        // Always disable caching for the static bundle, not just in debug
+        // builds: the host listens on a stable port across app restarts, so
+        // after an auto-update + relaunch the WebView's HTTP cache would
+        // otherwise keep serving the previous release's JS/CSS/HTML until a
+        // manual hard reload.
         let static_service = ServiceBuilder::new()
             .layer(SetResponseHeaderLayer::overriding(
                 CACHE_CONTROL,
