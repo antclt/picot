@@ -12,6 +12,7 @@ mod pi_launch;
 mod pi_rpc_bridge;
 mod remote_auth;
 mod runtime_coordinator;
+mod session_ui_profile_store;
 mod settings_store;
 mod skill_source_registry;
 mod terminal_manager;
