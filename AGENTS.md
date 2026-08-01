@@ -106,6 +106,8 @@ Single test file: `bun run vitest run public/settings-save-status.test.js`
 
 When grepping for source code, target the actual source directories directly — `public/`, `extensions/`, `src-tauri/src/` — never bare `src-tauri/`. Prefer `rg` (respects `.gitignore` by default) over `grep -r` when available.
 
+When running `find` (or any other filesystem/code search command), scope it to this repo by default — root the search at the repo root or a specific subdirectory inside it (e.g. `find public -name '*.js'`, `find . -path ./src-tauri/target -prune -o -name '*.rs' -print`), never at `/`, `~`, or an unrelated ancestor directory. Only search outside the repo if the user explicitly asks for a global/system-wide search.
+
 ## Linting & Formatting
 
 This project uses [Biome](https://biomejs.dev/) for JS/TS linting and formatting.
