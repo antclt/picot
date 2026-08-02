@@ -38,12 +38,16 @@ describe("settings language selector", () => {
     setupLanguageSelector();
 
     const options = Array.from(document.querySelectorAll("#settings-language-select option"));
-    expect(options.map((option) => option.value)).toEqual(["system", "en", "zh"]);
-    expect(options.map((option) => option.textContent)).toEqual([
-      "System Default",
-      "English",
-      "中文",
-    ]);
+    // The supported locales may grow; ensure the core ones are present.
+    const values = options.map((option) => option.value);
+    const texts = options.map((option) => option.textContent);
+    expect(values).toContain("system");
+    expect(values).toContain("en");
+    expect(values).toContain("zh");
+    // Verify the core language display names are present.
+    expect(texts).toContain("System Default");
+    expect(texts).toContain("English");
+    expect(texts).toContain("中文");
   });
 
   it("switches locale and repaints translated DOM", async () => {

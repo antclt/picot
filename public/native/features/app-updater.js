@@ -34,8 +34,25 @@ export function setupAppUpdater({ logger = console } = {}) {
     return invoke("install_beta_update");
   }
 
+  const LOADING_SVG =
+    '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>';
+
   function setSidebarVisible(visible) {
     sidebarBtn?.classList.toggle("hidden", !visible);
+  }
+
+  function setSidebarLoading(loading) {
+    if (!sidebarBtn) return;
+    if (loading) {
+      sidebarBtn.classList.remove("hidden");
+      sidebarBtn.classList.add("loading");
+      sidebarBtn.disabled = true;
+      sidebarBtn.innerHTML = `${LOADING_SVG}Update`;
+    } else {
+      sidebarBtn.classList.remove("loading");
+      sidebarBtn.disabled = false;
+      sidebarBtn.textContent = "Update";
+    }
   }
 
   function setState({ status, button, disabled = false, canInstall = false }) {
@@ -101,7 +118,7 @@ export function setupAppUpdater({ logger = console } = {}) {
     installing = true;
     totalBytes = 0;
     downloadedBytes = 0;
-    setSidebarVisible(false);
+    setSidebarLoading(true);
     setState({ status: "Preparing download…", button: "Installing…", disabled: true });
 
     try {
@@ -129,6 +146,7 @@ export function setupAppUpdater({ logger = console } = {}) {
     } catch (error) {
       logger.warn?.("[Updater] Install failed:", error);
       setState({ status: "Install failed", button: "Try again", canInstall: true });
+      setSidebarLoading(false);
       setSidebarVisible(true);
     } finally {
       installing = false;

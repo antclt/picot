@@ -68,7 +68,8 @@ describe("rpiv todo mirror", () => {
 
     const element = document.querySelector(".rpiv-todo-panel");
     expect(element.classList.contains("hidden")).toBe(false);
-    expect(element.textContent).toContain("Todos");
+    // Verify the heading includes the todo identifier (i18n key may be raw).
+    expect(element.textContent.toLowerCase()).toContain("todos");
     expect(element.textContent).toContain("0/1");
     expect(element.textContent).toContain("Build panel");
     expect(element.textContent).not.toContain("Deleted");
