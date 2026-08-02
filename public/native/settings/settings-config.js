@@ -16,11 +16,51 @@ import {
 const HEALTH_CHECK_TIMEOUT_MS = 120_000;
 const MODELS_DOCS_URL =
   "https://github.com/earendil-works/pi-mono/blob/main/packages/coding-agent/docs/models.md";
+const PROVIDER_ICON_ALIASES = {
+  "amazon-bedrock": "aws",
+  "azure-openai-responses": "azure",
+  "github-copilot": "github-copilot",
+  "google-vertex": "google",
+  "ant-ling": "ant-group",
+  "cloudflare-ai-gateway": "cloudflare",
+  "cloudflare-workers-ai": "cloudflare",
+  deepseek: "deep-seek",
+  fireworks: "fireworks",
+  huggingface: "hugging-face",
+  openrouter: "open-router",
+  opencode: "open-code",
+  "opencode-go": "open-code",
+  xai: "x-a-i",
+  "vercel-ai-gateway": "vercel",
+  "minimax-cn": "minimax",
+  moonshotai: "moonshot",
+  "moonshotai-cn": "moonshot",
+  "xiaomi-token-plan-ams": "xiaomi-mi-mo",
+  "xiaomi-token-plan-cn": "xiaomi-mi-mo",
+  "xiaomi-token-plan-sgp": "xiaomi-mi-mo",
+};
+function providerIcon(provider, className = "provider-logo") {
+  const key = PROVIDER_ICON_ALIASES[provider] || provider;
+  const img = document.createElement("img");
+  img.className = className;
+  img.alt = "";
+  img.src = `/icons/providers/${key}.svg`;
+  img.onerror = () => {
+    img.replaceWith(
+      Object.assign(document.createElement("span"), {
+        className,
+        textContent: provider.slice(0, 1).toUpperCase(),
+      }),
+    );
+  };
+  return img;
+}
 
 export function setupSettingsConfig({ configGateway, onModelConfigurationChanged }) {
   const call = (op, params, options) => configGateway.call(op, params, options);
   const apiKeysContainer = document.getElementById("settings-api-keys");
   const providerExpansionState = new Map();
+  let catalogProviders = [];
 
   async function loadApiKeysPanel(options = {}) {
     if (!apiKeysContainer) return;
@@ -96,17 +136,281 @@ export function setupSettingsConfig({ configGateway, onModelConfigurationChanged
   }
 
   function renderApiKeysPanel(providers) {
-    apiKeysContainer.replaceChildren();
-    if (providers.length === 0) {
-      const empty = document.createElement("div");
-      empty.className = "settings-api-keys-empty";
-      empty.textContent = t("settings.apiKeys.noProviders");
-      apiKeysContainer.appendChild(empty);
+    catalogProviders = providers;
+    if (inlineModelsTextarea) {
+      if (!inlineModelsTextarea.value.trim()) {
+        inlineModelsTextarea.value = '{\n  "providers": {}\n}';
+      }
+      renderModelsConfigLayout();
       return;
     }
-    for (const p of [...providers].sort((a, b) => Number(b.configured) - Number(a.configured))) {
-      apiKeysContainer.appendChild(buildApiKeyRow(p));
+
+    apiKeysContainer.replaceChildren();
+    const configured = providers.filter((provider) => provider.configured);
+    for (const provider of configured.sort((a, b) =>
+      (a.displayName || a.provider).localeCompare(b.displayName || b.provider),
+    )) {
+      apiKeysContainer.appendChild(buildApiKeyRow(provider));
     }
+  }
+
+  function openProviderPicker(providers) {
+    const backdrop = document.createElement("div");
+    backdrop.className = "provider-picker-backdrop";
+    const dialog = document.createElement("div");
+    dialog.className = "provider-picker-dialog";
+    const head = document.createElement("div");
+    head.className = "provider-picker-head";
+    head.innerHTML = `<div><h2>Add provider</h2><p>Connect a provider to start using its models.</p></div>`;
+    const close = document.createElement("button");
+    close.className = "provider-picker-close";
+    close.textContent = "×";
+    head.appendChild(close);
+    dialog.appendChild(head);
+    const search = document.createElement("input");
+    search.className = "provider-picker-search";
+    search.placeholder = "Search providers…";
+    dialog.appendChild(search);
+    const grid = document.createElement("div");
+    grid.className = "provider-picker-grid";
+    dialog.appendChild(grid);
+    const render = () => {
+      grid.replaceChildren();
+      const q = search.value.toLowerCase();
+      const matches = providers.filter((p) =>
+        (p.displayName || p.provider).toLowerCase().includes(q),
+      );
+      const custom = {
+        provider: "custom",
+        displayName: "OpenAI / Anthropic compatible",
+        custom: true,
+      };
+      const groups = [
+        [
+          "Custom",
+          !q || "custom openai-compatible anthropic-compatible".includes(q)
+            ? [custom]
+            : matches.filter((p) => p.custom || p.provider === "custom"),
+        ],
+        [
+          "Subscriptions",
+          matches.filter(
+            (p) =>
+              !p.custom &&
+              (p.authType === "oauth" || p.source === "oauth" || p.source === "subscription"),
+          ),
+        ],
+        [
+          "API key",
+          matches.filter(
+            (p) =>
+              !p.custom &&
+              p.authType !== "oauth" &&
+              p.source !== "oauth" &&
+              p.source !== "subscription",
+          ),
+        ],
+      ];
+      for (const [label, items] of groups) {
+        if (!items.length) continue;
+        const heading = document.createElement("div");
+        heading.className = "provider-picker-section-title";
+        heading.textContent = label;
+        grid.appendChild(heading);
+        for (const p of items) {
+          const card = document.createElement("button");
+          card.className = "provider-picker-card";
+          card.type = "button";
+          const logo = providerIcon(p.provider);
+          const text = document.createElement("span");
+          const strong = document.createElement("strong");
+          strong.textContent = p.displayName || p.provider;
+          const small = document.createElement("small");
+          small.textContent =
+            label === "Subscriptions"
+              ? "OAuth"
+              : label === "Custom"
+                ? "Custom endpoint format"
+                : `${Array.isArray(p.models) ? p.models.length : 0} models`;
+          text.append(strong, small);
+          card.append(logo, text);
+          card.addEventListener("click", () => {
+            backdrop.remove();
+            if (p.custom) {
+              openCustomProviderEditor();
+              return;
+            }
+            if (label === "Subscriptions") {
+              openSubscriptionSetup(p);
+              return;
+            }
+            let row = apiKeysContainer.querySelector(
+              `[data-provider="${escapeSelectorValue(p.provider)}"]`,
+            );
+            if (!row) {
+              row = buildApiKeyRow(p);
+              const detail = apiKeysContainer.querySelector(".models-config-main");
+              detail?.replaceChildren(row);
+            }
+            openApiKeyEditor(row, p);
+          });
+          grid.appendChild(card);
+        }
+      }
+    };
+    search.addEventListener("input", render);
+    close.addEventListener("click", () => backdrop.remove());
+    backdrop.addEventListener("click", (e) => {
+      if (e.target === backdrop) backdrop.remove();
+    });
+    backdrop.appendChild(dialog);
+    document.body.appendChild(backdrop);
+    render();
+    search.focus();
+  }
+
+  function setupDialog(title, subtitle) {
+    const backdrop = document.createElement("div");
+    backdrop.className = "provider-picker-backdrop";
+    const dialog = document.createElement("div");
+    dialog.className = "provider-setup-dialog";
+    Object.assign(dialog.style, {
+      width: "min(560px, 100%)",
+      maxHeight: "90vh",
+      overflow: "auto",
+      boxSizing: "border-box",
+      padding: "24px",
+      background: "var(--bg-primary, #fff)",
+      border: "1px solid var(--border)",
+      borderRadius: "16px",
+      boxShadow: "0 24px 80px rgb(0 0 0 / 30%)",
+    });
+    const head = document.createElement("div");
+    head.className = "provider-picker-head";
+    head.innerHTML = `<div><h2>${title}</h2><p>${subtitle}</p></div>`;
+    const close = document.createElement("button");
+    close.className = "provider-picker-close";
+    close.textContent = "×";
+    close.onclick = () => backdrop.remove();
+    head.appendChild(close);
+    dialog.appendChild(head);
+    backdrop.appendChild(dialog);
+    document.body.appendChild(backdrop);
+    return { backdrop, dialog };
+  }
+
+  function openSubscriptionSetup(p) {
+    const { backdrop, dialog } = setupDialog(
+      `Connect ${p.displayName || p.provider}`,
+      "This provider uses your subscription account.",
+    );
+    const note = document.createElement("div");
+    note.className = "provider-setup-note";
+    note.textContent =
+      "OAuth login is run by the pi agent. Start the login flow from a terminal, then return here to refresh the provider status.";
+    dialog.appendChild(note);
+    const command = document.createElement("code");
+    command.className = "provider-login-command";
+    command.textContent = `pi /login ${p.provider}`;
+    dialog.appendChild(command);
+    const actions = document.createElement("div");
+    actions.className = "provider-setup-actions";
+    const close = document.createElement("button");
+    close.className = "ui-button ui-button--secondary";
+    close.textContent = "Close";
+    close.onclick = () => backdrop.remove();
+    actions.appendChild(close);
+    dialog.appendChild(actions);
+  }
+
+  function openCustomProviderEditor() {
+    const { backdrop, dialog } = setupDialog(
+      "Add custom provider",
+      "Connect an OpenAI-compatible or Anthropic-compatible endpoint.",
+    );
+    const form = document.createElement("div");
+    form.className = "provider-setup-form";
+    Object.assign(form.style, { display: "grid", gap: "14px" });
+    const fields = [
+      ["Provider ID", "provider", "my-provider"],
+      ["Base URL", "baseUrl", "https://api.example.com/v1"],
+      ["API key", "apiKey", "Optional"],
+      ["Model ID", "modelId", "model-name"],
+    ];
+    const inputs = {};
+    for (const [label, key, placeholder] of fields) {
+      const wrap = document.createElement("label");
+      wrap.textContent = label;
+      Object.assign(wrap.style, {
+        display: "grid",
+        gap: "6px",
+        color: "var(--text-dim)",
+        fontSize: "13px",
+      });
+      const input = document.createElement("input");
+      input.placeholder = placeholder;
+      input.type = key === "apiKey" ? "password" : "text";
+      Object.assign(input.style, {
+        boxSizing: "border-box",
+        width: "100%",
+        padding: "10px 12px",
+        border: "1px solid var(--border)",
+        borderRadius: "8px",
+        background: "var(--bg-glass)",
+        color: "var(--text-primary)",
+        font: "inherit",
+      });
+      wrap.appendChild(input);
+      form.appendChild(wrap);
+      inputs[key] = input;
+    }
+    dialog.appendChild(form);
+    const error = document.createElement("div");
+    error.className = "api-key-editor-error";
+    dialog.appendChild(error);
+    const actions = document.createElement("div");
+    actions.className = "provider-setup-actions";
+    const cancel = document.createElement("button");
+    cancel.className = "ui-button ui-button--secondary";
+    cancel.textContent = "Cancel";
+    cancel.onclick = () => backdrop.remove();
+    const save = document.createElement("button");
+    save.className = "ui-button ui-button--primary";
+    save.textContent = "Save provider";
+    actions.append(cancel, save);
+    dialog.appendChild(actions);
+    save.onclick = async () => {
+      const id = inputs.provider.value.trim(),
+        baseUrl = inputs.baseUrl.value.trim(),
+        modelId = inputs.modelId.value.trim();
+      if (!id || !baseUrl || !modelId) {
+        error.textContent = "Provider ID, Base URL and Model ID are required.";
+        return;
+      }
+      save.disabled = true;
+      try {
+        const current = await call("read_models_config");
+        const json = JSON.parse(current.data.content || "{}");
+        json.providers ||= {};
+        json.providers[id] = {
+          baseUrl,
+          api: "openai-completions",
+          ...(inputs.apiKey.value.trim() ? { apiKey: inputs.apiKey.value.trim() } : {}),
+          models: [{ id: modelId }],
+        };
+        const result = await call("write_models_config", {
+          content: JSON.stringify(json, null, 2),
+        });
+        if (!result?.ok) throw new Error(result.error || "Failed to save provider");
+        backdrop.remove();
+        selectedModelsConfigItem = { type: "provider", provider: id };
+        await loadInlineModelsEditor();
+        await loadApiKeysPanel();
+      } catch (e) {
+        error.textContent = e.message;
+        save.disabled = false;
+      }
+    };
   }
 
   function escapeSelectorValue(value) {
@@ -598,6 +902,7 @@ export function setupSettingsConfig({ configGateway, onModelConfigurationChanged
   const inlineModelsSave = document.getElementById("inline-models-save");
   const inlineModelsInsertExample = document.getElementById("inline-models-insert-example");
   const modelsConfigDocsLink = document.getElementById("models-config-docs-link");
+  let selectedModelsConfigItem = null;
 
   const MODELS_JSON_EXAMPLE = `{
   "providers": {
@@ -629,7 +934,10 @@ export function setupSettingsConfig({ configGateway, onModelConfigurationChanged
   async function loadInlineModelsEditor() {
     if (!inlineModelsTextarea) return;
     clearInlineModelsError();
-    inlineModelsTextarea.value = "";
+    if (!inlineModelsTextarea.value.trim()) {
+      inlineModelsTextarea.value = '{\n  "providers": {}\n}';
+    }
+    renderModelsConfigLayout();
     if (inlineModelsPath)
       inlineModelsPath.textContent = t(
         "migrated.native.settings.settingsConfig.textcontent.loading",
@@ -642,11 +950,381 @@ export function setupSettingsConfig({ configGateway, onModelConfigurationChanged
       } catch {
         inlineModelsTextarea.value = data.data.content;
       }
+      renderModelsConfigLayout();
       if (inlineModelsPath) inlineModelsPath.textContent = data.data.path || "";
     } catch (e) {
       if (inlineModelsPath) inlineModelsPath.textContent = "";
       showInlineModelsError(e.message || String(e));
     }
+  }
+
+  function renderModelsConfigLayout() {
+    if (!inlineModelsTextarea) return;
+    let parsed;
+    try {
+      parsed = JSON.parse(inlineModelsTextarea.value);
+    } catch {
+      return;
+    }
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return;
+    if (
+      !parsed.providers ||
+      typeof parsed.providers !== "object" ||
+      Array.isArray(parsed.providers)
+    ) {
+      parsed.providers = {};
+    }
+    const providers = parsed.providers;
+    const providerNames = Object.keys(providers);
+    const configuredProviders = catalogProviders
+      .filter((provider) => provider.configured)
+      .sort((a, b) => (a.displayName || a.provider).localeCompare(b.displayName || b.provider));
+    if (
+      !selectedModelsConfigItem ||
+      (selectedModelsConfigItem.type === "auth" &&
+        !configuredProviders.some(
+          (provider) => provider.provider === selectedModelsConfigItem.provider,
+        )) ||
+      (selectedModelsConfigItem.type !== "auth" && !providers[selectedModelsConfigItem.provider]) ||
+      (selectedModelsConfigItem.type === "model" &&
+        !providers[selectedModelsConfigItem.provider].models?.[selectedModelsConfigItem.index])
+    ) {
+      selectedModelsConfigItem = configuredProviders[0]
+        ? { type: "auth", provider: configuredProviders[0].provider }
+        : providerNames[0]
+          ? { type: "provider", provider: providerNames[0] }
+          : null;
+    }
+
+    let layout = document.getElementById("models-config-layout");
+    if (!layout) {
+      layout = document.createElement("div");
+      layout.id = "models-config-layout";
+      layout.className = "models-config-layout";
+      apiKeysContainer.replaceChildren(layout);
+
+      const source = document.createElement("details");
+      source.className = "models-config-source";
+      const summary = document.createElement("summary");
+      summary.textContent = "Advanced JSON editor";
+      source.append(summary, inlineModelsTextarea);
+      inlineModelsTextarea.addEventListener("change", renderModelsConfigLayout);
+
+      const footer = document.createElement("div");
+      footer.className = "models-config-footer";
+      const sourceSection = inlineModelsSave?.closest(".settings-section");
+      const actions = inlineModelsSave?.closest(".settings-config-actions");
+      footer.appendChild(source);
+      if (actions) {
+        actions.classList.add("models-config-footer-actions");
+        footer.appendChild(actions);
+      }
+      apiKeysContainer.append(layout, footer);
+      if (sourceSection) sourceSection.hidden = true;
+    } else if (layout.parentNode !== apiKeysContainer) {
+      apiKeysContainer.prepend(layout);
+    }
+    layout.replaceChildren();
+    const sidebar = document.createElement("aside");
+    sidebar.className = "models-config-sidebar";
+    const list = document.createElement("div");
+    list.className = "models-provider-list";
+    const main = document.createElement("section");
+    main.className = "models-config-main";
+
+    const sync = () => {
+      inlineModelsTextarea.value = JSON.stringify(parsed, null, 2);
+      clearInlineModelsError();
+    };
+    const update = (callback) => {
+      callback();
+      sync();
+      renderModelsConfigLayout();
+    };
+
+    for (const provider of configuredProviders) {
+      const item = document.createElement("button");
+      item.type = "button";
+      item.className = "models-provider-item models-auth-provider-item";
+      item.classList.toggle(
+        "selected",
+        selectedModelsConfigItem?.type === "auth" &&
+          selectedModelsConfigItem.provider === provider.provider,
+      );
+      item.append(providerIcon(provider.provider, "models-provider-icon"));
+      item.appendChild(
+        Object.assign(document.createElement("span"), {
+          textContent: provider.displayName || provider.provider,
+        }),
+      );
+      item.addEventListener("click", () => {
+        selectedModelsConfigItem = { type: "auth", provider: provider.provider };
+        renderModelsConfigLayout();
+      });
+      list.appendChild(item);
+    }
+
+    if (configuredProviders.length && providerNames.length) {
+      const divider = document.createElement("div");
+      divider.className = "models-provider-divider";
+      list.appendChild(divider);
+    }
+
+    for (const id of providerNames) {
+      const provider = providers[id];
+      const item = document.createElement("button");
+      item.type = "button";
+      item.className = "models-provider-item";
+      item.classList.toggle(
+        "selected",
+        selectedModelsConfigItem?.type === "provider" && selectedModelsConfigItem.provider === id,
+      );
+      item.append(providerIcon(id, "models-provider-icon"));
+      item.appendChild(Object.assign(document.createElement("span"), { textContent: id }));
+      item.addEventListener("click", () => {
+        selectedModelsConfigItem = { type: "provider", provider: id };
+        renderModelsConfigLayout();
+      });
+      list.appendChild(item);
+
+      for (const [index, model] of (provider.models || []).entries()) {
+        const modelItem = document.createElement("button");
+        modelItem.type = "button";
+        modelItem.className = "models-model-item";
+        modelItem.classList.toggle(
+          "selected",
+          selectedModelsConfigItem?.type === "model" &&
+            selectedModelsConfigItem.provider === id &&
+            selectedModelsConfigItem.index === index,
+        );
+        modelItem.textContent = model.id || "New model";
+        modelItem.addEventListener("click", () => {
+          selectedModelsConfigItem = { type: "model", provider: id, index };
+          renderModelsConfigLayout();
+        });
+        list.appendChild(modelItem);
+      }
+
+      const addModel = document.createElement("button");
+      addModel.type = "button";
+      addModel.className = "models-model-add";
+      addModel.textContent = "+ Model";
+      addModel.addEventListener("click", () => {
+        provider.models ||= [];
+        provider.models.push({ id: "new-model" });
+        selectedModelsConfigItem = {
+          type: "model",
+          provider: id,
+          index: provider.models.length - 1,
+        };
+        sync();
+        renderModelsConfigLayout();
+      });
+      list.appendChild(addModel);
+    }
+    sidebar.appendChild(list);
+
+    const add = document.createElement("button");
+    add.type = "button";
+    add.className = "models-provider-add";
+    add.textContent = "+ Add provider";
+    add.addEventListener("click", () => openProviderPicker(catalogProviders));
+    sidebar.appendChild(add);
+
+    if (!selectedModelsConfigItem) {
+      const emptyTitle = document.createElement("h3");
+      emptyTitle.textContent = "No providers yet";
+      const emptyHint = document.createElement("p");
+      emptyHint.textContent = "Add a provider to configure a custom model endpoint.";
+      main.append(emptyTitle, emptyHint);
+    } else if (selectedModelsConfigItem.type === "auth") {
+      const provider = configuredProviders.find(
+        (candidate) => candidate.provider === selectedModelsConfigItem.provider,
+      );
+      if (provider) {
+        const card = buildApiKeyRow(provider);
+        card.classList.add("provider-manager-card");
+        card.querySelector(".api-key-row-header")?.classList.add("provider-manager-card-header");
+        card.querySelector(".api-model-list")?.classList.add("provider-manager-model-list");
+        main.appendChild(card);
+      }
+    } else if (selectedModelsConfigItem.type === "provider") {
+      renderProviderConfigForm(main, parsed, selectedModelsConfigItem.provider, update);
+    } else {
+      renderModelConfigForm(
+        main,
+        parsed,
+        selectedModelsConfigItem.provider,
+        selectedModelsConfigItem.index,
+        update,
+      );
+    }
+    layout.append(sidebar, main);
+  }
+
+  function createModelsField(label, control, hint) {
+    const field = document.createElement("label");
+    field.className = "models-config-field";
+    const caption = document.createElement("span");
+    caption.textContent = label;
+    field.append(caption, control);
+    if (hint) {
+      const help = document.createElement("small");
+      help.textContent = hint;
+      field.appendChild(help);
+    }
+    return field;
+  }
+
+  function createModelsInput(value, placeholder = "") {
+    const input = document.createElement("input");
+    input.className = "ui-input";
+    input.value = value ?? "";
+    input.placeholder = placeholder;
+    input.spellcheck = false;
+    return input;
+  }
+
+  function renderProviderConfigForm(main, config, providerName, update) {
+    const provider = config.providers[providerName];
+    const header = document.createElement("div");
+    header.className = "models-config-detail-header";
+    const eyebrow = document.createElement("span");
+    eyebrow.className = "models-config-eyebrow";
+    eyebrow.textContent = "Provider";
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "ui-button ui-button--danger ui-button--sm";
+    remove.textContent = "Delete";
+    remove.addEventListener("click", () => {
+      if (!confirm(`Delete provider “${providerName}”?`)) return;
+      update(() => {
+        delete config.providers[providerName];
+        selectedModelsConfigItem = null;
+      });
+    });
+    header.append(eyebrow, remove);
+
+    const form = document.createElement("div");
+    form.className = "models-config-form";
+    const name = createModelsInput(providerName, "provider-name");
+    name.addEventListener("change", () => {
+      const nextName = name.value.trim();
+      if (!nextName || nextName === providerName) {
+        name.value = providerName;
+        return;
+      }
+      if (config.providers[nextName]) {
+        showInlineModelsError(`Provider “${nextName}” already exists.`);
+        name.value = providerName;
+        return;
+      }
+      update(() => {
+        config.providers[nextName] = provider;
+        delete config.providers[providerName];
+        selectedModelsConfigItem = { type: "provider", provider: nextName };
+      });
+    });
+    const baseUrl = createModelsInput(provider.baseUrl, "https://api.example.com/v1");
+    baseUrl.addEventListener("input", () => {
+      provider.baseUrl = baseUrl.value || undefined;
+      inlineModelsTextarea.value = JSON.stringify(config, null, 2);
+    });
+    const apiKey = createModelsInput(
+      provider.apiKey,
+      "ENV_VAR_NAME, !shell-command, or literal key",
+    );
+    apiKey.type = "password";
+    apiKey.autocomplete = "off";
+    apiKey.addEventListener("input", () => {
+      provider.apiKey = apiKey.value || undefined;
+      inlineModelsTextarea.value = JSON.stringify(config, null, 2);
+    });
+    const api = document.createElement("select");
+    api.className = "ui-select";
+    for (const optionValue of [
+      "openai-completions",
+      "openai-responses",
+      "anthropic-messages",
+      "google-generative-ai",
+    ]) {
+      const option = document.createElement("option");
+      option.value = optionValue;
+      option.textContent = optionValue;
+      option.selected = (provider.api || "openai-completions") === optionValue;
+      api.appendChild(option);
+    }
+    api.addEventListener("change", () => {
+      provider.api = api.value;
+      inlineModelsTextarea.value = JSON.stringify(config, null, 2);
+    });
+    form.append(
+      createModelsField("Provider name", name),
+      createModelsField("Base URL", baseUrl),
+      createModelsField(
+        "API Key",
+        apiKey,
+        "Prefix with ! to run a shell command, or use an environment variable name.",
+      ),
+      createModelsField("API", api),
+    );
+    main.append(header, form);
+  }
+
+  function renderModelConfigForm(main, config, providerName, index, update) {
+    const model = config.providers[providerName].models[index];
+    const header = document.createElement("div");
+    header.className = "models-config-detail-header";
+    const eyebrow = document.createElement("span");
+    eyebrow.className = "models-config-eyebrow";
+    eyebrow.textContent = "Model";
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "ui-button ui-button--danger ui-button--sm";
+    remove.textContent = "Delete";
+    remove.addEventListener("click", () =>
+      update(() => {
+        config.providers[providerName].models.splice(index, 1);
+        selectedModelsConfigItem = { type: "provider", provider: providerName };
+      }),
+    );
+    header.append(eyebrow, remove);
+
+    const form = document.createElement("div");
+    form.className = "models-config-form";
+    const bindings = [
+      ["Model ID", "id", "model-name"],
+      ["Display name", "name", "Optional"],
+      ["Context window", "contextWindow", "Optional"],
+      ["Max tokens", "maxTokens", "Optional"],
+    ];
+    for (const [label, key, placeholder] of bindings) {
+      const input = createModelsInput(model[key], placeholder);
+      if (key === "contextWindow" || key === "maxTokens") input.type = "number";
+      input.addEventListener("input", () => {
+        const value = input.value.trim();
+        model[key] = value
+          ? key === "contextWindow" || key === "maxTokens"
+            ? Number(value)
+            : value
+          : undefined;
+        inlineModelsTextarea.value = JSON.stringify(config, null, 2);
+        if (key === "id") {
+          const item = document.querySelector(".models-model-item.selected");
+          if (item) item.textContent = value || "New model";
+        }
+      });
+      form.appendChild(createModelsField(label, input));
+    }
+    const reasoning = document.createElement("input");
+    reasoning.type = "checkbox";
+    reasoning.checked = model.reasoning === true;
+    reasoning.addEventListener("change", () => {
+      model.reasoning = reasoning.checked || undefined;
+      inlineModelsTextarea.value = JSON.stringify(config, null, 2);
+    });
+    form.appendChild(createModelsField("Reasoning model", reasoning));
+    main.append(header, form);
   }
 
   inlineModelsSave?.addEventListener("click", async () => {
@@ -691,6 +1369,8 @@ export function setupSettingsConfig({ configGateway, onModelConfigurationChanged
       if (!confirm("Replace current content with the Ollama example?")) return;
     }
     inlineModelsTextarea.value = MODELS_JSON_EXAMPLE;
+    selectedModelsConfigItem = { type: "provider", provider: "ollama" };
+    renderModelsConfigLayout();
     clearInlineModelsError();
   });
 

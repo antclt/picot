@@ -1,8 +1,13 @@
 # Picot MarkItDown Office and Email Preview Design
 
 **Date:** 2026-07-26
-**Status:** Proposed — awaiting review
+**Status:** Implemented on the native Rust Host
 **Scope:** Convert selected workspace Office and email files to Markdown for read-only preview.
+
+> Native-architecture note: the original text below describes the former TypeScript
+> embedded-server seam. The shipped implementation now lives in
+> `src-tauri/src/markitdown_preview.rs`, and `/api/files/content` delegates to it from
+> the Rust `HostServer`. The security limits and browser response contract remain the same.
 
 ## 1. Goal
 

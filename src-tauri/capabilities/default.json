@@ -12,6 +12,7 @@
     "core:default",
     "dialog:default",
     "fs:default",
+    "notification:default",
     "shell:default",
     "updater:default",
     "process:default",

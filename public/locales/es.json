@@ -33,6 +33,18 @@
     "contextTitle": "Uso del contexto",
     "costSub": "{amount} (suscripción)"
   },
+  "sessionInfo": {
+    "title": "Información de la sesión",
+    "heading": "Información de la sesión",
+    "file": "Archivo",
+    "id": "ID",
+    "inMemory": "En memoria (aún no guardada)",
+    "unavailable": "No disponible",
+    "copyFile": "Copiar ruta del archivo",
+    "copyId": "Copiar ID de sesión",
+    "copied": "Copiado",
+    "copyFailed": "Error al copiar"
+  },
   "context": {
     "cached": "En caché",
     "input": "Entrada",
@@ -43,7 +55,7 @@
   "models": {
     "searchPlaceholder": "Buscar modelos…",
     "emptyTitle": "No hay modelos disponibles",
-    "emptyHelp": "No hay claves API configuradas. Establece una clave en Configuración → Ajustes.",
+    "emptyHelp": "No hay claves API configuradas. Establece una clave en Ajustes → Proveedores.",
     "openSettings": "Abrir ajustes"
   },
   "queue": {
@@ -53,13 +65,13 @@
     "followUp": "Seguimiento"
   },
   "input": {
-    "typeMessage": "Escribe un mensaje...",
+    "typeMessage": "Mensaje… Escribe / para comandos, @ para archivos",
     "attachImage": "Adjuntar imagen",
     "commands": "Comandos",
     "switchModel": "Cambiar modelo",
     "send": "Enviar mensaje",
     "abort": "Cancelar (Esc)",
-    "messagePlaceholder": "Mensaje...",
+    "messagePlaceholder": "Mensaje… Escribe / para comandos, @ para archivos",
     "mirrorReadOnly": "Viendo sesión histórica (solo lectura)",
     "waitingForSession": "Esperando que la sesión actual termine…",
     "compact": "Compactar",
@@ -78,7 +90,12 @@
     "copyMessage": "Copiar mensaje",
     "thinking": "Pensando",
     "copy": "Copiar",
-    "copied": "¡Copiado!"
+    "copied": "¡Copiado!",
+    "processDetails": "Detalles del proceso",
+    "processStep": "{count} paso",
+    "processSteps": "{count} pasos",
+    "processToolCall": "{count} llamada a herramienta",
+    "processToolCalls": "{count} llamadas a herramientas"
   },
   "tools": {
     "copyOutput": "Copiar salida",
@@ -106,6 +123,7 @@
       "enableLineWrap": "Habilitar ajuste de línea",
       "edit": "Editar",
       "preview": "Vista previa",
+      "diff": "Diff",
       "find": "Buscar",
       "goToLine": "Ir a línea",
       "goToLinePrompt": "Número de línea",
@@ -334,6 +352,9 @@
     "untitled": "Sin título",
     "emptySession": "Sesión vacía",
     "rename": "Renombrar",
+    "generateTitle": "Generar título",
+    "generatingTitle": "Generando…",
+    "generateTitleError": "No se pudo generar el título. Inténtalo de nuevo.",
     "renameSessionAriaLabel": "Renombrar sesión",
     "renameInputPlaceholder": "Nombre de sesión",
     "renameErrorInvalid": "Introduce un nombre de sesión no vacío.",
@@ -443,7 +464,7 @@
     "general": "General",
     "extensions": "Extensiones",
     "usage": "Uso",
-    "configuration": "Configuración",
+    "configuration": "Proveedores",
     "agentInbox": "Bandeja del agente",
     "backToChat": "Volver al chat",
     "appearance": "Apariencia",
@@ -453,13 +474,17 @@
     "thinkingEffort": "Esfuerzo de razonamiento",
     "reasoningDepth": "Profundidad de razonamiento",
     "showThinking": "Mostrar razonamiento",
+    "taskNotifications": "Notificaciones de tareas completadas",
+    "taskNotificationsDescription": "Muestra una notificación del sistema operativo cuando finaliza una tarea.",
+    "taskCompleteTitle": "Tarea completada",
+    "taskCompleteMessage": "Tu tarea ha finalizado.",
     "piVersion": "Versión de Pi",
     "picotVersion": "Versión de Picot",
     "checkForUpdates": "Buscar actualizaciones",
     "status": "Estado",
     "updateAvailable": "Actualización disponible",
     "downloadInstall": "Descargar e instalar",
-    "authentication": "Autenticación",
+    "authentication": "Proveedores",
     "protection": "Protección",
     "requireLogin": "Requerir inicio de sesión",
     "agentConfigFile": "Archivo de configuración del agente",
@@ -710,7 +735,7 @@
         "searchResults": "Resultados de búsqueda"
       },
       "placeholder": {
-        "typeAMessageOrUseToCall": "Escribe un mensaje, o usa / para llamar a una habilidad…",
+        "typeAMessageOrUseToCall": "Mensaje… Escribe / para comandos, @ para archivos",
         "providers": "{ \"providers\": { ... } }",
         "searchTasksAndMessages": "Buscar tareas y mensajes…"
       },

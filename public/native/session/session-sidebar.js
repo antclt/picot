@@ -9,7 +9,7 @@ import { randomId } from "../utils/random-id.js";
 // but re-wired onto the native gateways:
 //   - listing        → HostDataGateway.listSessions(workspaceId)   (flat list)
 //   - full-text search→ HostDataGateway.searchSessions(workspaceId, query)
-//   - rename          → RuntimeGateway.request({ type: "set_session_name" })
+//   - rename/title    → RuntimeGateway for active sessions, ConfigGateway + Pi SessionManager for history
 //   - selection       → navigate to the session route (page re-bootstraps)
 //   - streaming/unread→ driven by the caller from runtime_event frames
 //
@@ -106,6 +106,7 @@ function sessionListSignature(sessions) {
       unread: session?.unread === true,
       hasUnread: session?.hasUnread === true,
       target: session?.target ?? null,
+      filePath: session?.filePath ?? null,
     })),
   );
 }
@@ -207,12 +208,13 @@ const TRASH_ICON = `
 export class SessionSidebar {
   constructor(
     container,
-    { data, runtime, control, getTarget, onSelect, onCreateSession, onSessionsLoaded },
+    { data, runtime, control, config, getTarget, onSelect, onCreateSession, onSessionsLoaded },
   ) {
     this.container = container;
     this.data = data;
     this.runtime = runtime;
     this.control = control;
+    this.config = config;
     this.getTarget = getTarget;
     this.onSelect = onSelect;
     this.onCreateSession = onCreateSession;
@@ -226,6 +228,7 @@ export class SessionSidebar {
     this.projectsCollapsed = readObject(STORAGE.projectsCollapsed);
     this.unread = new Set(readArray(STORAGE.unread));
     this.streaming = new Set();
+    this.autoTitleAttempted = new Set();
 
     this.searchQuery = "";
     this._searchResults = null;
@@ -422,7 +425,7 @@ export class SessionSidebar {
       }
       const changed = sessionListSignature(nextSessions) !== previousSignature;
       this.sessions = nextSessions;
-      this.#hydrateStatuses(this.sessions);
+      this.#hydrateStatuses(this.sessions, { authoritative: true });
       writeSessionCache(workspaceId, this.sessions);
       this.onSessionsLoaded?.(this.sessions);
       if (changed || (!quiet && !renderedFromCache)) this.render();
@@ -577,15 +580,22 @@ export class SessionSidebar {
       });
   }
 
-  #hydrateStatuses(sessions) {
+  #hydrateStatuses(sessions, { authoritative = false } = {}) {
+    const listedIds = new Set();
     for (const session of sessions) {
       if (!session?.id) continue;
+      listedIds.add(session.id);
       if (isWorkingSession(session)) this.streaming.add(session.id);
-      else if (hasLiveStatus(session)) this.streaming.delete(session.id);
+      else if (authoritative || hasLiveStatus(session)) this.streaming.delete(session.id);
 
       if (isUnreadSession(session) && session.id !== this.activeSessionId)
         this.unread.add(session.id);
       else if (session.id === this.activeSessionId) this.unread.delete(session.id);
+    }
+    if (authoritative) {
+      for (const id of this.streaming) {
+        if (!listedIds.has(id)) this.streaming.delete(id);
+      }
     }
     this.#save(STORAGE.unread, [...this.unread]);
   }
@@ -892,18 +902,23 @@ export class SessionSidebar {
     event.preventDefault();
     const rows = [
       {
-        icon: this.isFavourite(session.id) ? "☆" : "★",
         label: this.isFavourite(session.id) ? "Unfavourite" : "Favourite",
         action: () => this.toggleFavourite(session.id),
       },
       {
-        icon: this.isArchived(session.id) ? "📤" : "🗄️",
         label: this.isArchived(session.id) ? "Unarchive" : "Archive",
         action: () => this.toggleArchived(session.id),
       },
     ];
     if (session.id === this.activeSessionId) {
-      rows.push({ icon: "✏️", label: "Rename", action: () => this.#startRename(session) });
+      rows.push({
+        label: t("sidebar.generateTitle"),
+        action: () => void this.#generateTitle(session),
+      });
+    }
+    if (session.filePath) {
+      rows.push({ separator: true });
+      rows.push({ label: "Rename", action: () => this.#startRename(session) });
     }
     this.#showMenu(event, rows);
   }
@@ -912,7 +927,6 @@ export class SessionSidebar {
     event.preventDefault();
     this.#showMenu(event, [
       {
-        icon: "🗄️",
         label: "Archive all sessions",
         action: () => this.archiveProject(project),
       },
@@ -925,9 +939,15 @@ export class SessionSidebar {
     menu.className = "session-context-menu";
 
     for (const entry of rows) {
+      if (entry.separator) {
+        const sep = document.createElement("div");
+        sep.className = "context-menu-separator";
+        menu.appendChild(sep);
+        continue;
+      }
       const row = document.createElement("div");
       row.className = "context-menu-item";
-      row.innerHTML = `<span class="context-menu-icon">${entry.icon}</span>${entry.label}`;
+      row.textContent = entry.label;
       row.addEventListener("click", (ev) => {
         ev.stopPropagation();
         this.closeContextMenu();
@@ -952,8 +972,43 @@ export class SessionSidebar {
     this.contextMenu = null;
   }
 
-  // Rename only works for the active (foreground) session — set_session_name
-  // targets the running runtime, so non-active sessions cannot be renamed.
+  async autoGenerateTitle(sessionId) {
+    if (!sessionId || this.autoTitleAttempted.has(sessionId)) return;
+    const session = this.sessions.find((candidate) => candidate.id === sessionId);
+    if (!session) return;
+    const currentName = String(session.name || "").trim();
+    if (currentName && currentName !== "Untitled" && currentName !== "New Session") return;
+    this.autoTitleAttempted.add(sessionId);
+    await this.#generateTitle(session);
+  }
+
+  async #generateTitle(session) {
+    if (!this.config) return;
+    const item = this.container.querySelector(
+      `.session-item[data-session-id="${cssEscape(session.id)}"]`,
+    );
+    const titleEl = item?.querySelector(".session-title");
+    const previousTitle = titleEl?.textContent || session.name || "";
+    if (titleEl) titleEl.textContent = t("sidebar.generatingTitle");
+
+    try {
+      const result = await this.config.call("generate_session_title", {}, { timeoutMs: 100_000 });
+      const title = result?.data?.title?.trim();
+      if (!result?.ok || !title) throw new Error(result?.error || t("sidebar.generateTitleError"));
+      await this.runtime.request({ type: "set_session_name", name: title }, this.getTarget(), {
+        idempotencyKey: randomId(),
+      });
+      session.name = title;
+      if (titleEl) {
+        titleEl.textContent = title;
+        titleEl.title = title;
+      }
+    } catch (error) {
+      if (titleEl) titleEl.textContent = previousTitle;
+      console.error("[Sidebar] Generate title failed:", error);
+    }
+  }
+
   #startRename(session) {
     const item = this.container.querySelector(
       `.session-item[data-session-id="${cssEscape(session.id)}"]`,
@@ -972,10 +1027,22 @@ export class SessionSidebar {
       const name = input.value.trim();
       if (name && name !== current) {
         try {
-          await this.runtime.request({ type: "set_session_name", name }, this.getTarget(), {
-            idempotencyKey: randomId(),
-          });
+          if (session.id === this.activeSessionId) {
+            await this.runtime.request({ type: "set_session_name", name }, this.getTarget(), {
+              idempotencyKey: randomId(),
+            });
+          } else {
+            const result = await this.config.call("rename_historical_session", {
+              filePath: session.filePath,
+              name,
+            });
+            if (!result?.ok) throw new Error(result?.error || "Session rename failed");
+          }
+          for (const candidate of this.sessions) {
+            if (candidate.filePath === session.filePath) candidate.name = name;
+          }
           session.name = name;
+          void this.load({ quiet: true });
         } catch (error) {
           console.error("[Sidebar] Rename failed:", error);
         }

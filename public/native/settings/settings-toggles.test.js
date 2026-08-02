@@ -19,6 +19,7 @@ describe("setupSettingsToggles", () => {
     container.innerHTML = `
       <button class="settings-toggle" id="toggle-auto-compact"></button>
       <button class="settings-toggle on" id="toggle-show-thinking"></button>
+      <button class="settings-toggle" id="toggle-task-notifications"></button>
       <button class="settings-toggle" id="toggle-auth"></button>
       <button class="settings-toggle" id="toggle-beta-updates"></button>
     `;
@@ -35,15 +36,18 @@ describe("setupSettingsToggles", () => {
     const autoCompactBtn = document.getElementById("toggle-auto-compact");
     const showThinkingBtn = document.getElementById("toggle-show-thinking");
     const authBtn = document.getElementById("toggle-auth");
+    const taskNotificationsBtn = document.getElementById("toggle-task-notifications");
     const betaBtn = document.getElementById("toggle-beta-updates");
 
     expect(autoCompactBtn.classList.contains("on")).toBe(true);
     expect(showThinkingBtn.classList.contains("on")).toBe(true);
     expect(authBtn.classList.contains("on")).toBe(false);
+    expect(taskNotificationsBtn.classList.contains("on")).toBe(true);
 
     expect(autoCompactBtn.getAttribute("aria-checked")).toBe("true");
     expect(showThinkingBtn.getAttribute("aria-checked")).toBe("true");
     expect(authBtn.getAttribute("aria-checked")).toBe("false");
+    expect(taskNotificationsBtn.getAttribute("aria-checked")).toBe("true");
     expect(betaBtn.classList.contains("on")).toBe(false);
     expect(betaBtn.getAttribute("aria-checked")).toBe("false");
   });
@@ -105,6 +109,7 @@ describe("setupSettingsToggles", () => {
 
     expect(control.getToggleState("auto-compact")).toBe(true);
     expect(control.getToggleState("show-thinking")).toBe(true); // default
+    expect(control.getToggleState("task-notifications")).toBe(true); // default
     expect(control.getToggleState("auth-enabled")).toBe(false); // default
     expect(control.getToggleState("beta-updates")).toBe(false); // default
   });

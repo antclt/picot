@@ -1,6 +1,10 @@
 import { t } from "../../i18n.js";
 import { formatTokens, setupContextViz } from "../../ui/context-viz.js";
 
+// Mirrors Pi's DEFAULT_COMPACTION_SETTINGS.keepRecentTokens. Below this
+// boundary prepareCompaction() has no older context to summarize.
+export const MIN_COMPACTABLE_CONTEXT_TOKENS = 20_000;
+
 export function setupContextUsage({
   tokenUsageEl = document.getElementById("token-usage"),
   contextViz = document.getElementById("context-viz"),
@@ -8,9 +12,12 @@ export function setupContextUsage({
   contextLegend = document.getElementById("context-legend"),
   contextVizUsed = document.getElementById("context-viz-used"),
   contextVizTotal = document.getElementById("context-viz-total"),
+  compactButton = document.getElementById("compact-context-btn"),
 } = {}) {
   let usage = null;
   let contextWindowSize = 0;
+  let compacting = false;
+  let working = false;
 
   const viz = setupContextViz({
     tokenUsageEl,
@@ -45,9 +52,24 @@ export function setupContextUsage({
       tokenUsageEl.title = t("usage.contextTitle");
     }
     viz.hide();
+    renderCompactButton();
+  }
+
+  function renderCompactButton() {
+    if (!compactButton) return;
+    compactButton.hidden = usageTotal(usage) <= MIN_COMPACTABLE_CONTEXT_TOKENS;
+    compactButton.classList.toggle("compacting", compacting);
+    compactButton.disabled = compacting || working;
+    compactButton.setAttribute("aria-busy", String(compacting));
+    const label = compactButton.querySelector(".compact-btn-label");
+    if (label) label.textContent = t(compacting ? "input.compacting" : "input.compact");
+    const description = t(compacting ? "input.compacting" : "input.compactDesc");
+    compactButton.title = description;
+    compactButton.setAttribute("aria-label", description);
   }
 
   function renderPill() {
+    renderCompactButton();
     if (!tokenUsageEl) return;
     const used = usageTotal(usage);
     tokenUsageEl.classList.remove("warning", "critical");
@@ -79,6 +101,17 @@ export function setupContextUsage({
 
   return {
     clear,
+    get canCompact() {
+      return usageTotal(usage) > MIN_COMPACTABLE_CONTEXT_TOKENS;
+    },
+    setCompacting(value) {
+      compacting = Boolean(value);
+      renderCompactButton();
+    },
+    setWorking(value) {
+      working = Boolean(value);
+      renderCompactButton();
+    },
     setContextWindowSize,
     setUsage,
     get usage() {

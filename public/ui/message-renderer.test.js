@@ -82,6 +82,22 @@ describe("MessageRenderer streaming markdown preview", () => {
     expect(content.innerHTML).toContain("<code>code</code>");
   });
 
+  it("preserves streamed text when message_end carries only tool_use blocks", () => {
+    // Regression: task ends with content=[{type:"tool_use"}], which yields
+    // text="" from splitStreamingContent. Previously this overwrote
+    // _streamingRawText with "" and cleared the contentDiv.
+    const el = renderer.renderAssistantMessage({ content: "" }, true);
+    renderer.updateStreamingMessage(el, "I will call a tool now.");
+    // Simulate message_end passing full content that has no text blocks
+    renderer.updateStreamingMessage(el, [{ type: "tool_use", id: "x", name: "bash", input: {} }]);
+    renderer.finalizeStreamingMessage(el);
+
+    const content = el.querySelector(".message-content");
+    expect(content.textContent.trim()).toBe("I will call a tool now.");
+    // Footer exists because there is copyable text
+    expect(el.querySelector(".message-copy-btn")).not.toBeNull();
+  });
+
   it("does not add a copy footer to empty finalized streaming messages", () => {
     const el = renderer.renderAssistantMessage({ content: "" }, true);
 

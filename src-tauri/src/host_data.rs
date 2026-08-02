@@ -5,6 +5,8 @@ use std::path::{Component, Path, PathBuf};
 use std::process::Command;
 use std::sync::{Arc, RwLock};
 
+use crate::markitdown_preview::{is_convertible_suffix, INPUT_BYTE_CAP};
+
 #[derive(Debug, Clone)]
 struct CachedSessionSummary {
     modified_at_ms: u128,
@@ -66,6 +68,48 @@ pub struct RawFileContent {
     pub size: u64,
 }
 
+pub struct ConvertibleFile {
+    pub path: String,
+    pub bytes: Vec<u8>,
+    pub suffix: String,
+    pub size: u64,
+    pub mtime_ms: f64,
+    pub mime_type: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitFileStatus {
+    pub path: String,
+    pub original_path: Option<String>,
+    pub status: String,
+    pub code: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitStatusResult {
+    pub is_git_repository: bool,
+    pub files: Vec<GitFileStatus>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitStatResult {
+    pub is_git_repository: bool,
+    pub files_changed: u32,
+    pub insertions: u32,
+    pub deletions: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitDiffResult {
+    pub supported: bool,
+    pub status: Option<String>,
+    pub patch: Option<String>,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum WriteFileResult {
     Saved { size: u64, mtime_ms: f64 },
@@ -87,6 +131,8 @@ pub struct SessionSummary {
     pub project_name: String,
     /// True when this session belongs to the workspace the sidebar is showing.
     pub is_current_workspace: bool,
+    /// Absolute path to the persisted JSONL session file.
+    pub file_path: String,
     pub file_name: String,
     pub modified_at_ms: u128,
 }
@@ -220,6 +266,35 @@ fn message_with_entry_id(mut message: serde_json::Value, entry_id: &str) -> serd
         );
     }
     message
+}
+
+/// Parse a number from `git diff --shortstat` output for a given keyword.
+/// e.g. `parse_shortstat_num("3 files changed, 10 insertions(+)", "insertion")` → 10
+fn parse_shortstat_num(line: &str, keyword: &str) -> u32 {
+    line.split(',').find_map(|part| {
+        let part = part.trim();
+        if part.contains(keyword) {
+            part.split_whitespace().next().and_then(|n| n.parse().ok())
+        } else {
+            None
+        }
+    }).unwrap_or(0)
+}
+
+fn classify_git_status(x: char, y: char) -> (&'static str, &'static str) {
+    if matches!((x, y), ('D', 'D') | ('A', 'A')) || x == 'U' || y == 'U' {
+        ("conflict", "C")
+    } else if x == '?' && y == '?' {
+        ("untracked", "U")
+    } else if x == 'D' || y == 'D' {
+        ("deleted", "D")
+    } else if x == 'R' || y == 'R' {
+        ("renamed", "R")
+    } else if x == 'A' || y == 'A' {
+        ("added", "A")
+    } else {
+        ("modified", "M")
+    }
 }
 
 impl HostDataPlane {
@@ -454,6 +529,48 @@ impl HostDataPlane {
         })
     }
 
+    pub fn read_convertible_file(
+        &self,
+        workspace_id: &str,
+        relative_path: &str,
+    ) -> Result<Option<ConvertibleFile>, HostDataError> {
+        let suffix = preview_extension(Path::new(relative_path));
+        if !is_convertible_suffix(&suffix) {
+            return Ok(None);
+        }
+        let root = self.workspace_root(workspace_id)?;
+        let path = safe_join(&root, relative_path)?;
+        let metadata =
+            std::fs::metadata(&path).map_err(|error| HostDataError::Io(error.to_string()))?;
+        if !metadata.is_file() {
+            return Err(HostDataError::NotFile);
+        }
+        if metadata.len() > INPUT_BYTE_CAP {
+            return Ok(Some(ConvertibleFile {
+                path: relative_path.to_owned(),
+                bytes: Vec::new(),
+                suffix,
+                size: metadata.len(),
+                mtime_ms: file_mtime_ms(&metadata)?,
+                mime_type: "application/octet-stream".into(),
+            }));
+        }
+        let file =
+            std::fs::File::open(&path).map_err(|error| HostDataError::Io(error.to_string()))?;
+        let mut bytes = Vec::with_capacity(metadata.len() as usize);
+        file.take(INPUT_BYTE_CAP + 1)
+            .read_to_end(&mut bytes)
+            .map_err(|error| HostDataError::Io(error.to_string()))?;
+        Ok(Some(ConvertibleFile {
+            path: relative_path.to_owned(),
+            bytes,
+            suffix,
+            size: metadata.len(),
+            mtime_ms: file_mtime_ms(&metadata)?,
+            mime_type: "application/octet-stream".into(),
+        }))
+    }
+
     pub fn raw_file_content(
         &self,
         workspace_id: &str,
@@ -484,6 +601,169 @@ impl HostDataPlane {
             bytes,
             mime_type: classification.mime_type.to_owned(),
             size: metadata.len(),
+        })
+    }
+
+    pub fn git_status(&self, workspace_id: &str) -> Result<GitStatusResult, HostDataError> {
+        let root = self.workspace_root(workspace_id)?;
+        let output = Command::new("git")
+            .args(["status", "--porcelain=v1", "-z", "--untracked-files=all"])
+            .current_dir(&root)
+            .env("LC_ALL", "C")
+            .env("GIT_OPTIONAL_LOCKS", "0")
+            .output()
+            .map_err(|error| HostDataError::Io(error.to_string()))?;
+        if !output.status.success() {
+            return Ok(GitStatusResult {
+                is_git_repository: false,
+                files: vec![],
+            });
+        }
+        let text = String::from_utf8_lossy(&output.stdout);
+        let records: Vec<&str> = text.split('\0').collect();
+        let mut files = Vec::new();
+        let mut index = 0;
+        while index < records.len() {
+            let record = records[index];
+            index += 1;
+            if record.len() < 4 {
+                continue;
+            }
+            let bytes = record.as_bytes();
+            let x = bytes[0] as char;
+            let y = bytes[1] as char;
+            let path = record[3..].to_owned();
+            let original_path = if matches!(x, 'R' | 'C') || matches!(y, 'R' | 'C') {
+                let original = records
+                    .get(index)
+                    .filter(|value| !value.is_empty())
+                    .map(|value| (*value).to_owned());
+                if original.is_some() {
+                    index += 1;
+                }
+                original
+            } else {
+                None
+            };
+            let (status, code) = classify_git_status(x, y);
+            files.push(GitFileStatus {
+                path,
+                original_path,
+                status: status.into(),
+                code: code.into(),
+            });
+        }
+        Ok(GitStatusResult {
+            is_git_repository: true,
+            files,
+        })
+    }
+
+    pub fn git_file_diff(
+        &self,
+        workspace_id: &str,
+        relative_path: &str,
+    ) -> Result<GitDiffResult, HostDataError> {
+        let root = self.workspace_root(workspace_id)?;
+        let _ = safe_join(&root, relative_path)?;
+        let status = self
+            .git_status(workspace_id)?
+            .files
+            .into_iter()
+            .find(|file| file.path == relative_path);
+        let Some(file) = status else {
+            return Ok(GitDiffResult {
+                supported: false,
+                status: None,
+                patch: None,
+            });
+        };
+        let output = if file.status == "untracked" {
+            let absolute = safe_join(&root, relative_path)?;
+            Command::new("git")
+                .args([
+                    "diff",
+                    "--no-color",
+                    "--no-ext-diff",
+                    "--no-index",
+                    "/dev/null",
+                ])
+                .arg(absolute)
+                .current_dir(&root)
+                .env("LC_ALL", "C")
+                .output()
+        } else {
+            let mut command = Command::new("git");
+            command.args([
+                "diff",
+                "--no-color",
+                "--no-ext-diff",
+                "--unified=3",
+                "HEAD",
+                "--",
+            ]);
+            if let Some(original) = &file.original_path {
+                command.arg(original);
+            }
+            command
+                .arg(relative_path)
+                .current_dir(&root)
+                .env("LC_ALL", "C")
+                .output()
+        }
+        .map_err(|error| HostDataError::Io(error.to_string()))?;
+        // git diff --no-index reports differences with exit status 1.
+        if !output.status.success() && output.status.code() != Some(1) {
+            return Ok(GitDiffResult {
+                supported: false,
+                status: None,
+                patch: None,
+            });
+        }
+        let patch = String::from_utf8_lossy(&output.stdout).into_owned();
+        let supported = patch.contains("\n@@ ");
+        Ok(GitDiffResult {
+            supported,
+            status: Some(file.status),
+            patch: supported.then_some(patch),
+        })
+    }
+
+    pub fn git_stat(&self, workspace_id: &str) -> Result<GitStatResult, HostDataError> {
+        let root = self.workspace_root(workspace_id)?;
+        // Check if this is a git repo first
+        let check = Command::new("git")
+            .args(["rev-parse", "--is-inside-work-tree"])
+            .current_dir(&root)
+            .output()
+            .map_err(|e| HostDataError::Io(e.to_string()))?;
+        if !check.status.success() {
+            return Ok(GitStatResult {
+                is_git_repository: false,
+                files_changed: 0,
+                insertions: 0,
+                deletions: 0,
+            });
+        }
+        // git diff --shortstat HEAD gives: " N files changed, X insertions(+), Y deletions(-)"
+        // If HEAD doesn't exist (initial commit), fall back to diffing against empty tree
+        let output = Command::new("git")
+            .args(["diff", "--shortstat", "HEAD"])
+            .current_dir(&root)
+            .env("LC_ALL", "C")
+            .output()
+            .map_err(|e| HostDataError::Io(e.to_string()))?;
+        let line = String::from_utf8_lossy(&output.stdout);
+        let line = line.trim();
+        // Parse: "3 files changed, 10 insertions(+), 2 deletions(-)"
+        let files_changed = parse_shortstat_num(line, "file");
+        let insertions = parse_shortstat_num(line, "insertion");
+        let deletions = parse_shortstat_num(line, "deletion");
+        Ok(GitStatResult {
+            is_git_repository: true,
+            files_changed,
+            insertions,
+            deletions,
         })
     }
 
@@ -828,7 +1108,10 @@ impl HostDataPlane {
             };
             for file in files.filter_map(Result::ok) {
                 let path = file.path();
-                if path.extension().and_then(|value| value.to_str()) != Some("jsonl") {
+                let is_regular_file = file.file_type().is_ok_and(|file_type| file_type.is_file());
+                if !is_regular_file
+                    || path.extension().and_then(|value| value.to_str()) != Some("jsonl")
+                {
                     continue;
                 }
                 let Ok(Some(summary)) = self.cached_session_summary(&path) else {
@@ -1409,6 +1692,7 @@ fn parse_session_summary_with_metadata(
         project_path: project_path.to_string_lossy().into_owned(),
         project_name,
         is_current_workspace: false,
+        file_path: path.to_string_lossy().into_owned(),
         file_name: path
             .file_name()
             .unwrap_or_default()
@@ -1539,7 +1823,11 @@ impl<'a> FileMentionWalk<'a> {
 
 fn score_mention(display_path: &str, name: &str, fuzzy: &str, is_directory: bool) -> u16 {
     let base = if fuzzy.is_empty() {
-        if is_directory { 11 } else { 1 }
+        if is_directory {
+            11
+        } else {
+            1
+        }
     } else {
         let name = name.to_lowercase();
         if name == fuzzy {
@@ -1654,22 +1942,7 @@ fn classify_preview_file(path: &Path, prefix: &[u8]) -> PreviewFileClassificatio
             editable: false,
         };
     }
-    if matches!(
-        ext.as_str(),
-        "mbox"
-            | "doc"
-            | "docx"
-            | "rtf"
-            | "odt"
-            | "ppt"
-            | "pptx"
-            | "odp"
-            | "xls"
-            | "xlsx"
-            | "ods"
-            | "eml"
-            | "msg"
-    ) {
+    if ext == "mbox" || is_convertible_suffix(&ext) {
         return PreviewFileClassification {
             mime_type: "application/octet-stream",
             kind: PreviewFileKind::Binary,
@@ -2182,6 +2455,31 @@ mod tests {
         assert_eq!(dashboard.by_tool[0].name, "bash");
         // The most expensive session sorts first.
         assert_eq!(dashboard.top_sessions[0].id, "session-b");
+        fs::remove_dir_all(temp).unwrap();
+    }
+
+    #[test]
+    fn opens_convertible_preview_input_inside_the_registered_workspace() {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let temp = std::env::temp_dir().join(format!("picot-host-document-{nonce}"));
+        let workspace = temp.join("workspace");
+        fs::create_dir_all(&workspace).unwrap();
+        fs::write(workspace.join("report.docx"), b"document bytes").unwrap();
+        let data = HostDataPlane::new(HashMap::from([("workspace-a".into(), workspace)])).unwrap();
+
+        let source = data
+            .read_convertible_file("workspace-a", "report.docx")
+            .unwrap()
+            .unwrap();
+        assert_eq!(source.suffix, "docx");
+        assert_eq!(source.bytes, b"document bytes");
+        assert!(data
+            .read_convertible_file("workspace-a", "notes.csv")
+            .unwrap()
+            .is_none());
         fs::remove_dir_all(temp).unwrap();
     }
 }

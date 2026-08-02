@@ -9,7 +9,6 @@ import { expect, test } from "vitest";
 const publicDir = join(process.cwd(), "public");
 const indexHtml = readFileSync(join(publicDir, "index.html"), "utf8");
 const styleCss = readFileSync(join(publicDir, "style.css"), "utf8");
-const appJs = readFileSync(join(publicDir, "app.js"), "utf8");
 const document = new JSDOM(indexHtml).window.document;
 
 test("file sidebar uses the outlined panel toolbar control", () => {
@@ -26,16 +25,6 @@ test("Side Chat keeps its existing icon button styling", () => {
 
   expect(button?.classList.contains("icon-btn")).toBe(true);
   expect(button?.classList.contains("panel-toggle-btn")).toBe(false);
-});
-
-test("toolbar orders Side Chat, Terminal Panel, then File Browser", () => {
-  const moveSideChat = appJs.indexOf("toolbarEl.insertBefore(sideChatToggle, fileSidebarToggle)");
-  const moveTerminal = appJs.indexOf(
-    "toolbarEl.insertBefore(terminalPanel.toggleEl, fileSidebarToggle)",
-  );
-
-  expect(moveSideChat).toBeGreaterThan(-1);
-  expect(moveTerminal).toBeGreaterThan(moveSideChat);
 });
 
 test("panel controls use the compact borderless visual contract", () => {

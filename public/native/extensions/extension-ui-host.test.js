@@ -141,6 +141,43 @@ describe("ExtensionUiHost", () => {
     expect(host.hasPending("a")).toBe(true);
   });
 
+  it("shows an in-flight dialog again when switching away and immediately back", async () => {
+    const runtime = { request: vi.fn().mockResolvedValue({}) };
+    let shown = 0;
+    const host = new ExtensionUiHost({
+      runtime,
+      showInlinePrompt: (_request, { dismissSignal }) => {
+        shown += 1;
+        if (shown > 1) return Promise.resolve({ value: "chosen" });
+        return new Promise((resolve) => {
+          dismissSignal.then(() => {
+            setTimeout(() => resolve({ cancelled: true }), 0);
+          });
+        });
+      },
+    });
+    await host.setForegroundSession("a");
+
+    const handled = host.handle(targetA, {
+      type: "extension_ui_request",
+      id: "dialog-a",
+      method: "select",
+      title: "Pick one",
+      options: ["chosen"],
+    });
+
+    await host.setForegroundSession("b");
+    await host.setForegroundSession("a");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(shown).toBe(2);
+    await handled;
+    expect(runtime.request).toHaveBeenCalledWith(
+      { type: "extension_ui_response", id: "dialog-a", value: "chosen" },
+      targetA,
+    );
+  });
+
   it("uses inline prompts before falling back to modal dialogs", async () => {
     const runtime = { request: vi.fn().mockResolvedValue({}) };
     const showDialog = vi.fn();

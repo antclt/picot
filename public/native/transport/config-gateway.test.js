@@ -20,6 +20,25 @@ function idFromRequest(request) {
 }
 
 describe("ConfigGateway", () => {
+  it("waits for the active runtime target before sending startup configuration reads", async () => {
+    let markReady;
+    const ready = new Promise((resolve) => {
+      markReady = resolve;
+    });
+    const waitUntilReady = () => ready;
+    const runtime = { request: vi.fn().mockResolvedValue({ acceptance: "accepted" }) };
+    const target = { workspaceId: "w", sessionId: "s", instanceId: "i" };
+    const gateway = new ConfigGateway({ runtime, getTarget: () => target, waitUntilReady });
+
+    void gateway.call("get_default_thinking_level");
+    void gateway.call("get_default_auto_compaction");
+    await Promise.resolve();
+    expect(runtime.request).not.toHaveBeenCalled();
+
+    markReady();
+    await vi.waitFor(() => expect(runtime.request).toHaveBeenCalledTimes(2));
+  });
+
   it("invokes /picot-config with an idempotency key and resolves on the matching notify", async () => {
     const { requests, gateway } = createHarness();
     const promise = gateway.call("list_model_catalog", { foo: 1 });

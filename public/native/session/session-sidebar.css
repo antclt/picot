@@ -455,37 +455,42 @@
 .session-context-menu {
   position: fixed;
   z-index: 10000;
-  min-width: 160px;
-  padding: var(--space-1);
+  min-width: 220px;
+  padding: var(--space-1-5) 0;
   background: var(--bg-frosted);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid var(--border-hover);
-  border-radius: var(--radius-md);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-  animation: fadeIn 0.15s var(--ease);
+  backdrop-filter: blur(40px) saturate(180%);
+  -webkit-backdrop-filter: blur(40px) saturate(180%);
+  border: 0.5px solid var(--border-hover);
+  border-radius: 8px;
+  box-shadow:
+    var(--shadow-lg),
+    0 20px 40px rgba(0, 0, 0, 0.15);
+  animation: fadeIn 0.08s ease-out;
 }
 
 .context-menu-item {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-sm);
-  font-size: var(--font-size-sm);
+  display: block;
+  padding: 5px 14px;
+  font-size: 13px;
+  font-family: -apple-system, BlinkMacSystemFont, "San Francisco", system-ui, sans-serif;
+  font-weight: 400;
+  line-height: 1.4;
   color: var(--text-primary);
-  cursor: pointer;
-  transition: background var(--duration) var(--ease);
+  cursor: default;
+  user-select: none;
+  -webkit-user-select: none;
+  white-space: nowrap;
 }
 
 .context-menu-item:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--accent);
+  color: #fff;
 }
 
-.context-menu-icon {
-  width: 16px;
-  text-align: center;
-  flex-shrink: 0;
+.context-menu-separator {
+  height: 1px;
+  margin: 5px 0;
+  background: var(--border-hover);
 }
 
 /* Favourite star in session items */

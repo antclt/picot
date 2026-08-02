@@ -15,8 +15,12 @@
  */
 export async function setupProjectHeader({ data, workspaceId }) {
   const workspaceEl = document.getElementById("workspace-indicator");
-  const branchEl = document.getElementById("git-branch-indicator");
-  if (!workspaceEl && !branchEl) return;
+  // #git-branch-indicator is the label span inside #diff-sidebar-toggle.
+  // The toggle button itself carries the hidden class and is shown only when
+  // git info is available.
+  const branchLabelEl = document.getElementById("git-branch-indicator");
+  const diffToggleEl = branchLabelEl?.closest("#diff-sidebar-toggle");
+  if (!workspaceEl && !branchLabelEl) return;
 
   let info;
   try {
@@ -34,12 +38,13 @@ export async function setupProjectHeader({ data, workspaceId }) {
     workspaceEl.classList.remove("hidden");
   }
 
-  if (branchEl) {
+  if (diffToggleEl) {
     if (info.gitBranch) {
-      branchEl.textContent = info.gitBranch;
-      branchEl.classList.remove("hidden");
+      if (branchLabelEl) branchLabelEl.textContent = info.gitBranch;
+      diffToggleEl.title = `Git changes — ${info.gitBranch}`;
+      diffToggleEl.classList.remove("hidden");
     } else {
-      branchEl.classList.add("hidden");
+      diffToggleEl.classList.add("hidden");
     }
   }
 }

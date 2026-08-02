@@ -73,13 +73,7 @@ export class ExtensionUiHost {
     const sessionId = this.#foregroundSessionId;
     const inFlight = this.#inFlight.get(sessionId);
     if (!inFlight) return false;
-    const queue = this.#queues.get(sessionId) ?? [];
-    queue.unshift({
-      target: structuredClone(inFlight.target),
-      request: structuredClone(inFlight.request),
-    });
-    this.#queues.set(sessionId, queue);
-    inFlight.abort({ cancel: false, requeuedNow: true });
+    this.#requeueInFlight(sessionId, inFlight);
     return true;
   }
 
@@ -101,9 +95,22 @@ export class ExtensionUiHost {
     // and shown again when the user returns to that session.
     if (oldId && oldId !== sessionId) {
       const inFlight = this.#inFlight.get(oldId);
-      if (inFlight) inFlight.abort({ cancel: false });
+      if (inFlight) this.#requeueInFlight(oldId, inFlight);
     }
     if (flush) await this.flushForegroundQueue();
+  }
+
+  #requeueInFlight(sessionId, inFlight) {
+    const queue = this.#queues.get(sessionId) ?? [];
+    queue.unshift({
+      target: structuredClone(inFlight.target),
+      request: structuredClone(inFlight.request),
+    });
+    this.#queues.set(sessionId, queue);
+    // Queue synchronously before dismissing the old DOM. The prompt's dismiss
+    // path can settle asynchronously; waiting for it used to let a rapid
+    // switch back flush an empty queue and strand the request afterward.
+    inFlight.abort({ cancel: false, requeuedNow: true });
   }
 
   /**

@@ -43,6 +43,12 @@ Picot 当前的 `parseSessionFile()` 在取得首条用户消息后约 50 行即
 - 浏览器传入的文件路径永远不可信；
 - rename 是 catalog mutation，必须使所有 mutation 前已发出的 catalog 请求永久失效。
 
+> Native-architecture note: historical rename is implemented as the Pi-owned
+> `rename_historical_session` operation in `picot-config`, invoked over the existing
+> native RPC bridge. Active rename still uses native `set_session_name`. This replaces
+> the former loopback `/api/sessions/rename` endpoint while preserving managed-session
+> validation and `SessionManager.open().appendSessionInfo()` persistence.
+
 ## Architecture
 
 ### Session catalog

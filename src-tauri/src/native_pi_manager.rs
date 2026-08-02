@@ -230,6 +230,7 @@ impl NativePiManager {
                 }
                 let _ = inner.events.send(runtime_event);
             }
+            remove_closed_runtime(&inner, &target.instance_id);
         });
     }
 
@@ -524,6 +525,29 @@ impl NativePiManager {
     }
 }
 
+fn remove_closed_runtime(inner: &NativePiManagerInner, instance_id: &str) {
+    let runtime = inner
+        .runtimes
+        .lock()
+        .ok()
+        .and_then(|mut runtimes| runtimes.remove(instance_id));
+    let Some(mut runtime) = runtime else {
+        return;
+    };
+    if let Some(process) = &mut runtime.process {
+        let _ = process.kill();
+    }
+    let target = runtime.target.lock().ok().map(|target| target.clone());
+    if let Some(target) = target {
+        if let Ok(mut coordinator) = inner.coordinator.lock() {
+            let _ = coordinator.unregister(&target);
+        }
+    }
+    if let Ok(mut pending_ui) = inner.pending_ui.lock() {
+        pending_ui.remove(instance_id);
+    }
+}
+
 fn is_mutation(command_type: &str) -> bool {
     matches!(
         command_type,
@@ -674,6 +698,25 @@ mod tests {
             )
             .await
             .is_err());
+    }
+
+    #[tokio::test]
+    async fn unregisters_runtime_when_the_rpc_stream_closes_unexpectedly() {
+        let manager = NativePiManager::in_memory(8);
+        let target = RuntimeTarget::new("workspace-a", "session-a", "instance-a");
+        let fake = manager.register_in_memory(target.clone()).unwrap();
+
+        assert_eq!(manager.target_for_session_id("session-a"), Some(target));
+        drop(fake);
+
+        tokio::time::timeout(Duration::from_secs(1), async {
+            while manager.target_for_session_id("session-a").is_some() {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .expect("closed RPC stream should unregister its runtime");
+        assert!(manager.statuses().unwrap().is_empty());
     }
 
     #[tokio::test]
