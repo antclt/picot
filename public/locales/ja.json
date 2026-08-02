@@ -72,7 +72,8 @@
     "output": "output",
     "cache": "cache",
     "costTitle": "costTitle",
-    "summary": "summary"
+    "summary": "In {in} · Out {out} · Cache {cache}",
+    "sessionUsageTitle": "Session tokens (input / output / cache)"
   },
   "context": {
     "cached": "キャッシュ済み",
@@ -119,7 +120,8 @@
     "copyMessage": "メッセージをコピー",
     "thinking": "考え中",
     "copy": "コピー",
-    "copied": "コピーしました！"
+    "copied": "コピーしました！",
+    "scrollToBottom": "Scroll to latest message"
   },
   "tools": {
     "copyOutput": "出力をコピー",
@@ -320,7 +322,9 @@
     "abortedByUser": "ユーザーによって中止されました",
     "invalidJson": "無効なJSON：{detail}",
     "modelsMustBeObject": "models.jsonはJSONオブジェクトである必要があります。",
-    "providersMustBeObject": "'providers'はオブジェクトである必要があります。"
+    "providersMustBeObject": "'providers'はオブジェクトである必要があります。",
+    "compactionFailed": "Context compaction failed.",
+    "compactionFailedDetail": "Context compaction failed: {error}"
   },
   "onboarding": {
     "openProject": "チャットを始めるためにプロジェクトを開いてください。",
@@ -728,7 +732,8 @@
     "model": "モデル",
     "compact": "コンパクト",
     "compactTitle": "コンテキストが80%を超えています — トークンを節約するためコンパクトにしてください",
-    "qrUnavailable": "QRコードが利用できません"
+    "qrUnavailable": "QRコードが利用できません",
+    "toggleContextControls": "Toggle context controls"
   },
   "browse": {
     "openExternalPrompt": "このリンクを新しいタブで開きますか："

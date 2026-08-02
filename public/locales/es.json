@@ -72,7 +72,8 @@
     "output": "output",
     "cache": "cache",
     "costTitle": "costTitle",
-    "summary": "summary"
+    "summary": "In {in} · Out {out} · Cache {cache}",
+    "sessionUsageTitle": "Session tokens (input / output / cache)"
   },
   "context": {
     "cached": "En caché",
@@ -119,7 +120,8 @@
     "copyMessage": "Copiar mensaje",
     "thinking": "Pensando",
     "copy": "Copiar",
-    "copied": "¡Copiado!"
+    "copied": "¡Copiado!",
+    "scrollToBottom": "Scroll to latest message"
   },
   "tools": {
     "copyOutput": "Copiar salida",
@@ -320,7 +322,9 @@
     "abortedByUser": "Cancelado por el usuario",
     "invalidJson": "JSON inválido: {detail}",
     "modelsMustBeObject": "models.json debe ser un objeto JSON.",
-    "providersMustBeObject": "'providers' debe ser un objeto."
+    "providersMustBeObject": "'providers' debe ser un objeto.",
+    "compactionFailed": "Context compaction failed.",
+    "compactionFailedDetail": "Context compaction failed: {error}"
   },
   "onboarding": {
     "openProject": "Abre un proyecto para comenzar a chatear.",
@@ -728,7 +732,8 @@
     "model": "modelo",
     "compact": "Compactar",
     "compactTitle": "El contexto supera el 80% — compacta para ahorrar tokens",
-    "qrUnavailable": "Código QR no disponible"
+    "qrUnavailable": "Código QR no disponible",
+    "toggleContextControls": "Toggle context controls"
   },
   "browse": {
     "openExternalPrompt": "Abrir este enlace en una nueva pestaña:"
