@@ -79,10 +79,13 @@
   line-height: 1;
 }
 
+/* Portaled to <body> by header-open-app.js and positioned with `position:
+   fixed` inline styles, so it escapes the header's `overflow-x: auto;
+   overflow-y: hidden` clipping. Keep this selector's static layout rules
+   (padding, colors, radius) but do not rely on `.header` as an offset
+   parent. */
 .header-open-app-menu {
-  position: absolute;
-  top: calc(100% + 4px);
-  right: 0;
+  position: fixed;
   z-index: 1000;
   min-width: 120px;
   padding: var(--space-1);

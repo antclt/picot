@@ -71,6 +71,23 @@ export function setupHeaderOpenApp({ data, control, workspaceId, onError } = {})
     button.setAttribute("aria-label", `Open workspace in ${app.label}`);
   };
 
+  // Portal the menu to <body> so it escapes the header's `overflow-x: auto;
+  // overflow-y: hidden` clipping (the header scrolls horizontally when its
+  // content overflows, which also clips any child that visually extends
+  // below it, per docs/engineering-lessons.md). Re-position it with fixed
+  // coordinates on every open so it tracks the toggle button.
+  if (menu.parentElement !== document.body) {
+    document.body.appendChild(menu);
+  }
+
+  const positionMenu = () => {
+    const rect = toggle.getBoundingClientRect();
+    menu.style.position = "fixed";
+    menu.style.top = `${rect.bottom + 4}px`;
+    menu.style.right = `${window.innerWidth - rect.right}px`;
+    menu.style.left = "auto";
+  };
+
   const closeMenu = () => menu.classList.add("hidden");
 
   const openWorkspace = async (app = selectedApp()) => {
@@ -115,6 +132,7 @@ export function setupHeaderOpenApp({ data, control, workspaceId, onError } = {})
     event.stopPropagation();
     if (menu.classList.contains("hidden")) {
       renderMenu();
+      positionMenu();
       menu.classList.remove("hidden");
     } else {
       closeMenu();
