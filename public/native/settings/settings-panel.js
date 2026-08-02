@@ -8,7 +8,6 @@ import { setupSettingsConfig } from "./settings-config.js";
 import { setupSettingsToggles } from "./settings-toggles.js";
 import { setupDiscoveredSkillsTab } from "./skills-discovered-tab.js";
 import { setupSkillsInstallTab } from "./skills-install-tab.js";
-import { setupSkillsPage } from "./skills-page.js";
 import { setupSkillsTabShell } from "./skills-tab-shell.js";
 import { setupThinkingEffortControl } from "./thinking-effort-control.js";
 
@@ -94,9 +93,7 @@ export function setupSettingsPanel({
     rpcCommand: skillsRpc,
   });
 
-  const skillsTabs = Array.from(
-    document.querySelectorAll("[data-skills-page-tab]"),
-  );
+  const skillsTabs = Array.from(document.querySelectorAll("[data-skills-page-tab]"));
   const skillsPanels = {
     discovered: document.getElementById("settings-skills"),
     install: document.getElementById("settings-install-skills"),

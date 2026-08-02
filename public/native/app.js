@@ -205,7 +205,7 @@ const config = new ConfigGateway({ runtime, getTarget: () => target });
 window.__picotConfigCall = (op, params, options) => config.call(op, params, options);
 const contextUsage = setupContextUsage();
 const filePreviewPanel = setupFilePreviewPanel();
-const gitPanel = setupGitPanel({
+const _gitPanel = setupGitPanel({
   runtime,
   getTarget: () => target,
   container: document.getElementById("git-panel"),

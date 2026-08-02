@@ -16,7 +16,8 @@
       "!node_modules",
       "!public/vendor",
       "!coverage",
-      "!skill-install-prototype.html"
+      "!skill-install-prototype.html",
+      "!docs/prototypes"
     ]
   },
   "formatter": {

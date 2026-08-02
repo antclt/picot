@@ -9,7 +9,6 @@ export function setupGitPanel({
   runtime,
   getTarget,
   container,
-  fileSidebar,
   fileList,
   filePreviewPanel,
   onError,

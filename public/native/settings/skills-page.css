@@ -296,7 +296,6 @@
   color: var(--error);
 }
 
-
 /* Packages skills tab: read-only bundled candidates from configured Pi packages. */
 .package-skills-header {
   display: flex;
