@@ -91,7 +91,7 @@ compiled `extensions/`. Unzip and run `Picot.exe` directly.
 1. Verifies `bun` / `cargo` / `rustup` (and `x86_64-w64-mingw32-gcc` for Windows)
 2. `bun install --frozen-lockfile`
 3. `bun run fetch:pi` (downloads/verifies embedded `pi` binary)
-4. `bun run build:extensions` (compiles `extensions/embedded-server.ts`)
+4. `bun run build:extensions` (bundles `picot-bridge.mjs` and `pi-chat.mjs`)
 5. `rustup target add <target>` (idempotent)
 6. `tauri build` with the right target / bundler flags
 7. Windows: `zip` the release-dir contents

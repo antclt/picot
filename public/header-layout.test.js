@@ -23,13 +23,4 @@ describe("workspace header layout", () => {
     expect(ruleBody(".header-left")).toContain("overflow: hidden");
     expect(styleCss).toMatch(/\.header-right\s*\{[^}]*justify-content:\s*flex-end/s);
   });
-
-  test("reserves shared header space for both preview and files panels", () => {
-    expect(ruleBody(".file-preview-panel")).toContain(
-      "margin-top: var(--workspace-header-offset, 36px)",
-    );
-    expect(ruleBody(".workspace-content > .app-side-panel")).toContain(
-      "margin-top: var(--workspace-header-offset, 36px)",
-    );
-  });
 });

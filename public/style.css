@@ -17,6 +17,7 @@
 @import url("native/workspace/file-browser.css");
 @import url("native/workspace/file-preview-panel.css");
 @import url("native/session/session-search-dialog.css");
+@import url("native/session/session-info.css");
 @import url("native/workspace/header-open-app.css");
 @import url("native/extensions/command-palette.css");
 @import url("native/features/lan-qr.css");
@@ -163,10 +164,6 @@ body {
   resize: none;
 }
 
-.workspace-content > .app-side-panel {
-  margin-top: var(--workspace-header-offset, 36px);
-}
-
 .app-side-panel-resize-handle {
   position: absolute;
   top: 0;
@@ -224,6 +221,7 @@ body.is-resizing-side-panel {
 
 .file-sidebar {
   display: flex;
+  margin-top: 40px;
 }
 
 .file-sidebar.collapsed {

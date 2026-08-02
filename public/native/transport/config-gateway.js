@@ -21,15 +21,24 @@ export class ConfigGateway {
   #runtime;
   #getTarget;
   #pending = new Map();
+  #waitUntilReady;
 
-  constructor({ runtime, getTarget }) {
+  constructor({ runtime, getTarget, waitUntilReady = null }) {
     this.#runtime = runtime;
     this.#getTarget = getTarget;
+    this.#waitUntilReady = waitUntilReady;
   }
 
   // Invoke a configuration operation. Resolves with the handler payload
   // `{ ok: boolean, data?, error? }`. Rejects only on transport/timeout errors.
-  call(op, params = {}, { timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
+  call(op, params = {}, options = {}) {
+    if (this.#waitUntilReady) {
+      return this.#waitUntilReady().then(() => this.#send(op, params, options));
+    }
+    return this.#send(op, params, options);
+  }
+
+  #send(op, params, { timeoutMs = DEFAULT_TIMEOUT_MS }) {
     const target = this.#getTarget();
     if (!target) return Promise.reject(new Error("No active session for configuration request"));
     const id = `cfg-${randomId()}`;

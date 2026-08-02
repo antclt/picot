@@ -12,6 +12,7 @@ import { setupAtFileMention } from "../ui/at-file-mention.js";
 import { ConvNav } from "../ui/conv-nav.js";
 import { setupMessagesInsets } from "../ui/layout-insets.js";
 import { MessageRenderer } from "../ui/message-renderer.js";
+import { createProcessDetailsGroup, summarizeProcessGroup } from "../ui/process-group.js";
 import { setupResizablePanel } from "../ui/resizable-panel.js";
 import { ToolCardRenderer } from "../ui/tool-card.js";
 import { setupComposerAutoResize } from "./composer/composer-autoresize.js";
@@ -34,6 +35,8 @@ import {
 } from "./features/rpiv-todo-mirror.js";
 import { setupTerminalPanel } from "./features/terminal-panel-integration.js";
 import { createNotificationCenter } from "./notifications/notification-center.js";
+import { createTaskCompletionNotifications } from "./notifications/task-completion-notifications.js";
+import { setupSessionInfo } from "./session/session-info.js";
 import { createSessionSelectionHandler } from "./session/session-navigation.js";
 import { setupSessionSearchDialog } from "./session/session-search-dialog.js";
 import { SessionSidebar } from "./session/session-sidebar.js";
@@ -53,7 +56,7 @@ import { setupAppKeyboardShortcuts } from "./utils/keyboard-shortcuts.js";
 import { randomId } from "./utils/random-id.js";
 import { appRoutePath, parseAppRoute, replaceTemporarySessionRoute } from "./utils/router.js";
 import { findLatestAssistantUsage, setupContextUsage } from "./workspace/context-usage.js";
-import { NativeFileBrowser } from "./workspace/file-browser.js";
+import { NativeFileBrowser, toggleExclusiveSidePanel } from "./workspace/file-browser.js";
 import { setupHeaderOpenApp } from "./workspace/header-open-app.js";
 import { setupProjectHeader } from "./workspace/project-header.js";
 import {
@@ -88,6 +91,10 @@ const convNav = new ConvNav({
   badgeEl: scrollBottomBadge,
 });
 const notifications = createNotificationCenter();
+const taskCompletionNotifications = createTaskCompletionNotifications({
+  title: () => t("settings.taskCompleteTitle"),
+  body: () => t("settings.taskCompleteMessage"),
+});
 
 setupMessagesInsets({
   main: document.querySelector(".main"),
@@ -141,11 +148,23 @@ let currentModelContextWindow = 0;
 let availableModels = [];
 let target = provisionalTargetFromRoute(route);
 let configGatewayTargetReady = false;
+let resolveConfigGatewayReady;
+const configGatewayReady = new Promise((resolve) => {
+  resolveConfigGatewayReady = resolve;
+});
 let store = createSessionStore(target);
 let navigationGeneration = 0;
 let commandCatalog = buildCommandCatalog({});
 let streamingElement = null;
 let sidebar = null;
+const sessionInfo = setupSessionInfo({
+  toggle: document.getElementById("session-info-toggle"),
+  panel: document.getElementById("session-info-panel"),
+  fileValue: document.getElementById("session-info-file"),
+  idValue: document.getElementById("session-info-id"),
+  getTarget: () => target,
+  getSessions: () => sidebar?.sessions ?? [],
+});
 let activeSearchQuery = "";
 // Auto-launch guard. Stored in sessionStorage (not a module variable) so it
 // survives same-window `window.navigate()` reloads: when the user selects
@@ -200,9 +219,14 @@ setupTerminalPanel({
 const runtime = new RuntimeGateway(adapter);
 const data = new HostDataGateway(adapter, { fetchImpl: window.fetch.bind(window) });
 const control = new HostControlGateway(adapter);
-const config = new ConfigGateway({ runtime, getTarget: () => target });
+const config = new ConfigGateway({
+  runtime,
+  getTarget: () => target,
+  waitUntilReady: () => (configGatewayTargetReady ? Promise.resolve() : configGatewayReady),
+});
 window.__picotConfigCall = (op, params, options) => config.call(op, params, options);
 const contextUsage = setupContextUsage();
+const compactContextButton = document.getElementById("compact-context-btn");
 const filePreviewPanel = setupFilePreviewPanel();
 const sessionCostEl = document.getElementById("session-cost");
 let sessionTotalCost = 0;
@@ -228,6 +252,24 @@ function setSessionCost(cost) {
   sessionCostEl.textContent = `$${cost.toFixed(4)}`;
   sessionCostEl.title = `Session cost: $${cost.toFixed(6)}`;
 }
+
+async function requestManualCompaction() {
+  if (
+    !contextUsage.canCompact ||
+    store.lifecycle === "working" ||
+    store.compaction?.status === "running"
+  )
+    return;
+  contextUsage.setCompacting(true);
+  try {
+    await runtime.request({ type: "compact" }, target, { idempotencyKey: randomId() });
+  } catch (error) {
+    contextUsage.setCompacting(false);
+    throw error;
+  }
+}
+
+compactContextButton?.addEventListener("click", () => requestManualCompaction().catch(showError));
 const extensionUi = new ExtensionUiHost({
   runtime,
   showDialog: (request, opts) => showNativeDialog(request, undefined, opts),
@@ -275,6 +317,8 @@ const hydrateFromSnapshot = async (snapshot) => {
   convNav.rebuild();
   const pi = snapshot.state.pi ?? {};
   setStatus(pi.isStreaming ? "Working…" : "Connected");
+  contextUsage.setWorking(Boolean(pi.isStreaming));
+  contextUsage.setCompacting(snapshot.state.compaction?.status === "running");
   updateComposerModel(pi.model ?? null);
   updateComposerThinking(pi.thinkingLevel ?? "off");
   contextUsage.setUsage(
@@ -289,6 +333,7 @@ const hydrateFromSnapshot = async (snapshot) => {
 
 runtime.subscribe((frame) => {
   if (frame.type !== "runtime_event") return;
+  taskCompletionNotifications.handleRuntimeFrame(frame);
   if (
     frame.target.instanceId !== target.instanceId ||
     (frame.target.sessionId && frame.target.sessionId !== target.sessionId)
@@ -399,13 +444,6 @@ setupCommandPalette({
   overlay: commandPaletteOverlay,
   list: commandList,
   commands: () => [
-    {
-      icon: "🗜️",
-      label: "Compact",
-      desc: "Compact context to save tokens",
-      action: () => runtime.request({ type: "compact" }, target, { idempotencyKey: randomId() }),
-      disabled: store.lifecycle === "working",
-    },
     {
       icon: "⬇️",
       label: "Expand All Tools",
@@ -558,6 +596,7 @@ async function hydrateSnapshot() {
   if (target.sessionId !== expectedSessionId) return; // stale: session switched while snapshot was in-flight
   await hydrateFromSnapshot(snapshot);
   configGatewayTargetReady = true;
+  resolveConfigGatewayReady();
   signalConfigGatewayReady();
 }
 
@@ -626,6 +665,7 @@ function setupSessionSidebar() {
     data,
     runtime,
     control,
+    config,
     getTarget: () => target,
     onSelect: (session) => {
       updateSuperAgentActiveState(session);
@@ -734,6 +774,7 @@ async function openSessionInProject(session) {
 }
 
 function subscribeToLiveSessions(sessions) {
+  sessionInfo.refresh();
   for (const session of sessions ?? []) {
     const liveTarget = session?.target;
     if (liveTarget?.workspaceId && liveTarget?.sessionId && liveTarget?.instanceId) {
@@ -967,6 +1008,14 @@ function createNativeFilePreviewApi({ workspaceId }) {
     rawUrlForPath(path) {
       return buildUrl(path, "/api/files/raw").toString();
     },
+    readGitDiff(path, { signal } = {}) {
+      return fetch(buildUrl(path, "/api/git/diff"), { signal });
+    },
+    readGitStat({ signal } = {}) {
+      const url = new URL("/api/git/stat", origin);
+      url.searchParams.set("workspaceId", target.workspaceId);
+      return fetch(url.toString(), { signal });
+    },
   };
 }
 
@@ -988,6 +1037,7 @@ function setupFileBrowser() {
   if (upBtn) upBtn.disabled = true; // disabled until we've navigated into a subdir
 
   const browser = new NativeFileBrowser(fileList, pathEl, data, target.workspaceId, {
+    showViewSwitch: false,
     onFileOpen(entry) {
       openWorkspaceRelativePath(entry.relativePath).catch(showError);
     },
@@ -995,6 +1045,7 @@ function setupFileBrowser() {
       filePreviewPanel?.openFile(entry.relativePath, {
         fileName: entry.name,
         size: entry.size,
+        mode: entry.mode,
       });
     },
     onPathChange(path) {
@@ -1014,8 +1065,8 @@ function setupFileBrowser() {
 
   const toggleBtn = document.getElementById("file-sidebar-toggle");
   toggleBtn?.addEventListener("click", () => {
-    const isCollapsed = sidebar.classList.toggle("collapsed");
-    if (!isCollapsed && browser.currentPath === null) browser.load().catch(showError);
+    const opened = toggleExclusiveSidePanel(sidebar, [document.getElementById("diff-sidebar")]);
+    if (opened && browser.currentPath === null) browser.load().catch(showError);
   });
   if (toggleBtn) {
     const shortcutLabel = isMacOS() ? "⌘B" : "Ctrl+B";
@@ -1025,8 +1076,8 @@ function setupFileBrowser() {
   document.addEventListener("keydown", (event) => {
     if (!isFilePanelShortcut(event)) return;
     event.preventDefault();
-    const isCollapsed = sidebar.classList.toggle("collapsed");
-    if (!isCollapsed && browser.currentPath === null) browser.load().catch(showError);
+    const opened = toggleExclusiveSidePanel(sidebar, [document.getElementById("diff-sidebar")]);
+    if (opened && browser.currentPath === null) browser.load().catch(showError);
   });
   document.getElementById("file-sidebar-close")?.addEventListener("click", () => {
     sidebar.classList.add("collapsed");
@@ -1035,6 +1086,35 @@ function setupFileBrowser() {
     const parent = browser.getParentPath();
     if (parent !== null) browser.load(parent).catch(showError);
   });
+
+  const diffSidebar = document.getElementById("diff-sidebar");
+  const diffList = document.getElementById("diff-list");
+  const diffToggle = document.getElementById("diff-sidebar-toggle");
+  if (diffSidebar && diffList) {
+    const diffBrowser = new NativeFileBrowser(
+      diffList,
+      document.createElement("div"),
+      data,
+      target.workspaceId,
+      {
+        initialView: "diff",
+        showViewSwitch: false,
+        onFileSelect(entry) {
+          filePreviewPanel?.openFile(entry.relativePath, {
+            fileName: entry.name,
+            mode: "diff",
+          });
+        },
+      },
+    );
+    diffToggle?.addEventListener("click", () => {
+      const opened = toggleExclusiveSidePanel(diffSidebar, [sidebar]);
+      if (opened) diffBrowser.load().catch(showError);
+    });
+    document.getElementById("diff-sidebar-close")?.addEventListener("click", () => {
+      diffSidebar.classList.add("collapsed");
+    });
+  }
 }
 
 async function sendComposerInput({ altKey }) {
@@ -1079,11 +1159,26 @@ async function handleRuntimeEvent(event) {
   switch (event.type) {
     case "agent_start":
       setStatus("Working…");
+      contextUsage.setWorking(true);
       sidebar?.setStreaming(target.sessionId, true);
       break;
     case "agent_settled":
       setStatus("Connected");
+      contextUsage.setWorking(false);
       sidebar?.setStreaming(target.sessionId, false);
+      void sidebar?.autoGenerateTitle(target.sessionId);
+      collapseCompletedTurn();
+      break;
+    case "compaction_start":
+      contextUsage.setCompacting(true);
+      break;
+    case "compaction_end":
+      contextUsage.setCompacting(false);
+      if (event.errorMessage) {
+        showError(new Error(event.errorMessage));
+      } else if (!event.aborted) {
+        await hydrateSnapshotOnce();
+      }
       break;
     case "message_start":
       if (event.message?.role === "user") {
@@ -1186,7 +1281,53 @@ async function adoptTarget(nextTarget, { updateRoute = true } = {}) {
   streamingElement = null;
   adapter.subscribeTarget(target);
   sidebar?.setActive(target.sessionId);
+  sessionInfo.refresh();
   await extensionUi.setForegroundSession(target.sessionId, { flush: false });
+}
+
+/** Non-empty rendered text for an assistant message's `text` blocks. */
+function assistantTextOf(content) {
+  if (!Array.isArray(content)) return "";
+  return content
+    .filter((block) => block?.type === "text")
+    .map((block) => block.text ?? "")
+    .join("\n")
+    .trim();
+}
+
+/**
+ * Split one assistant message's content blocks into "process" (thinking,
+ * tool calls, and any leading text) and "answer" (the trailing run of text
+ * blocks) — mirrors pi-web's splitFinalAssistantBlocks. Everything up to and
+ * including the last non-text block is process; blocks after that are the
+ * final answer.
+ */
+function splitFinalAssistantBlocks(content) {
+  if (!Array.isArray(content)) return { processBlocks: [], answerBlocks: [] };
+  let lastNonTextIdx = -1;
+  for (let i = 0; i < content.length; i++) {
+    if (content[i]?.type !== "text") lastNonTextIdx = i;
+  }
+  return {
+    processBlocks: content.slice(0, lastNonTextIdx + 1),
+    answerBlocks: content.slice(lastNonTextIdx + 1),
+  };
+}
+
+/** Render an assistant message's tool-call blocks as history cards, target defaults to the main container. */
+function renderToolCallBlocks(blocks, toolResults, targetContainer) {
+  let count = 0;
+  for (const block of blocks) {
+    if (block?.type !== "toolCall") continue;
+    count += 1;
+    toolRenderer.createHistoryCard(
+      { toolCallId: block.id, toolName: block.name, args: block.arguments ?? {} },
+      targetContainer,
+    );
+    const result = toolResults.get(block.id);
+    if (result) toolRenderer.addHistoryResult(block.id, result, result.isError);
+  }
+  return count;
 }
 
 function renderHistory(messages) {
@@ -1207,31 +1348,147 @@ function renderHistory(messages) {
     }
   }
 
-  for (const message of messages) {
-    if (message.role === "user") messageRenderer.renderUserMessage(message, true);
-    if (message.role === "assistant") {
-      messageRenderer.renderAssistantMessage(message, false, true);
-      // Render tool-call cards embedded in this assistant message
-      if (Array.isArray(message.content)) {
-        for (const block of message.content) {
-          if (block.type === "toolCall") {
-            toolRenderer.createHistoryCard({
-              toolCallId: block.id,
-              toolName: block.name,
-              args: block.arguments ?? {},
-            });
-            const result = toolResults.get(block.id);
-            if (result) {
-              toolRenderer.addHistoryResult(block.id, result, result.isError);
-            }
-          }
+  // Split into turns anchored at each user message so each turn's
+  // thinking/tool-call noise can be folded into one collapsed group, leaving
+  // only the user prompt and the final answer visible (mirrors pi-web).
+  const turns = [];
+  let turnStart = 0;
+  for (let i = 0; i < messages.length; i++) {
+    if (messages[i].role === "user" && i !== turnStart) {
+      turns.push([turnStart, i]);
+      turnStart = i;
+    }
+  }
+  turns.push([turnStart, messages.length]);
+
+  for (const [start, end] of turns) {
+    const anchor = messages[start];
+    let bodyStart = start;
+    if (anchor.role === "user") {
+      messageRenderer.renderUserMessage(anchor, true);
+      bodyStart = start + 1;
+    }
+
+    let finalAssistantIdx = -1;
+    for (let i = end - 1; i >= bodyStart; i--) {
+      if (messages[i].role === "assistant" && assistantTextOf(messages[i].content)) {
+        finalAssistantIdx = i;
+        break;
+      }
+    }
+
+    let group = null;
+    let stepCount = 0;
+    let toolCallCount = 0;
+    const ensureGroup = () => {
+      if (!group) {
+        group = createProcessDetailsGroup();
+        // Insert immediately so later appends (the final answer, or the next
+        // turn's user message) land after it in DOM order — the group holds
+        // this turn's spot even before its body has any children.
+        messagesElement.appendChild(group.wrapper);
+      }
+      return group;
+    };
+
+    for (let i = bodyStart; i < end; i++) {
+      const message = messages[i];
+      if (message.role !== "assistant") continue;
+
+      if (i === finalAssistantIdx) {
+        const { processBlocks, answerBlocks } = splitFinalAssistantBlocks(message.content);
+        if (processBlocks.some((b) => b.type === "text" || b.type === "thinking")) {
+          const el = messageRenderer.renderAssistantMessage(
+            { content: processBlocks, usage: message.usage },
+            false,
+            true,
+            ensureGroup().body,
+          );
+          if (el) stepCount += 1;
         }
+        if (processBlocks.some((b) => b.type === "toolCall")) {
+          toolCallCount += renderToolCallBlocks(processBlocks, toolResults, ensureGroup().body);
+        }
+        if (answerBlocks.length > 0) {
+          messageRenderer.renderAssistantMessage(
+            { content: answerBlocks, usage: message.usage },
+            false,
+            true,
+          );
+        }
+      } else {
+        const el = messageRenderer.renderAssistantMessage(message, false, true, ensureGroup().body);
+        if (el) stepCount += 1;
+        toolCallCount += renderToolCallBlocks(message.content ?? [], toolResults, group.body);
+      }
+    }
+
+    if (group) {
+      if (group.body.children.length > 0) {
+        group.setLabel(summarizeProcessGroup(stepCount, toolCallCount));
+      } else {
+        group.wrapper.remove();
       }
     }
   }
+
   const highlighted = applyActiveSearchHighlight();
   if (highlighted === 0) messageRenderer.forceScrollToBottom();
   return hadInFlightPrompt;
+}
+
+/**
+ * Fold the just-finished turn's thinking blocks and tool cards into a
+ * collapsed "Process details" group, leaving the user prompt and final
+ * answer as the only visible content. Runs once a turn fully completes
+ * (`agent_settled`) — while streaming, everything still renders flat and
+ * expanded so the user can watch it happen live, matching pi-web.
+ */
+function collapseCompletedTurn() {
+  const children = Array.from(messagesElement.children);
+  let lastUserIdx = -1;
+  for (let i = children.length - 1; i >= 0; i--) {
+    if (children[i].classList.contains("user")) {
+      lastUserIdx = i;
+      break;
+    }
+  }
+  const afterUser = children.slice(lastUserIdx + 1);
+  if (afterUser.length === 0) return;
+
+  const group = createProcessDetailsGroup();
+  let stepCount = 0;
+  let toolCallCount = 0;
+  let inserted = false;
+  const insertGroupBefore = (el) => {
+    if (inserted) return;
+    el.before(group.wrapper);
+    inserted = true;
+  };
+
+  for (const el of afterUser) {
+    if (el.classList.contains("tool-card")) {
+      insertGroupBefore(el);
+      group.body.appendChild(el);
+      stepCount += 1;
+      toolCallCount += 1;
+      continue;
+    }
+    if (el.classList.contains("assistant")) {
+      const thinkingEl = el.querySelector(".thinking-block");
+      if (!thinkingEl) continue;
+      insertGroupBefore(el);
+      thinkingEl.remove();
+      group.body.appendChild(thinkingEl);
+      stepCount += 1;
+      const contentEl = el.querySelector(".message-content");
+      const hasRemainingContent = Boolean(contentEl?.textContent.trim());
+      if (!hasRemainingContent) el.remove();
+    }
+  }
+
+  if (group.body.children.length === 0) return; // nothing to fold away; wrapper was never inserted
+  group.setLabel(summarizeProcessGroup(stepCount, toolCallCount));
 }
 
 function applyActiveSearchHighlight({ scrollToFirst = true } = {}) {

@@ -10,6 +10,7 @@ import { createCodeEditor } from "./code-editor.js";
 import { classifyFilePath } from "./file-language.js";
 import { createPdfRenderer } from "./file-pdf-preview.js";
 import { attachCopyButtonDelegation, renderFileMarkdown } from "./file-preview-markdown.js";
+import { flattenDiffLines } from "./workspace/patch-utils.js";
 
 export function createFileRenderer({
   filePath,
@@ -23,7 +24,12 @@ export function createFileRenderer({
   onError,
   rawUrlForPath,
   renderAs,
+  gitDiff,
 } = {}) {
+  // If a diff is requested and available, return diff renderer
+  if (mode === "diff" && gitDiff) {
+    return createDiffRenderer({ patch: gitDiff.patch || "" });
+  }
   const classification = classifyFilePath(filePath || "");
   if (renderAs === "markdown" && classification.contentType === "convertible") {
     return createMarkdownRenderer({
@@ -351,6 +357,129 @@ function createImageRenderer({ filePath, fileName, rawUrlForPath }) {
 
     get contentType() {
       return "image";
+    },
+  };
+}
+
+// ─── Diff renderer ───────────────────────────────────────────────────────────
+
+const CONTEXT_LINES = 3;
+
+/**
+ * Render a unified diff patch as an inline colour-coded diff.
+ * Exposes the same mount/update/destroy interface as the other renderers.
+ */
+function createDiffRenderer({ patch = "" } = {}) {
+  let containerEl = null;
+
+  function renderDiff(container) {
+    container.replaceChildren();
+    const wrap = document.createElement("div");
+    wrap.className = "file-diff-view";
+    container.appendChild(wrap);
+
+    if (!patch?.trim()) {
+      const empty = document.createElement("div");
+      empty.className = "file-diff-empty";
+      empty.textContent = "No changes";
+      wrap.appendChild(empty);
+      return;
+    }
+
+    const lines = flattenDiffLines(patch);
+    const hasChanges = lines.some((l) => l.type !== "unchanged");
+    if (!hasChanges) {
+      const empty = document.createElement("div");
+      empty.className = "file-diff-empty";
+      empty.textContent = "No changes";
+      wrap.appendChild(empty);
+      return;
+    }
+
+    // Determine which line indices are visible (changed ± CONTEXT_LINES)
+    const changed = new Set();
+    for (let i = 0; i < lines.length; i++) {
+      if (lines[i].type !== "unchanged") changed.add(i);
+    }
+    const visible = new Set();
+    for (const ci of changed) {
+      for (
+        let j = Math.max(0, ci - CONTEXT_LINES);
+        j <= Math.min(lines.length - 1, ci + CONTEXT_LINES);
+        j++
+      ) {
+        visible.add(j);
+      }
+    }
+
+    let i = 0;
+    while (i < lines.length) {
+      if (visible.has(i)) {
+        // Emit a block of visible lines
+        while (i < lines.length && visible.has(i)) {
+          wrap.appendChild(makeDiffLineEl(lines[i]));
+          i++;
+        }
+      } else {
+        // Count collapsed lines
+        let count = 0;
+        while (i < lines.length && !visible.has(i)) {
+          count++;
+          i++;
+        }
+        const collapseEl = document.createElement("div");
+        collapseEl.className = "file-diff-collapse";
+        collapseEl.textContent = `\u2026 ${count} unchanged line${count !== 1 ? "s" : ""} \u2026`;
+        wrap.appendChild(collapseEl);
+      }
+    }
+  }
+
+  function makeDiffLineEl(line) {
+    const row = document.createElement("div");
+    let cls = "file-diff-line";
+    if (line.type === "added") cls += " file-diff-line--added";
+    else if (line.type === "removed") cls += " file-diff-line--removed";
+    row.className = cls;
+
+    const gutter = document.createElement("span");
+    gutter.className = "file-diff-gutter";
+    gutter.textContent =
+      line.type === "removed" ? String(line.oldLineNo ?? "") : String(line.newLineNo ?? "");
+
+    const sign = document.createElement("span");
+    sign.className = "file-diff-sign";
+    sign.setAttribute("aria-hidden", "true");
+    sign.textContent = line.type === "added" ? "+" : line.type === "removed" ? "\u2212" : " ";
+
+    const content = document.createElement("span");
+    content.className = "file-diff-content";
+    content.textContent = line.text || "\u00a0";
+
+    row.appendChild(gutter);
+    row.appendChild(sign);
+    row.appendChild(content);
+    return row;
+  }
+
+  return {
+    mount(container) {
+      containerEl = container;
+      renderDiff(container);
+    },
+
+    update({ patch: newPatch } = {}) {
+      if (newPatch !== undefined) patch = newPatch;
+      if (containerEl) renderDiff(containerEl);
+    },
+
+    destroy() {
+      if (containerEl) containerEl.replaceChildren();
+      containerEl = null;
+    },
+
+    get contentType() {
+      return "diff";
     },
   };
 }

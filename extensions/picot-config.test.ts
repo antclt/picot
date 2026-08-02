@@ -1,6 +1,14 @@
 // @vitest-environment node
 
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -8,7 +16,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 vi.mock("@earendil-works/pi-coding-agent", () => ({
   createAgentSession: vi.fn(),
   ModelRuntime: { create: vi.fn() },
-  SessionManager: { inMemory: vi.fn() },
+  SessionManager: { inMemory: vi.fn(), listAll: vi.fn(), open: vi.fn() },
+}));
+vi.mock("./session-title", () => ({
+  generateTitleForSession: vi.fn().mockResolvedValue("Generated title"),
 }));
 
 const tempHomes: string[] = [];
@@ -26,6 +37,7 @@ async function loadConfigWithTempHome() {
 }
 
 afterEach(() => {
+  vi.clearAllMocks();
   vi.unstubAllEnvs();
   for (const home of tempHomes.splice(0)) {
     rmSync(home, { recursive: true, force: true });
@@ -33,6 +45,64 @@ afterEach(() => {
 });
 
 describe("picot config default settings operations", () => {
+  it("renames a managed historical session through Pi SessionManager", async () => {
+    const home = mkdtempSync(join(tmpdir(), "picot-config-session-"));
+    tempHomes.push(home);
+    const sessionPath = join(home, "session.jsonl");
+    writeFileSync(sessionPath, '{"type":"session","id":"s1"}\n', "utf8");
+    const appendSessionInfo = vi.fn();
+    const { SessionManager } = await import("@earendil-works/pi-coding-agent");
+    vi.mocked(SessionManager.listAll).mockResolvedValue([{ path: sessionPath }] as never);
+    vi.mocked(SessionManager.open).mockReturnValue({ appendSessionInfo } as never);
+    const { handlePicotConfig } = await loadConfigWithTempHome();
+
+    await expect(
+      handlePicotConfig(
+        "rename_historical_session",
+        { filePath: sessionPath, name: "  Renamed session  " },
+        {},
+      ),
+    ).resolves.toEqual({
+      ok: true,
+      data: { filePath: realpathSync(sessionPath), name: "Renamed session" },
+    });
+    expect(SessionManager.open).toHaveBeenCalledWith(realpathSync(sessionPath));
+    expect(appendSessionInfo).toHaveBeenCalledWith("Renamed session");
+  });
+
+  it("rejects unmanaged historical session paths", async () => {
+    const home = mkdtempSync(join(tmpdir(), "picot-config-session-"));
+    tempHomes.push(home);
+    const sessionPath = join(home, "session.jsonl");
+    writeFileSync(sessionPath, '{"type":"session","id":"s1"}\n', "utf8");
+    const { SessionManager } = await import("@earendil-works/pi-coding-agent");
+    vi.mocked(SessionManager.listAll).mockResolvedValue([] as never);
+    const { handlePicotConfig } = await loadConfigWithTempHome();
+
+    await expect(
+      handlePicotConfig(
+        "rename_historical_session",
+        { filePath: sessionPath, name: "Renamed session" },
+        {},
+      ),
+    ).resolves.toEqual({ ok: false, error: "Session is not available." });
+    expect(SessionManager.open).not.toHaveBeenCalled();
+  });
+
+  it("generates a title from the active persisted session", async () => {
+    const { handlePicotConfig } = await loadConfigWithTempHome();
+    await expect(
+      handlePicotConfig(
+        "generate_session_title",
+        {},
+        {
+          model: { provider: "test", id: "model" },
+          sessionManager: { getSessionFile: () => "/sessions/current.jsonl" },
+        },
+      ),
+    ).resolves.toEqual({ ok: true, data: { title: "Generated title" } });
+  });
+
   it("writes global default thinking level while preserving unknown settings", async () => {
     const { home, handlePicotConfig } = await loadConfigWithTempHome();
     const settingsPath = join(home, ".pi", "agent", "settings.json");

@@ -17,17 +17,21 @@ function makeSidebar(sessions, overrides = {}) {
     searchSessions: vi.fn().mockResolvedValue({ results: [] }),
   };
   const runtime = { request: vi.fn().mockResolvedValue({}) };
+  const config = {
+    call: vi.fn().mockResolvedValue({ ok: true, data: { title: "Generated title" } }),
+  };
   const control = { deleteSessions: vi.fn().mockResolvedValue({ deleted: [], errors: [] }) };
   const onSelect = vi.fn();
   const sidebar = new SessionSidebar(container, {
     data,
     runtime,
     control,
+    config,
     getTarget: () => ({ workspaceId: "ws-1", sessionId: "s-active" }),
     onSelect,
     ...overrides,
   });
-  return { sidebar, container, data, runtime, control, onSelect };
+  return { sidebar, container, data, runtime, config, control, onSelect };
 }
 
 function deferred() {
@@ -58,6 +62,9 @@ describe("formatSessionTime", () => {
 describe("SessionSidebar.render", () => {
   beforeEach(() => {
     localStorage.clear();
+    document.querySelectorAll(".session-context-menu").forEach((menu) => {
+      menu.remove();
+    });
   });
 
   afterEach(() => {
@@ -72,6 +79,101 @@ describe("SessionSidebar.render", () => {
     expect(container.querySelectorAll(".session-item")).toHaveLength(1);
     expect(container.querySelector(".session-title").textContent).toBe("Hello");
     expect(container.querySelector(".session-time")).toBeNull();
+  });
+
+  it("generates and persists a title for the active session", async () => {
+    const { sidebar, container, config, runtime } = makeSidebar([
+      { id: "s-active", timestamp: new Date().toISOString(), name: "Old title" },
+    ]);
+    await sidebar.load();
+    const item = container.querySelector('.session-item[data-session-id="s-active"]');
+    item.dispatchEvent(
+      new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 10, clientY: 10 }),
+    );
+    const generate = Array.from(document.querySelectorAll(".context-menu-item")).find((row) =>
+      row.textContent.toLowerCase().includes("generatetitle"),
+    );
+    generate.click();
+
+    await vi.waitFor(() =>
+      expect(config.call).toHaveBeenCalledWith(
+        "generate_session_title",
+        {},
+        { timeoutMs: 100_000 },
+      ),
+    );
+    await vi.waitFor(() =>
+      expect(runtime.request).toHaveBeenCalledWith(
+        { type: "set_session_name", name: "Generated title" },
+        expect.objectContaining({ sessionId: "s-active" }),
+        expect.objectContaining({ idempotencyKey: expect.any(String) }),
+      ),
+    );
+    expect(item.querySelector(".session-title").textContent).toBe("Generated title");
+  });
+
+  it("automatically generates one title for an unnamed active session", async () => {
+    const { sidebar, config, runtime } = makeSidebar([
+      { id: "s-active", timestamp: new Date().toISOString(), firstMessage: "Help me debug it" },
+    ]);
+    await sidebar.load();
+
+    await sidebar.autoGenerateTitle("s-active");
+    await sidebar.autoGenerateTitle("s-active");
+
+    expect(config.call).toHaveBeenCalledTimes(1);
+    expect(runtime.request).toHaveBeenCalledWith(
+      { type: "set_session_name", name: "Generated title" },
+      expect.objectContaining({ sessionId: "s-active" }),
+      expect.objectContaining({ idempotencyKey: expect.any(String) }),
+    );
+  });
+
+  it("renames a historical session through Pi SessionManager config", async () => {
+    const { sidebar, container, config, runtime } = makeSidebar([
+      {
+        id: "s-history",
+        timestamp: new Date().toISOString(),
+        name: "Old title",
+        filePath: "/sessions/history.jsonl",
+      },
+    ]);
+    config.call.mockResolvedValue({
+      ok: true,
+      data: { filePath: "/sessions/history.jsonl", name: "New title" },
+    });
+    await sidebar.load();
+    const item = container.querySelector('.session-item[data-session-id="s-history"]');
+    item.dispatchEvent(
+      new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 10, clientY: 10 }),
+    );
+    const rename = Array.from(document.querySelectorAll(".context-menu-item")).find((row) =>
+      row.textContent.includes("Rename"),
+    );
+    rename.click();
+    const input = item.querySelector(".session-rename-input");
+    input.value = "New title";
+    input.dispatchEvent(new FocusEvent("blur"));
+
+    await vi.waitFor(() =>
+      expect(config.call).toHaveBeenCalledWith("rename_historical_session", {
+        filePath: "/sessions/history.jsonl",
+        name: "New title",
+      }),
+    );
+    expect(runtime.request).not.toHaveBeenCalled();
+    expect(item.querySelector(".session-title").textContent).toBe("New title");
+  });
+
+  it("does not replace an existing custom title automatically", async () => {
+    const { sidebar, config } = makeSidebar([
+      { id: "s-active", timestamp: new Date().toISOString(), name: "Keep this title" },
+    ]);
+    await sidebar.load();
+
+    await sidebar.autoGenerateTitle("s-active");
+
+    expect(config.call).not.toHaveBeenCalled();
   });
 
   it("retries transient load failures before showing the manual retry error", async () => {
@@ -142,6 +244,53 @@ describe("SessionSidebar.render", () => {
 
     expect(container.textContent).toContain("Fresh");
     expect(container.textContent).not.toContain("Cached");
+  });
+
+  it("clears a cached in-progress status when the live session list has no runtime status", async () => {
+    const pending = deferred();
+    localStorage.setItem(
+      "picot-session-list-cache:ws-1",
+      JSON.stringify([
+        {
+          id: "s-interrupted",
+          timestamp: new Date().toISOString(),
+          name: "Interrupted",
+          projectPath: "/ws-1",
+          projectName: "ws-1",
+          isCurrentWorkspace: true,
+          status: "working",
+        },
+      ]),
+    );
+    const { sidebar, container, data } = makeSidebar([]);
+    data.listAllSessions.mockReturnValueOnce(pending.promise);
+
+    const load = sidebar.load();
+    expect(
+      container
+        .querySelector('.session-item[data-session-id="s-interrupted"]')
+        .classList.contains("streaming"),
+    ).toBe(true);
+
+    pending.resolve({
+      sessions: [
+        {
+          id: "s-interrupted",
+          timestamp: new Date().toISOString(),
+          name: "Interrupted",
+          projectPath: "/ws-1",
+          projectName: "ws-1",
+          isCurrentWorkspace: true,
+        },
+      ],
+    });
+    await load;
+
+    expect(
+      container
+        .querySelector('.session-item[data-session-id="s-interrupted"]')
+        .classList.contains("streaming"),
+    ).toBe(false);
   });
 
   it("falls back to the latest cached session list for a workspace without its own cache", async () => {

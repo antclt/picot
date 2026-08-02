@@ -75,6 +75,18 @@ describe("resolveLocale", () => {
 // ── t() fallback ──────────────────────────────────────────────────────
 
 describe("t() lookup and fallback", () => {
+  it("does not report keys as missing while locale messages are still loading", async () => {
+    const { t } = await importFreshI18n();
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    expect(t("migrated.ui.resizablePanel.title.resizePanel")).toBe(
+      "migrated.ui.resizablePanel.title.resizePanel",
+    );
+    expect(warnSpy).not.toHaveBeenCalled();
+
+    warnSpy.mockRestore();
+  });
+
   it("missing active key falls back to English", async () => {
     vi.stubGlobal(
       "fetch",

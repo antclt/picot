@@ -33,6 +33,18 @@
     "contextTitle": "上下文用量",
     "costSub": "{amount}（订阅）"
   },
+  "sessionInfo": {
+    "title": "会话信息",
+    "heading": "会话信息",
+    "file": "文件",
+    "id": "ID",
+    "inMemory": "内存中（尚未保存）",
+    "unavailable": "不可用",
+    "copyFile": "复制文件路径",
+    "copyId": "复制会话 ID",
+    "copied": "已复制",
+    "copyFailed": "复制失败"
+  },
   "context": {
     "cached": "已缓存",
     "input": "输入",
@@ -43,7 +55,7 @@
   "models": {
     "searchPlaceholder": "搜索模型…",
     "emptyTitle": "无可用模型",
-    "emptyHelp": "未配置 API 密钥。请在设置 → 配置中设置密钥。",
+    "emptyHelp": "未配置 API 密钥。请在设置 → 提供商中设置密钥。",
     "openSettings": "打开设置"
   },
   "queue": {
@@ -53,13 +65,13 @@
     "followUp": "后续"
   },
   "input": {
-    "typeMessage": "输入消息...",
+    "typeMessage": "消息…输入 / 使用命令，输入 @ 查找文件",
     "attachImage": "附加图片",
     "commands": "命令",
     "switchModel": "切换模型",
     "send": "发送消息",
     "abort": "中止 (Esc)",
-    "messagePlaceholder": "消息...",
+    "messagePlaceholder": "消息…输入 / 使用命令，输入 @ 查找文件",
     "mirrorReadOnly": "正在查看历史会话（只读）",
     "waitingForSession": "等待当前会话结束…",
     "compact": "压缩",
@@ -78,7 +90,12 @@
     "copyMessage": "复制消息",
     "thinking": "思考中",
     "copy": "复制",
-    "copied": "已复制！"
+    "copied": "已复制！",
+    "processDetails": "处理详情",
+    "processStep": "{count} 个步骤",
+    "processSteps": "{count} 个步骤",
+    "processToolCall": "{count} 次工具调用",
+    "processToolCalls": "{count} 次工具调用"
   },
   "tools": {
     "copyOutput": "复制输出",
@@ -106,6 +123,7 @@
       "enableLineWrap": "开启自动换行",
       "edit": "编辑",
       "preview": "预览",
+      "diff": "差异",
       "find": "查找",
       "goToLine": "跳转到行",
       "goToLinePrompt": "行号",
@@ -334,6 +352,9 @@
     "untitled": "未命名",
     "emptySession": "空会话",
     "rename": "重命名",
+    "generateTitle": "生成标题",
+    "generatingTitle": "正在生成…",
+    "generateTitleError": "无法生成标题，请重试。",
     "renameSessionAriaLabel": "重命名会话",
     "renameInputPlaceholder": "会话名称",
     "renameErrorInvalid": "请输入非空的会话名称。",
@@ -443,7 +464,7 @@
     "general": "通用",
     "extensions": "扩展",
     "usage": "使用量",
-    "configuration": "配置",
+    "configuration": "提供商",
     "agentInbox": "智能体收件箱",
     "backToChat": "返回聊天",
     "appearance": "外观",
@@ -453,13 +474,17 @@
     "thinkingEffort": "思考深度",
     "reasoningDepth": "推理深度",
     "showThinking": "显示思考",
+    "taskNotifications": "任务完成通知",
+    "taskNotificationsDescription": "任务完成时显示操作系统通知。",
+    "taskCompleteTitle": "任务已完成",
+    "taskCompleteMessage": "你的任务已完成。",
     "piVersion": "Pi 版本",
     "picotVersion": "Picot 版本",
     "checkForUpdates": "检查更新",
     "status": "状态",
     "updateAvailable": "有可用更新",
     "downloadInstall": "下载并安装",
-    "authentication": "认证",
+    "authentication": "提供商",
     "protection": "保护",
     "requireLogin": "需要登录",
     "agentConfigFile": "智能体配置文件",
@@ -710,7 +735,7 @@
         "searchResults": "Search results"
       },
       "placeholder": {
-        "typeAMessageOrUseToCall": "Type a message, or use / to call a skill…",
+        "typeAMessageOrUseToCall": "消息…输入 / 使用命令，输入 @ 查找文件",
         "providers": "{ \"providers\": { ... } }",
         "searchTasksAndMessages": "Search tasks and messages…"
       },

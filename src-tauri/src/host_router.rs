@@ -177,6 +177,12 @@ impl HostRouter {
             "runtime_request" | "runtime_snapshot_request" | "runtime_capabilities_request" => {
                 if frame_type == "runtime_request" {
                     validate_runtime_request(frame)?;
+                    if client_kind == ClientKind::Remote && is_picot_config_prompt(frame) {
+                        return Err(RouterError::new(
+                            "remote_operation_forbidden",
+                            "Remote clients cannot invoke Picot configuration operations",
+                        ));
+                    }
                 }
                 Ok(RoutedAction::Runtime {
                     client_id: client_id.to_owned(),
@@ -223,6 +229,13 @@ impl HostRouter {
             )),
         }
     }
+}
+
+fn is_picot_config_prompt(frame: &Value) -> bool {
+    frame
+        .pointer("/command/message")
+        .and_then(Value::as_str)
+        .is_some_and(|message| message.trim_start().starts_with("/picot-config "))
 }
 
 fn validate_runtime_request(frame: &Value) -> Result<(), RouterError> {
@@ -381,6 +394,30 @@ mod tests {
                 )
                 .is_err());
         }
+    }
+
+    #[test]
+    fn forbids_picot_config_commands_for_remote_clients() {
+        let mut router = HostRouter::new();
+        router
+            .connect(
+                "phone",
+                &json!({ "type": "hello", "protocolVersion": 2, "clientType": "remote" }),
+            )
+            .unwrap();
+        let error = router
+            .route(
+                "phone",
+                &json!({
+                    "type": "runtime_request",
+                    "requestId": "r1",
+                    "idempotencyKey": "i1",
+                    "target": { "workspaceId": "w", "sessionId": "s", "instanceId": "i" },
+                    "command": { "type": "prompt", "message": "/picot-config {}" }
+                }),
+            )
+            .unwrap_err();
+        assert_eq!(error.code, "remote_operation_forbidden");
     }
 
     #[test]

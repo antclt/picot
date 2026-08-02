@@ -59,3 +59,112 @@
   color: var(--text-dim);
   font-size: var(--font-size-sm);
 }
+
+.file-changes {
+  padding-top: var(--space-1);
+}
+
+.file-browser-view-switch {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-1);
+  margin-bottom: var(--space-2);
+  padding: var(--space-1);
+  background: var(--bg-frosted);
+}
+
+.file-browser-view-switch .ui-button {
+  justify-content: center;
+}
+
+.file-browser-view-switch .ui-button.active {
+  background: var(--bg-glass-hover);
+  color: var(--text-primary);
+}
+
+.file-changes-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-1) var(--space-2);
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+}
+
+.file-changes-count {
+  min-width: var(--control-height-xs);
+  text-align: center;
+}
+
+.file-changes-stat {
+  display: flex;
+  gap: var(--space-1);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+}
+
+.file-changes-stat--added {
+  color: var(--success, #3fb950);
+}
+
+.file-changes-stat--removed {
+  color: var(--error, #f85149);
+}
+
+.file-change-item {
+  display: flex;
+  box-sizing: border-box;
+  width: 100%;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+  text-align: left;
+}
+
+.file-change-item:hover {
+  background: var(--bg-glass-hover);
+}
+
+.file-change-path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--font-size-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-git-badge {
+  min-width: var(--control-height-xs);
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+  text-align: center;
+}
+
+/* The preview stylesheet also styles legacy tree badges with auto margins.
+   Diff rows keep a fixed leading status column instead. */
+.file-change-item > .file-git-badge {
+  flex: 0 0 var(--control-height-xs);
+  margin-left: 0;
+  padding: 0;
+}
+
+.file-git-badge[data-git-status="A"],
+.file-git-badge[data-git-status="U"] {
+  color: var(--success);
+}
+
+.file-git-badge[data-git-status="D"],
+.file-git-badge[data-git-status="C"] {
+  color: var(--accent-danger, #ef4444);
+}

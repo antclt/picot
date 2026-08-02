@@ -23,9 +23,17 @@ Background idle instances suspend after 30 minutes, with at most eight warm idle
 by LRU. Visible, working, queued, retrying, compacting, and dialog-blocked instances never suspend.
 Resume preserves `sessionId` and assigns a new `instanceId`. Crash recovery restores persisted session
 state only and never replays an unfinished prompt or tool execution.
+Closing the runtime RPC stream unregisters that instance immediately, so it cannot remain marked as
+working or be reused after its Pi process exits. Reopening starts a fresh process from persisted state.
 
 Mutations require idempotency keys. Acceptance and completion are separate; a lost outcome is surfaced
 as unknown and is never automatically retried.
+
+Historical session names remain Pi-owned metadata. The native sidebar invokes the bundled
+`picot-config` adapter through the active RPC process; that adapter validates the target against
+`SessionManager.listAll()`, opens the canonical managed session with `SessionManager.open()`, and
+appends the name through `appendSessionInfo()`. Active-session rename continues to use Pi's native
+`set_session_name` RPC so live in-memory state stays synchronized.
 
 ## Consequences
 

@@ -33,6 +33,18 @@
     "contextTitle": "コンテキスト使用量",
     "costSub": "{amount}（サブスク）"
   },
+  "sessionInfo": {
+    "title": "セッション情報",
+    "heading": "セッション情報",
+    "file": "ファイル",
+    "id": "ID",
+    "inMemory": "メモリ内（未保存）",
+    "unavailable": "利用できません",
+    "copyFile": "ファイルパスをコピー",
+    "copyId": "セッション ID をコピー",
+    "copied": "コピーしました",
+    "copyFailed": "コピーに失敗しました"
+  },
   "context": {
     "cached": "キャッシュ済み",
     "input": "入力",
@@ -43,7 +55,7 @@
   "models": {
     "searchPlaceholder": "モデルを検索…",
     "emptyTitle": "利用可能なモデルがありません",
-    "emptyHelp": "APIキーが設定されていません。設定 → 構成でキーを設定してください。",
+    "emptyHelp": "APIキーが設定されていません。設定 → プロバイダーでキーを設定してください。",
     "openSettings": "設定を開く"
   },
   "queue": {
@@ -53,13 +65,13 @@
     "followUp": "フォローアップ"
   },
   "input": {
-    "typeMessage": "メッセージを入力...",
+    "typeMessage": "メッセージ… / でコマンド、@ でファイルを入力",
     "attachImage": "画像を添付",
     "commands": "コマンド",
     "switchModel": "モデルを切り替え",
     "send": "メッセージを送信",
     "abort": "中止 (Esc)",
-    "messagePlaceholder": "メッセージ...",
+    "messagePlaceholder": "メッセージ… / でコマンド、@ でファイルを入力",
     "mirrorReadOnly": "履歴セッションを表示中（読み取り専用）",
     "waitingForSession": "現在のセッションが終了するのを待っています…",
     "compact": "コンパクト",
@@ -78,7 +90,12 @@
     "copyMessage": "メッセージをコピー",
     "thinking": "考え中",
     "copy": "コピー",
-    "copied": "コピーしました！"
+    "copied": "コピーしました！",
+    "processDetails": "処理の詳細",
+    "processStep": "{count} ステップ",
+    "processSteps": "{count} ステップ",
+    "processToolCall": "{count} 件のツール呼び出し",
+    "processToolCalls": "{count} 件のツール呼び出し"
   },
   "tools": {
     "copyOutput": "出力をコピー",
@@ -106,6 +123,7 @@
       "enableLineWrap": "折り返しを有効にする",
       "edit": "編集",
       "preview": "プレビュー",
+      "diff": "差分",
       "find": "検索",
       "goToLine": "行に移動",
       "goToLinePrompt": "行番号",
@@ -334,6 +352,9 @@
     "untitled": "無題",
     "emptySession": "空のセッション",
     "rename": "名前を変更",
+    "generateTitle": "タイトルを生成",
+    "generatingTitle": "生成中…",
+    "generateTitleError": "タイトルを生成できませんでした。もう一度お試しください。",
     "renameSessionAriaLabel": "セッション名を変更",
     "renameInputPlaceholder": "セッション名",
     "renameErrorInvalid": "空でないセッション名を入力してください。",
@@ -443,7 +464,7 @@
     "general": "一般",
     "extensions": "拡張機能",
     "usage": "使用量",
-    "configuration": "設定",
+    "configuration": "プロバイダー",
     "agentInbox": "エージェント受信箱",
     "backToChat": "チャットに戻る",
     "appearance": "外観",
@@ -453,13 +474,17 @@
     "thinkingEffort": "思考の深さ",
     "reasoningDepth": "推論の深さ",
     "showThinking": "思考を表示",
+    "taskNotifications": "タスク完了通知",
+    "taskNotificationsDescription": "タスクの完了時にOS通知を表示します。",
+    "taskCompleteTitle": "タスクが完了しました",
+    "taskCompleteMessage": "タスクが完了しました。",
     "piVersion": "Piバージョン",
     "picotVersion": "Picotバージョン",
     "checkForUpdates": "アップデートを確認",
     "status": "ステータス",
     "updateAvailable": "アップデートが利用可能",
     "downloadInstall": "ダウンロードしてインストール",
-    "authentication": "認証",
+    "authentication": "プロバイダー",
     "protection": "保護",
     "requireLogin": "ログインを要求",
     "agentConfigFile": "エージェント設定ファイル",
@@ -710,7 +735,7 @@
         "searchResults": "検索結果"
       },
       "placeholder": {
-        "typeAMessageOrUseToCall": "メッセージを入力するか、/を使ってスキルを呼び出してください…",
+        "typeAMessageOrUseToCall": "メッセージ… / でコマンド、@ でファイルを入力",
         "providers": "{ \"providers\": { ... } }",
         "searchTasksAndMessages": "タスクとメッセージを検索…"
       },

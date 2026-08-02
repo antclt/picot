@@ -33,6 +33,18 @@
     "contextTitle": "Context usage",
     "costSub": "{amount} (sub)"
   },
+  "sessionInfo": {
+    "title": "Session info",
+    "heading": "Session Info",
+    "file": "File",
+    "id": "ID",
+    "inMemory": "In memory (not saved yet)",
+    "unavailable": "Unavailable",
+    "copyFile": "Copy file path",
+    "copyId": "Copy session ID",
+    "copied": "Copied",
+    "copyFailed": "Copy failed"
+  },
   "context": {
     "cached": "Cached",
     "input": "Input",
@@ -43,7 +55,7 @@
   "models": {
     "searchPlaceholder": "Search models…",
     "emptyTitle": "No models available",
-    "emptyHelp": "No API keys configured. Set a key in Settings → Configuration.",
+    "emptyHelp": "No API keys configured. Set a key in Settings → Providers.",
     "openSettings": "Open Settings"
   },
   "queue": {
@@ -53,13 +65,13 @@
     "followUp": "Follow-up"
   },
   "input": {
-    "typeMessage": "Type a message...",
+    "typeMessage": "Message… Type / for commands, @ for files",
     "attachImage": "Attach image",
     "commands": "Commands",
     "switchModel": "Switch model",
     "send": "Send message",
     "abort": "Abort (Esc)",
-    "messagePlaceholder": "Message...",
+    "messagePlaceholder": "Message… Type / for commands, @ for files",
     "mirrorReadOnly": "Viewing historical session (read-only)",
     "waitingForSession": "Waiting for current session to finish…",
     "compact": "Compact",
@@ -78,7 +90,12 @@
     "copyMessage": "Copy message",
     "thinking": "Thinking",
     "copy": "Copy",
-    "copied": "Copied!"
+    "copied": "Copied!",
+    "processDetails": "Process details",
+    "processStep": "{count} step",
+    "processSteps": "{count} steps",
+    "processToolCall": "{count} tool call",
+    "processToolCalls": "{count} tool calls"
   },
   "tools": {
     "copyOutput": "Copy output",
@@ -106,6 +123,7 @@
       "enableLineWrap": "Enable line wrap",
       "edit": "Edit",
       "preview": "Preview",
+      "diff": "Diff",
       "find": "Find",
       "goToLine": "Go to line",
       "goToLinePrompt": "Line number",
@@ -334,6 +352,9 @@
     "untitled": "Untitled",
     "emptySession": "Empty session",
     "rename": "Rename",
+    "generateTitle": "Generate title",
+    "generatingTitle": "Generating…",
+    "generateTitleError": "Could not generate a title. Try again.",
     "renameSessionAriaLabel": "Rename session",
     "renameInputPlaceholder": "Session name",
     "renameErrorInvalid": "Enter a non-empty session name.",
@@ -443,7 +464,7 @@
     "general": "General",
     "extensions": "Extensions",
     "usage": "Usage",
-    "configuration": "Configuration",
+    "configuration": "Providers",
     "agentInbox": "Agent Inbox",
     "backToChat": "Back to chat",
     "appearance": "Appearance",
@@ -453,13 +474,17 @@
     "thinkingEffort": "Thinking effort",
     "reasoningDepth": "Reasoning depth",
     "showThinking": "Show thinking",
+    "taskNotifications": "Task completion notifications",
+    "taskNotificationsDescription": "Show an operating system notification when a task finishes.",
+    "taskCompleteTitle": "Task completed",
+    "taskCompleteMessage": "Your task has finished.",
     "piVersion": "Pi version",
     "picotVersion": "Picot version",
     "checkForUpdates": "Check for updates",
     "status": "Status",
     "updateAvailable": "Update available",
     "downloadInstall": "Download & install",
-    "authentication": "Authentication",
+    "authentication": "Providers",
     "protection": "Protection",
     "requireLogin": "Require login",
     "agentConfigFile": "Agent config file",
@@ -710,7 +735,7 @@
         "searchResults": "Search results"
       },
       "placeholder": {
-        "typeAMessageOrUseToCall": "Type a message, or use / to call a skill…",
+        "typeAMessageOrUseToCall": "Message… Type / for commands, @ for files",
         "providers": "{ \"providers\": { ... } }",
         "searchTasksAndMessages": "Search tasks and messages…"
       },

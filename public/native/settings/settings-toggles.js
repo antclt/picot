@@ -40,6 +40,11 @@ export function setupSettingsToggles({ configGateway, onError } = {}) {
       },
     },
     {
+      id: "toggle-task-notifications",
+      key: "task-notifications",
+      defaultValue: true,
+    },
+    {
       id: "toggle-auth",
       key: "auth-enabled",
       defaultValue: false,
