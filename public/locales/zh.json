@@ -315,7 +315,9 @@
     "abortedByUser": "已被用户中止",
     "invalidJson": "无效的 JSON：{detail}",
     "modelsMustBeObject": "models.json 必须是 JSON 对象。",
-    "providersMustBeObject": "'providers' 必须是对象。"
+    "providersMustBeObject": "'providers' 必须是对象。",
+    "compactionFailed": "上下文压缩失败。",
+    "compactionFailedDetail": "上下文压缩失败：{error}"
   },
   "onboarding": {
     "openProject": "打开一个项目以开始对话。",

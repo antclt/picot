@@ -315,7 +315,9 @@
     "abortedByUser": "Aborted by user",
     "invalidJson": "Invalid JSON: {detail}",
     "modelsMustBeObject": "models.json must be a JSON object.",
-    "providersMustBeObject": "'providers' must be an object."
+    "providersMustBeObject": "'providers' must be an object.",
+    "compactionFailed": "Context compaction failed.",
+    "compactionFailedDetail": "Context compaction failed: {error}"
   },
   "onboarding": {
     "openProject": "Open a project to start chatting.",
