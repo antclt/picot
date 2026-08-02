@@ -1,28 +1,27 @@
 // @vitest-environment jsdom
 // ABOUTME: Pins the header session-aggregate lifecycle: aggregate totals only hydrate
 // ABOUTME: from authoritative stats and live completions; current context is independent.
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { setMessages } from "../i18n.js";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { initI18n } from "../i18n.js";
 import { createHeaderStatusBar } from "./header-status-bar.js";
 
-beforeEach(() => {
+const enMessages = JSON.parse(readFileSync(join(process.cwd(), "public/locales/en.json"), "utf8"));
+
+beforeEach(async () => {
   document.body.replaceChildren(
     Object.assign(document.createElement("span"), { id: "session-cost" }),
     Object.assign(document.createElement("span"), { id: "session-usage" }),
     Object.assign(document.createElement("span"), { id: "token-usage" }),
   );
-  setMessages({
-    usage: {
-      input: "IN",
-      output: "OUT",
-      cache: "CACHE",
-      costSub: "{amount} (sub)",
-      costTitle: "Session cost",
-      contextTitle: "Context usage",
-      contextTokens: "Context: {used}k / {limit}k",
-      summary: "In {in} · Out {out} · Cache {cache}",
-    },
+  globalThis.fetch = vi.fn(async (input) => {
+    if (String(input).includes("/locales/en.json")) {
+      return new Response(JSON.stringify(enMessages));
+    }
+    return new Response(JSON.stringify({}), { status: 404 });
   });
+  await initI18n();
 });
 
 afterEach(() => {

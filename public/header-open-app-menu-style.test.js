@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, test } from "vitest";
 
-const stylesheet = readFileSync(resolve("public/style.css"), "utf8");
+const stylesheet = readFileSync(resolve("public/native/workspace/header-open-app.css"), "utf8");
 
 function ruleBody(selector) {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

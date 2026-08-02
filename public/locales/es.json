@@ -67,7 +67,12 @@
     "contextTokens": "Contexto: {used}k / {limit}k tokens",
     "sessionCostTitle": "Costo de sesión",
     "contextTitle": "Uso del contexto",
-    "costSub": "{amount} (suscripción)"
+    "costSub": "{amount} (suscripción)",
+    "input": "input",
+    "output": "output",
+    "cache": "cache",
+    "costTitle": "costTitle",
+    "summary": "summary"
   },
   "context": {
     "cached": "En caché",

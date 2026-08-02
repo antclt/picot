@@ -69,7 +69,11 @@
     "contextTitle": "Context usage",
     "costSub": "{amount} (sub)",
     "sessionUsageTitle": "Session tokens (input / output / cache)",
-    "summary": "In {in} · Out {out} · Cache {cache}"
+    "summary": "In {in} · Out {out} · Cache {cache}",
+    "input": "IN",
+    "output": "OUT",
+    "cache": "CACHE",
+    "costTitle": "Session cost"
   },
   "context": {
     "cached": "Cached",

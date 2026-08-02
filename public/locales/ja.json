@@ -67,7 +67,12 @@
     "contextTokens": "コンテキスト：{used}k / {limit}k トークン",
     "sessionCostTitle": "セッションコスト",
     "contextTitle": "コンテキスト使用量",
-    "costSub": "{amount}（サブスク）"
+    "costSub": "{amount}（サブスク）",
+    "input": "input",
+    "output": "output",
+    "cache": "cache",
+    "costTitle": "costTitle",
+    "summary": "summary"
   },
   "context": {
     "cached": "キャッシュ済み",
