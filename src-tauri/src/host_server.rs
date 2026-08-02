@@ -3,6 +3,7 @@
 use crate::host_data::{HostDataError, HostDataPlane, WriteFileResult};
 use crate::host_git;
 use crate::host_router::{HostRouter, RoutedAction, PROTOCOL_VERSION};
+use tauri_plugin_dialog::DialogExt;
 use crate::native_pi_manager::NativePiManager;
 use crate::pi_launch::{list_installed_apps, open_external, open_in_app, PiLaunchResolver};
 use crate::remote_auth::RemoteAuth;
@@ -52,6 +53,9 @@ struct HostState {
     terminal_events: tokio::sync::broadcast::Sender<(OwnerId, Value)>,
     git_service: Arc<crate::git_service::GitService>,
     git_events: tokio::sync::broadcast::Sender<(String, Value)>,
+    skill_registry: Arc<crate::skill_source_registry::SkillSourceRegistry>,
+    install_secret: String,
+    app_handle: Option<tauri::AppHandle>,
 }
 
 pub struct HostServer {
@@ -65,8 +69,9 @@ impl HostServer {
         static_dir: PathBuf,
         runtimes: NativePiManager,
         auth: Arc<Mutex<RemoteAuth>>,
+        app_handle: Option<tauri::AppHandle>,
     ) -> Result<Self, String> {
-        Self::start_with_workspaces(static_dir, runtimes, auth, HashMap::new()).await
+        Self::start_with_workspaces(static_dir, runtimes, auth, HashMap::new(), app_handle).await
     }
 
     pub async fn start_with_workspaces(
@@ -74,6 +79,7 @@ impl HostServer {
         runtimes: NativePiManager,
         auth: Arc<Mutex<RemoteAuth>>,
         workspace_roots: HashMap<String, PathBuf>,
+        app_handle: Option<tauri::AppHandle>,
     ) -> Result<Self, String> {
         let mut data = HostDataPlane::new(workspace_roots)
             .map_err(|error| format!("Cannot initialize Host data plane: {error:?}"))?;
@@ -113,6 +119,14 @@ impl HostServer {
         let (terminal_events, _) = tokio::sync::broadcast::channel(256);
         let (git_events, _) = tokio::sync::broadcast::channel(256);
         let git_service = Arc::new(crate::git_service::GitService::new());
+        let skill_registry = Arc::new(crate::skill_source_registry::SkillSourceRegistry::new());
+        let install_secret = {
+            use base64::Engine;
+            use rand::RngCore;
+            let mut bytes = [0u8; 32];
+            rand::rngs::OsRng.fill_bytes(&mut bytes);
+            base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes)
+        };
         let terminal_manager = TerminalManager::new(
             TerminalRegistry::new(15),
             TerminalStateStore::new(
@@ -137,6 +151,9 @@ impl HostServer {
             terminal_events,
             git_service,
             git_events,
+            skill_registry,
+            install_secret,
+            app_handle: app_handle,
         });
         let index = static_dir.join("index.html");
         let static_service = ServeDir::new(static_dir).fallback(ServeFile::new(index));
@@ -1358,6 +1375,75 @@ async fn dispatch_host_operation(
                 "deleted": result.deleted,
                 "errors": result.errors,
             }))
+        }
+        "pick_skill_source" => {
+            let Some(app) = state.app_handle.clone() else {
+                return Err(("host_operation_failed", "Folder picker is not available".into()));
+            };
+            let path = tokio::task::spawn_blocking(move || {
+                app.dialog().file().blocking_pick_folder()
+            })
+            .await
+            .map_err(|error| ("host_operation_failed", error.to_string()))?;
+            let Some(picked) = path else {
+                return Ok(json!({ "type": "host_response", "requestId": request_id, "operation": "pick_skill_source", "sourceId": null }));
+            };
+            let source_id = picked
+                .as_path()
+                .ok_or(("invalid_path", "Selected folder is not a local path".into()))?
+                .to_string_lossy()
+                .into_owned();
+            Ok(json!({ "type": "host_response", "requestId": request_id, "operation": "pick_skill_source", "sourceId": source_id }))
+        }
+        "skill_scan_install_source" => {
+            let source_id = frame
+                .get("sourceId")
+                .and_then(Value::as_str)
+                .filter(|value| !value.is_empty())
+                .ok_or(("invalid_source", "sourceId is required".into()))?
+                .to_owned();
+            let install_secret = state.install_secret.clone();
+            let result = tokio::task::spawn_blocking(move || {
+                crate::skill_source_registry::scan_source_static(&source_id, &install_secret)
+            })
+            .await
+            .map_err(|error| ("host_operation_failed", error.to_string()))?
+            .map_err(|message| ("skill_scan_failed", message))?;
+            Ok(json!({ "type": "host_response", "requestId": request_id, "operation": "skill_scan_install_source", "scan": result }))
+        }
+        "skill_install_links" => {
+            let source_id = frame
+                .get("sourceId")
+                .and_then(Value::as_str)
+                .filter(|value| !value.is_empty())
+                .ok_or(("invalid_source", "sourceId is required".into()))?
+                .to_owned();
+            let scope = frame
+                .get("scope")
+                .and_then(Value::as_str)
+                .filter(|value| *value == "global" || *value == "project")
+                .ok_or(("invalid_scope", "scope must be 'global' or 'project'".into()))?
+                .to_owned();
+            let scan_revision = frame
+                .get("scanRevision")
+                .and_then(Value::as_str)
+                .filter(|value| !value.is_empty())
+                .ok_or(("invalid_revision", "scanRevision is required".into()))?
+                .to_owned();
+            let selection = frame
+                .get("selection")
+                .and_then(Value::as_array)
+                .filter(|items| !items.is_empty())
+                .ok_or(("invalid_selection", "selection array is required".into()))?;
+            let install_secret = state.install_secret.clone();
+            let owned_selection = selection.clone();
+            let result = tokio::task::spawn_blocking(move || {
+                crate::skill_source_registry::install_links_static(&source_id, &scope, &scan_revision, &owned_selection, &install_secret)
+            })
+            .await
+            .map_err(|error| ("host_operation_failed", error.to_string()))?
+            .map_err(|message| ("skill_install_failed", message))?;
+            Ok(json!({ "type": "host_response", "requestId": request_id, "operation": "skill_install_links", "result": result }))
         }
         _ => Err((
             "host_operation_unimplemented",

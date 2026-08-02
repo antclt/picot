@@ -18,6 +18,9 @@ const REMOTE_FORBIDDEN_HOST_OPERATIONS: &[&str] = &[
     "delete_workspace",
     "open_workspace",
     "delete_sessions",
+    "pick_skill_source",
+    "skill_scan_install_source",
+    "skill_install_links",
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

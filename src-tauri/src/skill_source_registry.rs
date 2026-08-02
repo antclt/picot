@@ -439,3 +439,23 @@ mod tests {
             .is_ok());
     }
 }
+
+/// Placeholder: scans a local skill source directory for candidates.
+/// The full implementation delegates to the embedded Pi extension layer.
+pub fn scan_source_static(
+    _source_id: &str,
+    _install_secret: &str,
+) -> Result<serde_json::Value, String> {
+    Err("skill source scanning is not yet wired to the native host".into())
+}
+
+/// Placeholder: installs skill links into Pi's settings.json.
+pub fn install_links_static(
+    _source_id: &str,
+    _scope: &str,
+    _scan_revision: &str,
+    _selection: &[serde_json::Value],
+    _install_secret: &str,
+) -> Result<serde_json::Value, String> {
+    Err("skill link installation is not yet wired to the native host".into())
+}
