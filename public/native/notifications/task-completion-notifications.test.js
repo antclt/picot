@@ -19,6 +19,7 @@ function setup({ storedValue, permission = true } = {}) {
   };
   const task = { id: "session-a", name: "Fix notification routing" };
   const showNotification = vi.fn();
+  const logger = { debug: vi.fn(), warn: vi.fn() };
   const control = createTaskCompletionNotifications({
     storage,
     notificationApi,
@@ -26,8 +27,9 @@ function setup({ storedValue, permission = true } = {}) {
     title: (resolvedTask) => resolvedTask.name,
     body: () => "Finished",
     showNotification,
+    logger,
   });
-  return { control, notificationApi, showNotification, task };
+  return { control, logger, notificationApi, showNotification, task };
 }
 
 describe("task completion notifications", () => {
@@ -48,6 +50,20 @@ describe("task completion notifications", () => {
       workspaceId: "workspace-a",
       sessionId: "session-a",
     });
+  });
+
+  it("logs why a native notification cannot be invoked", async () => {
+    const logger = { debug: vi.fn(), warn: vi.fn() };
+    const invoke = vi.fn();
+    const send = createNativeTaskNotificationSender({ invoke, logger });
+
+    await send({ title: "Task completed", body: "Finished", target: { instanceId: "instance-a" } });
+
+    expect(invoke).not.toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining("incomplete target"),
+      expect.objectContaining({ instanceId: "instance-a", workspaceId: null, sessionId: null }),
+    );
   });
 
   it("notifies once when a running task settles", async () => {
@@ -88,10 +104,13 @@ describe("task completion notifications", () => {
   });
 
   it("ignores completion events without a preceding start", async () => {
-    const { control, showNotification } = setup();
+    const { control, logger, showNotification } = setup();
     control.handleRuntimeFrame(runtimeFrame("agent_end"));
 
     await Promise.resolve();
     expect(showNotification).not.toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining("no matching agent start"), {
+      key: "instance-a",
+    });
   });
 });
