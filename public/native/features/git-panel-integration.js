@@ -20,8 +20,7 @@ export function setupGitPanel({
   const finder = document.getElementById("file-sidebar-finder");
   if (!runtime || !container || !filesTab || !gitTab) return null;
 
-  let client;
-  client = new GitClient({
+  const client = new GitClient({
     send: (message) => {
       runtime
         .git(message, getTarget())
@@ -31,6 +30,12 @@ export function setupGitPanel({
         .catch((error) => onError?.(error));
     },
   });
+
+  // The native Host backend always uses generation 0 (workspace roots are
+  // stable per process — there is no workspace-swap lifecycle). Without this
+  // call, generation stays null and every command() returns early, so the
+  // panel never sends a status request and renders empty.
+  client.setWorkspaceGeneration(0);
 
   const handleFrame = (frame) => {
     if (!frame?.type) return;
