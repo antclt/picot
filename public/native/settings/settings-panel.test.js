@@ -4,6 +4,8 @@ import { setupSettingsPanel } from "./settings-panel.js";
 function renderSettingsDom() {
   document.body.innerHTML = `
     <button id="settings-btn"></button>
+    <button id="sidebar-extensions-btn"></button>
+    <button id="sidebar-skills-btn"></button>
     <div class="settings-overlay hidden" id="settings-overlay"></div>
     <div class="settings-panel hidden" id="settings-panel">
       <aside class="settings-nav">
@@ -85,6 +87,22 @@ describe("settings panel hash routing", () => {
     expect(document.getElementById("settings-panel").classList.contains("hidden")).toBe(false);
     const extensionsTab = document.querySelector('[data-settings-panel="extensions"]');
     expect(extensionsTab.classList.contains("active")).toBe(true);
+  });
+
+  it("opens sidebar resource entries as dialogs without changing the route", () => {
+    setupSettingsPanel();
+
+    document.getElementById("sidebar-extensions-btn").click();
+
+    const panel = document.getElementById("settings-panel");
+    expect(panel.classList.contains("resource-dialog")).toBe(true);
+    expect(
+      document.querySelector('[data-settings-panel="extensions"]').classList.contains("active"),
+    ).toBe(true);
+    expect(window.location.hash).toBe("");
+
+    document.querySelector(".resource-dialog-header button").click();
+    expect(panel.classList.contains("hidden")).toBe(true);
   });
 
   it("opens the Skills tab through the Picot config gateway", async () => {

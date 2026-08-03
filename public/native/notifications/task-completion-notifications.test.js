@@ -14,56 +14,62 @@ function setup({ storedValue, permission = true } = {}) {
     requestPermission: vi.fn().mockResolvedValue("granted"),
     sendNotification: vi.fn(),
   };
+  const task = { id: "session-a", name: "Fix notification routing" };
+  const showNotification = vi.fn();
   const control = createTaskCompletionNotifications({
     storage,
     notificationApi,
-    title: () => "Done",
+    resolveTask: () => task,
+    title: (resolvedTask) => resolvedTask.name,
     body: () => "Finished",
+    showNotification,
   });
-  return { control, notificationApi };
+  return { control, notificationApi, showNotification, task };
 }
 
 describe("task completion notifications", () => {
   it("notifies once when a running task settles", async () => {
-    const { control, notificationApi } = setup();
+    const { control, showNotification, task } = setup();
     control.handleRuntimeFrame(runtimeFrame("agent_start"));
     control.handleRuntimeFrame(runtimeFrame("agent_settled"));
     control.handleRuntimeFrame(runtimeFrame("agent_end"));
 
     await vi.waitFor(() => {
-      expect(notificationApi.sendNotification).toHaveBeenCalledOnce();
+      expect(showNotification).toHaveBeenCalledOnce();
     });
-    expect(notificationApi.sendNotification).toHaveBeenCalledWith({
-      title: "Done",
+    expect(showNotification).toHaveBeenCalledWith({
+      title: "Fix notification routing",
       body: "Finished",
+      target: { instanceId: "instance-a" },
+      task,
     });
   });
 
   it("does not notify when the setting is disabled", async () => {
-    const { control, notificationApi } = setup({ storedValue: "false" });
+    const { control, showNotification } = setup({ storedValue: "false" });
     control.handleRuntimeFrame(runtimeFrame("agent_start"));
     control.handleRuntimeFrame(runtimeFrame("agent_end"));
 
     await Promise.resolve();
-    expect(notificationApi.sendNotification).not.toHaveBeenCalled();
+    expect(showNotification).not.toHaveBeenCalled();
   });
 
   it("requests permission before the first notification", async () => {
-    const { control, notificationApi } = setup({ permission: false });
+    const { control, notificationApi, showNotification } = setup({ permission: false });
     control.handleRuntimeFrame(runtimeFrame("agent_start"));
     control.handleRuntimeFrame(runtimeFrame("agent_end"));
 
     await vi.waitFor(() => {
       expect(notificationApi.requestPermission).toHaveBeenCalledOnce();
-      expect(notificationApi.sendNotification).toHaveBeenCalledOnce();
+      expect(showNotification).toHaveBeenCalledOnce();
     });
   });
 
   it("ignores completion events without a preceding start", async () => {
-    const { control, notificationApi } = setup();
+    const { control, showNotification } = setup();
     control.handleRuntimeFrame(runtimeFrame("agent_end"));
 
     await Promise.resolve();
-    expect(notificationApi.sendNotification).not.toHaveBeenCalled();
+    expect(showNotification).not.toHaveBeenCalled();
   });
 });

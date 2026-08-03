@@ -14,19 +14,62 @@
   min-height: 320px;
   margin-bottom: 10px;
 }
-.models-config-source {
-  margin-top: var(--space-3);
+.models-json-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: grid;
+  place-items: center;
+  padding: var(--space-5);
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(var(--blur-heavy));
+}
+
+.models-json-dialog-backdrop.hidden {
+  display: none;
+}
+
+.models-json-dialog {
+  display: flex;
+  flex-direction: column;
+  width: min(760px, 100%);
+  max-height: 85vh;
+  padding: var(--space-5);
+  background: var(--bg-frosted);
+  border: 1px solid var(--border-hover);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg), var(--shadow-inset);
+}
+
+.models-json-dialog-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-bottom: var(--space-3);
+}
+
+.models-json-dialog-header h2 {
+  margin: 0 0 var(--space-1);
+  font-size: var(--font-size-xl);
+}
+
+.models-json-dialog-header .settings-static-value {
+  display: block;
   color: var(--text-dim);
   font-size: var(--font-size-sm);
+  word-break: break-all;
 }
 
-.models-config-source summary {
-  cursor: pointer;
-}
-
-.models-config-source .settings-config-textarea {
+.models-json-dialog .settings-config-textarea {
+  flex: 1;
   width: 100%;
-  margin-top: var(--space-2);
+  min-height: 360px;
+  margin: 0;
+}
+
+.models-json-dialog-actions {
+  margin-top: var(--space-3);
 }
 
 .models-config-layout {
@@ -207,23 +250,9 @@
   justify-self: start;
 }
 
-.models-config-layout + .models-config-source {
-  margin-top: var(--space-3);
-}
-
 .models-config-footer {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-4);
-}
-
-.models-config-footer .models-config-source {
-  flex: 1;
-  min-width: 0;
-}
-
-.models-config-footer-actions {
+  justify-content: flex-end;
   margin-top: var(--space-3);
 }
 
@@ -238,12 +267,17 @@
     border-bottom: 1px solid var(--border);
   }
 
-  .models-config-footer {
-    flex-direction: column;
+  .models-json-dialog-backdrop {
+    padding: var(--space-3);
   }
 
-  .models-config-footer-actions {
-    width: 100%;
+  .models-json-dialog {
+    max-height: 90vh;
+    padding: var(--space-4);
+  }
+
+  .models-json-dialog .settings-config-textarea {
+    min-height: 240px;
   }
 }
 

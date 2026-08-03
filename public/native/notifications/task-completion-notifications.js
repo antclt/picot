@@ -13,19 +13,23 @@ function targetKey(target = {}) {
 export function createTaskCompletionNotifications({
   storage = globalThis.localStorage,
   notificationApi = { isPermissionGranted, requestPermission, sendNotification },
-  title = () => "Task completed",
+  resolveTask = () => null,
+  title = (task) => task?.name || task?.firstMessage || "Task completed",
   body = () => "Your task has finished.",
+  showNotification = (notification) => notificationApi.sendNotification(notification),
   onError = (error) => console.warn("[Notifications] Failed to show notification:", error),
 } = {}) {
   const runningTargets = new Set();
 
   const enabled = () => storage?.getItem(SETTINGS_KEY) !== "false";
 
-  async function showCompletion() {
+  async function showCompletion(target) {
     if (!enabled()) return;
     let granted = await notificationApi.isPermissionGranted();
     if (!granted) granted = (await notificationApi.requestPermission()) === "granted";
-    if (granted) notificationApi.sendNotification({ title: title(), body: body() });
+    if (!granted) return;
+    const task = resolveTask(target);
+    await showNotification({ title: title(task), body: body(task), target, task });
   }
 
   function handleRuntimeFrame(frame) {
@@ -38,7 +42,7 @@ export function createTaskCompletionNotifications({
     }
     if (frame.event?.type !== "agent_settled" && frame.event?.type !== "agent_end") return;
     if (!runningTargets.delete(key)) return;
-    void showCompletion().catch(onError);
+    void showCompletion(frame.target).catch(onError);
   }
 
   return { handleRuntimeFrame };

@@ -381,6 +381,44 @@ impl NativePiManager {
         }
     }
 
+    /// Stop the runtime for `target` and spawn a fresh one that resumes the same
+    /// session, returning the new instance id. Used to pick up extension/package
+    /// changes without leaving the app. Falls back to a no-op returning the
+    /// existing instance id when the target is not currently running.
+    pub fn restart(
+        &self,
+        target: &RuntimeTarget,
+        spec: NativeLaunchSpec,
+    ) -> Result<String, String> {
+        let existing = self
+            .inner
+            .runtimes
+            .lock()
+            .map_err(|_| "Native runtime registry lock poisoned".to_string())?
+            .values()
+            .find_map(|runtime| {
+                runtime.target.lock().ok().map(|t| t.clone()).filter(|t| {
+                    t.workspace_id == target.workspace_id && t.session_id == target.session_id
+                })
+            });
+
+        let Some(existing) = existing else {
+            // Not currently running — nothing to restart.
+            return Ok(target.instance_id.clone());
+        };
+
+        self.stop(&existing)?;
+
+        let new_instance = format!("instance-{}", uuid::Uuid::new_v4().simple());
+        let fresh = RuntimeTarget::new(
+            existing.workspace_id.clone(),
+            existing.session_id.clone(),
+            new_instance.clone(),
+        );
+        self.spawn(fresh, spec)?;
+        Ok(new_instance)
+    }
+
     pub fn target_for_session(
         &self,
         workspace_id: &str,

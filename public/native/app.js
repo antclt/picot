@@ -8,7 +8,7 @@ import { selectSuperAgentStartupAction } from "../super-agent/startup-flow.js";
 import { buildTaskComposerPrompt, markTaskChildSessionBound } from "../super-agent/task-state.js";
 import { updateSuperAgentTask } from "../super-agent/task-store.js";
 import { applyTheme, getCurrentTheme } from "../themes.js";
-import { setupAtFileMention } from "../ui/at-file-mention.js";
+import { buildAtMentionValue, setupAtFileMention } from "../ui/at-file-mention.js";
 import { ConvNav } from "../ui/conv-nav.js";
 import { setupMessagesInsets } from "../ui/layout-insets.js";
 import { MessageRenderer } from "../ui/message-renderer.js";
@@ -92,8 +92,24 @@ const convNav = new ConvNav({
 });
 const notifications = createNotificationCenter();
 const taskCompletionNotifications = createTaskCompletionNotifications({
-  title: () => t("settings.taskCompleteTitle"),
+  resolveTask: (notificationTarget) =>
+    sidebar?.sessions?.find(
+      (session) =>
+        session.id === notificationTarget?.sessionId &&
+        session.workspaceId === notificationTarget?.workspaceId,
+    ) ?? null,
+  title: (task) => task?.name || task?.firstMessage || t("settings.taskCompleteTitle"),
   body: () => t("settings.taskCompleteMessage"),
+  showNotification: ({ title, body, target: notificationTarget, task }) => {
+    const invoke = globalThis.__TAURI__?.core?.invoke;
+    if (!invoke || !task?.projectPath || !notificationTarget?.sessionId) return;
+    return invoke("show_task_completion_notification", {
+      title,
+      body,
+      projectPath: task.projectPath,
+      sessionId: notificationTarget.sessionId,
+    });
+  },
 });
 
 setupMessagesInsets({
@@ -121,6 +137,7 @@ const imageInput = document.getElementById("image-input");
 const imagePreviews = document.getElementById("image-previews");
 const skillSlashMenu = document.getElementById("skill-slash-menu");
 const atFileMentionMenu = document.getElementById("at-file-mention-menu");
+let atFileMention = null;
 const composerAutoResize = setupComposerAutoResize({ input });
 const queuedMessages = document.getElementById("queued-messages");
 const todoMirrorPanel = new RpivTodoMirrorPanel({
@@ -373,7 +390,7 @@ setupSidebarToggle();
 if (atFileMentionMenu) {
   // @-file mention completion must be wired before the Enter-to-send listener
   // so it can intercept Enter/Tab/Escape while its listbox is open.
-  setupAtFileMention({
+  atFileMention = setupAtFileMention({
     input,
     container: atFileMentionMenu,
     getWorkspaceRoot: () => target.workspaceId,
@@ -481,6 +498,7 @@ const settingsPanel = setupSettingsPanel({
   getTarget: () => target,
   onError: showError,
   notify: notifications.notify,
+  onRestarted: () => window.location.reload(),
 });
 setupAppUpdater({ settingsPanel });
 setupNewSessionButton({ data, workspaceId: target.workspaceId, onError: showError });
@@ -1047,6 +1065,14 @@ function setupFileBrowser() {
         size: entry.size,
         mode: entry.mode,
       });
+    },
+    onMention(entry) {
+      if (!atFileMention) return;
+      const isDirectory = entry.kind === "directory" || entry.isDirectory;
+      const value = buildAtMentionValue(entry.relativePath, isDirectory);
+      input.focus();
+      atFileMention.insert(value, isDirectory);
+      composerAutoResize.sync();
     },
     onPathChange(path) {
       // Enable the up button only when we're inside a subdirectory.

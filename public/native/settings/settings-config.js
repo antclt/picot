@@ -1003,22 +1003,63 @@ export function setupSettingsConfig({ configGateway, onModelConfigurationChanged
       layout.className = "models-config-layout";
       apiKeysContainer.replaceChildren(layout);
 
-      const source = document.createElement("details");
-      source.className = "models-config-source";
-      const summary = document.createElement("summary");
-      summary.textContent = "Advanced JSON editor";
-      source.append(summary, inlineModelsTextarea);
-      inlineModelsTextarea.addEventListener("change", renderModelsConfigLayout);
+      const openSource = document.createElement("button");
+      openSource.type = "button";
+      openSource.className = "ui-button ui-button--secondary models-config-source-button";
+      openSource.textContent = "Advanced JSON editor";
+
+      const sourceDialog = document.createElement("div");
+      sourceDialog.className = "models-json-dialog-backdrop hidden";
+      const dialog = document.createElement("section");
+      dialog.className = "models-json-dialog";
+      dialog.setAttribute("role", "dialog");
+      dialog.setAttribute("aria-modal", "true");
+      dialog.setAttribute("aria-labelledby", "models-json-dialog-title");
+      const header = document.createElement("header");
+      header.className = "models-json-dialog-header";
+      const heading = document.createElement("div");
+      const title = document.createElement("h2");
+      title.id = "models-json-dialog-title";
+      title.textContent = "Advanced JSON editor";
+      heading.append(title, inlineModelsPath);
+      const close = document.createElement("button");
+      close.type = "button";
+      close.className = "ui-icon-button ui-icon-button--ghost";
+      close.setAttribute("aria-label", "Close advanced JSON editor");
+      close.textContent = "×";
+      header.append(heading, close);
+      dialog.append(header, inlineModelsTextarea);
 
       const footer = document.createElement("div");
       footer.className = "models-config-footer";
       const sourceSection = inlineModelsSave?.closest(".settings-section");
       const actions = inlineModelsSave?.closest(".settings-config-actions");
-      footer.appendChild(source);
+      footer.appendChild(openSource);
       if (actions) {
-        actions.classList.add("models-config-footer-actions");
-        footer.appendChild(actions);
+        actions.classList.add("models-json-dialog-actions");
+        dialog.appendChild(actions);
       }
+      sourceDialog.appendChild(dialog);
+      document.body.appendChild(sourceDialog);
+
+      const closeSourceDialog = () => {
+        sourceDialog.classList.add("hidden");
+        renderModelsConfigLayout();
+        openSource.focus();
+      };
+      openSource.addEventListener("click", () => {
+        sourceDialog.classList.remove("hidden");
+        inlineModelsTextarea.focus();
+      });
+      close.addEventListener("click", closeSourceDialog);
+      sourceDialog.addEventListener("click", (event) => {
+        if (event.target === sourceDialog) closeSourceDialog();
+      });
+      sourceDialog.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") closeSourceDialog();
+      });
+      inlineModelsTextarea.addEventListener("change", renderModelsConfigLayout);
+
       apiKeysContainer.append(layout, footer);
       if (sourceSection) sourceSection.hidden = true;
     } else if (layout.parentNode !== apiKeysContainer) {

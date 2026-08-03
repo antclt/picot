@@ -158,7 +158,13 @@ export function setupPackageBrowse(control, { notify } = {}) {
     }
     try {
       const configured = await control.listPiPackages();
-      installedSet = new Set(Array.isArray(configured) ? configured : []);
+      // listPiPackages now returns package objects; keep just the sources for
+      // installed-state matching against the catalog.
+      installedSet = new Set(
+        (Array.isArray(configured) ? configured : []).map((pkg) =>
+          typeof pkg === "string" ? pkg : pkg.source,
+        ),
+      );
     } catch {
       installedSet = new Set();
     }

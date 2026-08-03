@@ -3134,6 +3134,7 @@ dependencies = [
  "futures-util",
  "libc",
  "log",
+ "notify-rust",
  "percent-encoding",
  "portable-pty",
  "qrcode",

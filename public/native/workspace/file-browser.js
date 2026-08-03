@@ -12,6 +12,7 @@ export class NativeFileBrowser {
   #requestId = 0;
   #onFileOpen;
   #onFileSelect;
+  #onMention;
   #onPathChange;
   #gitFiles = [];
   #gitStat = null;
@@ -28,6 +29,7 @@ export class NativeFileBrowser {
    * @param {{
    *   onFileOpen?: (entry: object) => void,
    *   onFileSelect?: (entry: object) => void,
+   *   onMention?: (entry: object) => void,
    *   onPathChange?: (path: string) => void,
    * }} [options]
    */
@@ -36,7 +38,14 @@ export class NativeFileBrowser {
     pathEl,
     gateway,
     workspaceId,
-    { onFileOpen, onFileSelect, onPathChange, initialView = "files", showViewSwitch = true } = {},
+    {
+      onFileOpen,
+      onFileSelect,
+      onMention,
+      onPathChange,
+      initialView = "files",
+      showViewSwitch = true,
+    } = {},
   ) {
     this.#container = container;
     this.#pathEl = pathEl;
@@ -44,6 +53,7 @@ export class NativeFileBrowser {
     this.#workspaceId = workspaceId;
     this.#onFileOpen = onFileOpen ?? null;
     this.#onFileSelect = onFileSelect ?? null;
+    this.#onMention = onMention ?? null;
     this.#onPathChange = onPathChange ?? null;
     this.#view = initialView === "diff" ? "diff" : "files";
     this.#showViewSwitch = showViewSwitch;
@@ -120,6 +130,20 @@ export class NativeFileBrowser {
         size.className = "file-size";
         size.textContent = formatSize(entry.size);
         item.append(size);
+      }
+
+      if (this.#onMention) {
+        const mention = document.createElement("button");
+        mention.type = "button";
+        mention.className = "file-mention-btn";
+        mention.title = `@mention ${entry.name}`;
+        mention.textContent = "@";
+        mention.setAttribute("aria-label", `Mention ${entry.name}`);
+        mention.addEventListener("click", (event) => {
+          event.stopPropagation();
+          this.#onMention?.({ ...entry, isDirectory });
+        });
+        item.append(mention);
       }
 
       if (isDirectory) {

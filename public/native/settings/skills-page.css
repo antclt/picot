@@ -182,7 +182,11 @@
 
 .skills-switch {
   flex: 0 0 auto;
-  accent-color: var(--accent);
+}
+
+.skills-switch.indeterminate {
+  background: var(--bg-glass-strong);
+  opacity: 0.6;
 }
 
 .skills-skill-description {

@@ -248,16 +248,19 @@ export function setupSkillsPage({ container, rpcCommand, showSuccess, showError 
   }
 
   function renderSwitch(checked, disabled, indeterminate, ariaLabel, onChange) {
-    const input = el("input", {
-      type: "checkbox",
-      class: "skills-switch",
-      aria: { label: ariaLabel },
+    const btn = el("button", {
+      class: `settings-toggle skills-switch${checked ? " on" : ""}${indeterminate ? " indeterminate" : ""}`,
+      aria: { label: ariaLabel, checked: String(Boolean(checked)), role: "switch" },
     });
-    input.checked = Boolean(checked);
-    input.indeterminate = Boolean(indeterminate);
-    if (disabled) input.disabled = true;
-    input.addEventListener("change", () => onChange(input.checked));
-    return input;
+    if (disabled) btn.disabled = true;
+    btn.addEventListener("click", () => {
+      const nowOn = !btn.classList.contains("on");
+      btn.classList.toggle("on", nowOn);
+      btn.setAttribute("aria-checked", String(nowOn));
+      btn.classList.remove("indeterminate");
+      onChange(nowOn);
+    });
+    return btn;
   }
 
   function stateBadge(state, enabled, total) {

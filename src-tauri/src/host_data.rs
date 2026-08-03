@@ -1667,7 +1667,11 @@ fn parse_session_summary_with_metadata(
             }
             _ => {}
         }
-        if line_count > 50 && first_message.is_some() {
+        // The session display name (`session_info`) is appended at the end of the
+        // file when the agent settles. Do not break early until we've read it,
+        // otherwise every session over 50 lines shows the first message instead
+        // of its name. Only stop once both `first_message` and `name` are known.
+        if line_count > 50 && first_message.is_some() && name.is_some() {
             break;
         }
     }
@@ -2157,6 +2161,49 @@ mod tests {
         assert!(foreign.workspace_id.is_empty());
         assert!(foreign.project_path.ends_with("other"));
         assert_eq!(foreign.project_name, "other");
+        fs::remove_dir_all(temp).unwrap();
+    }
+
+    #[test]
+    fn reads_session_name_appended_after_many_messages() {
+        // Regression: the summary parser used to stop scanning after 50 lines,
+        // so a `session_info` name appended at the end of a long session was
+        // never read and the list fell back to the first message.
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let temp = std::env::temp_dir().join(format!("picot-host-session-name-{nonce}"));
+        let workspace = temp.join("workspace");
+        let sessions = temp.join("sessions/project");
+        fs::create_dir_all(&workspace).unwrap();
+        fs::create_dir_all(&sessions).unwrap();
+        let mut file = format!(
+            "{{\"type\":\"session\",\"id\":\"session-a\",\"timestamp\":\"2026-01-01\",\"cwd\":{}}}\n",
+            serde_json::to_string(&workspace.to_string_lossy()).unwrap(),
+        );
+        file.push_str(
+            "{\"type\":\"message\",\"message\":{\"role\":\"user\",\"content\":\"first turn\"}}\n",
+        );
+        // Push well past the 50-line early-break threshold.
+        for _ in 0..60 {
+            file.push_str(
+                "{\"type\":\"message\",\"message\":{\"role\":\"assistant\",\"content\":\"work\"}}\n",
+            );
+        }
+        // The display name is appended at the very end.
+        file.push_str("{\"type\":\"session_info\",\"name\":\"Generated title\"}\n");
+        fs::write(sessions.join("long.jsonl"), file).unwrap();
+
+        let data = HostDataPlane::new(HashMap::from([("workspace-a".into(), workspace)]))
+            .unwrap()
+            .with_session_root(temp.join("sessions"));
+
+        let all = data.list_all_sessions("workspace-a").unwrap();
+        assert_eq!(all.len(), 1);
+        assert_eq!(all[0].id, "session-a");
+        assert_eq!(all[0].name.as_deref(), Some("Generated title"));
+        assert_eq!(all[0].first_message.as_deref(), Some("first turn"));
         fs::remove_dir_all(temp).unwrap();
     }
 

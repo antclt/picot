@@ -80,6 +80,23 @@ describe("models provider editor", () => {
     delete globalThis.confirm;
   });
 
+  test("opens the advanced JSON editor in a modal dialog", async () => {
+    const editor = setupSettingsConfig({ configGateway: { call } });
+    await editor.loadInlineModelsEditor();
+
+    const trigger = document.querySelector(".models-config-source-button");
+    const backdrop = document.querySelector(".models-json-dialog-backdrop");
+    expect(backdrop.classList.contains("hidden")).toBe(true);
+    expect(backdrop.querySelector('[role="dialog"][aria-modal="true"]')).not.toBeNull();
+
+    trigger.click();
+    expect(backdrop.classList.contains("hidden")).toBe(false);
+    expect(backdrop.contains(document.getElementById("inline-models-textarea"))).toBe(true);
+
+    backdrop.querySelector('[aria-label="Close advanced JSON editor"]').click();
+    expect(backdrop.classList.contains("hidden")).toBe(true);
+  });
+
   test("switches providers without removing siblings from models.json", async () => {
     const editor = setupSettingsConfig({ configGateway: { call } });
     await editor.loadInlineModelsEditor();

@@ -174,6 +174,17 @@
                         </button>
                     </div>
                 </div>
+                <nav class="sidebar-primary-nav" aria-label="Resource management">
+                    <button type="button" class="sidebar-primary-nav-item" id="sidebar-extensions-btn">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path d="M10 22V7a1 1 0 0 0-1-1H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5a1 1 0 0 0-1-1H2"/><rect width="8" height="8" x="14" y="2" rx="1"/></g></svg>
+                        <span data-i18n="migrated.index.text.extensions">Extensions</span>
+                    </button>
+                    <button type="button" class="sidebar-primary-nav-item" id="sidebar-skills-btn">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594Z"/><path d="M20 2v4m2-2h-4"/><circle cx="4" cy="20" r="2"/></g></svg>
+                        <span data-i18n="migrated.index.text.skills">Skills</span>
+                    </button>
+                </nav>
+                <div class="sidebar-section-label">Sessions</div>
                 <div class="session-list" id="session-list">
                     <div class="session-loading" data-i18n="sidebar.loadingSessions">Loading sessions...</div>
                 </div>
@@ -1401,9 +1412,42 @@
 
                 <div class="settings-tab" data-settings-panel="extensions">
                     <div class="settings-body">
-                        <div class="settings-section">
-                            <div class="settings-section-title" data-i18n="settings.browseCommunityPackages">
-                                Browse Community Packages
+                        <div class="settings-section" id="pkg-manager-section">
+                            <div class="settings-section-title" data-i18n="settings.installedPackages">
+                                Installed Packages
+                            </div>
+                            <p class="settings-help" data-i18n="settings.installedHelp">
+                                Manage the extension packages configured for this
+                                installation: enable, disable, update, or remove.
+                            </p>
+                            <div class="pkg-manager-shell">
+                                <div class="pkg-manager-sidebar">
+                                    <div id="pkg-manager-groups" class="pkg-manager-groups"></div>
+                                    <button
+                                        type="button"
+                                        id="pkg-manager-add-btn"
+                                        class="pkg-manager-add-btn"
+                                        data-i18n="extensions.addPlugin"
+                                    >
+                                        + Add plugin
+                                    </button>
+                                </div>
+                                <div id="pkg-manager-detail" class="pkg-manager-detail"></div>
+                            </div>
+                            <div id="pkg-manager-footer" class="pkg-manager-footer"></div>
+                        </div>
+                        <div class="settings-section" id="pkg-browse-section" hidden>
+                            <div class="pkg-browse-section-header">
+                                <div class="settings-section-title" data-i18n="settings.browseCommunityPackages">
+                                    Browse Community Packages
+                                </div>
+                                <button
+                                    type="button"
+                                    id="pkg-browse-close-btn"
+                                    class="settings-value-btn pkg-browse-close-btn"
+                                    data-i18n="status.done">
+                                    Done
+                                </button>
                             </div>
                             <p class="settings-help" data-i18n="settings.browseHelp">
                                 Discover extensions, skills, themes, and prompts

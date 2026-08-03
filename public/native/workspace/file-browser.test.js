@@ -64,6 +64,48 @@ describe("NativeFileBrowser", () => {
     expect(browser.getParentPath()).toBe("");
   });
 
+  it("shows a mention button but does not break directory navigation", async () => {
+    const onMention = vi.fn();
+    const gateway = fakeGateway(async (_workspaceId, path) => {
+      if (path === "")
+        return {
+          entries: [
+            { name: "src", relativePath: "src", kind: "directory" },
+            { name: "a.ts", relativePath: "a.ts", kind: "file" },
+          ],
+        };
+      return { entries: [] };
+    });
+    const browser = new NativeFileBrowser(container, pathEl, gateway, "workspace-a", {
+      onMention,
+    });
+    await browser.load();
+
+    const buttons = container.querySelectorAll(".file-mention-btn");
+    expect(buttons.length).toBe(2);
+
+    // Clicking a directory's mention button navigates AND mentions (stopPropagation).
+    buttons[0].click();
+    expect(onMention).toHaveBeenCalledWith(
+      expect.objectContaining({ relativePath: "src", isDirectory: true }),
+    );
+    // Row navigation is not triggered when the mention button is clicked.
+    expect(browser.currentPath).toBe("");
+
+    // The file mention passes isDirectory: false.
+    buttons[1].click();
+    expect(onMention).toHaveBeenCalledWith(expect.objectContaining({ isDirectory: false }));
+  });
+
+  it("omits the mention button when no onMention handler is provided", async () => {
+    const gateway = fakeGateway(async () => ({
+      entries: [{ name: "a.ts", relativePath: "a.ts", kind: "file" }],
+    }));
+    const browser = new NativeFileBrowser(container, pathEl, gateway, "workspace-a");
+    await browser.load();
+    expect(container.querySelectorAll(".file-mention-btn").length).toBe(0);
+  });
+
   it("ignores a slower, superseded response so it can't overwrite a newer directory listing", async () => {
     const slow = deferred();
     const fast = deferred();
