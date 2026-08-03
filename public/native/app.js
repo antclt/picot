@@ -1,6 +1,7 @@
 import { FilePreviewPanel } from "../file-preview-panel.js";
 import { initI18n, onLocaleChange, t } from "../i18n.js";
 import { reconcileSnapshotTarget } from "../session/bootstrap-target.js";
+import { SessionUiStateStore } from "../session-ui-state.js";
 import { dispatchSuperAgentTaskNative } from "../super-agent/native-dispatch.js";
 import { isSuperAgentProjectPath } from "../super-agent/session.js";
 import { isSuperAgentEnabled } from "../super-agent/settings.js";
@@ -145,6 +146,10 @@ function formatThinkingLevelLabel(level) {
 }
 let currentThinkingLevel = "off";
 let currentModelId = null;
+
+// Session UI state: persists per-session model + thinking level and input draft
+// so switching between sessions restores the composer state.
+const sessionUiState = new SessionUiStateStore();
 let currentModelContextWindow = 0;
 let availableModels = [];
 let target = provisionalTargetFromRoute(route);
@@ -239,6 +244,24 @@ const _gitPanel = setupGitPanel({
   onError: showError,
 });
 const sessionCostEl = document.getElementById("session-cost");
+const sessionUsageEl = document.getElementById("session-usage");
+const tokenUsageEl = document.getElementById("token-usage");
+
+// Header status bar: aggregates session IN/OUT/CACHE tokens and cost
+// from session stats + live completions. Separate from current-context.
+let headerStatusBar = null;
+if (sessionUsageEl && sessionCostEl) {
+  import("../ui/header-status-bar.js").then(({ createHeaderStatusBar }) => {
+    headerStatusBar = createHeaderStatusBar({
+      sessionCostEl,
+      sessionUsageEl,
+      tokenUsageEl,
+      getContextWindowSize: () => currentModelContextWindow,
+      t,
+    });
+  });
+}
+
 let sessionTotalCost = 0;
 
 function computeTotalCostFromMessages(messages) {
@@ -336,6 +359,10 @@ const hydrateFromSnapshot = async (snapshot) => {
     currentModelContextWindow,
   );
   setSessionCost(computeTotalCostFromMessages(snapshot.state.messages ?? []));
+  // Hydrate header status bar from session stats if available
+  if (headerStatusBar) {
+    headerStatusBar.hydrateAggregate?.(snapshot.state.messages ?? []);
+  }
   // Flush queued extension prompts after rendering is settled so inline cards
   // are not immediately destroyed by a subsequent renderHistory() clear.
   await extensionUi.flushForegroundQueue();
@@ -494,6 +521,37 @@ const settingsPanel = setupSettingsPanel({
 });
 setupAppUpdater({ settingsPanel });
 setupNewSessionButton({ data, workspaceId: target.workspaceId, onError: showError });
+
+// SPA session creation: when workspace-actions creates a new session via the
+// HTTP API, it emits picot:session-created with the new target. Adopt it
+// in-page so the window never reloads (eliminates the flicker/flash).
+window.addEventListener("picot:session-created", (event) => {
+  const detail = event.detail;
+  if (!detail?.sessionId || !detail?.workspaceId) return;
+  const nextTarget = {
+    workspaceId: detail.workspaceId,
+    sessionId: detail.sessionId,
+    instanceId: detail.instanceId || `pending-${detail.sessionId.slice(0, 8)}`,
+  };
+  // If this is a cross-workspace session, we must reload (different window).
+  // Same-workspace sessions adopt in-page.
+  if (nextTarget.workspaceId !== target.workspaceId) {
+    const path = `/app/workspaces/${encodeURIComponent(nextTarget.workspaceId)}/sessions/${encodeURIComponent(nextTarget.sessionId)}`;
+    window.location.href = path;
+    return;
+  }
+  // Clear the chat area for the new session before adopting
+  messageRenderer.clear();
+  toolRenderer.clear();
+  void adoptTarget(nextTarget).then(() => {
+    input.value = "";
+    composerAutoResize.sync();
+    input.focus();
+    // Hydrate the new session's state from Pi
+    hydrateSnapshotOnce().catch(showError);
+  });
+});
+
 setupOpenFolderButton({ onError: showError });
 setupLanQr({ control });
 setupAppKeyboardShortcuts({
@@ -1211,6 +1269,7 @@ async function handleRuntimeEvent(event) {
         messageRenderer.finalizeStreamingMessage(streamingElement, event.message.usage ?? null);
         contextUsage.setUsage(event.message.usage ?? null, currentModelContextWindow);
         setSessionCost(sessionTotalCost + (event.message.usage?.cost?.total ?? 0));
+        headerStatusBar?.addLiveUsage?.(event.message.usage ?? null);
         streamingElement = null;
         convNav.notifyNewMessage();
       }
@@ -1292,6 +1351,22 @@ async function adoptTarget(nextTarget, { updateRoute = true } = {}) {
   adapter.subscribeTarget(target);
   sidebar?.setActive(target.sessionId);
   sessionInfo.refresh();
+  headerStatusBar?.reset?.();
+  setSessionCost(0);
+  // Save the outgoing session's draft and restore the incoming session's
+  if (previousTarget.sessionId && previousTarget.sessionId !== "pending-bootstrap") {
+    sessionUiState.saveDraft(previousTarget.sessionId, input.value);
+  }
+  // Restore model/thinking for the new session
+  const restoredProfile = await sessionUiState.loadProfile();
+  if (restoredProfile) {
+    updateComposerModel({ id: restoredProfile.modelId });
+    updateComposerThinking(restoredProfile.thinkingLevel);
+  }
+  // Restore input draft for the new session
+  const draft = sessionUiState.loadDraft(nextTarget.sessionId);
+  input.value = draft || "";
+  composerAutoResize.sync();
   await extensionUi.setForegroundSession(target.sessionId, { flush: false });
 }
 
@@ -1565,6 +1640,12 @@ function showError(error) {
 
 function updateComposerModel(model) {
   currentModelId = model?.id ?? null;
+  // Persist the model change to session UI state
+  sessionUiState.saveProfile({
+    provider: "anthropic",
+    modelId: currentModelId || "",
+    thinkingLevel: currentThinkingLevel,
+  }).catch(() => {});
   currentModelContextWindow =
     Number(model?.contextWindow) || findModelContextWindow(currentModelId);
   contextUsage.setContextWindowSize(currentModelContextWindow);
@@ -1575,6 +1656,11 @@ function updateComposerModel(model) {
 
 function updateComposerThinking(level) {
   currentThinkingLevel = level ?? "off";
+  sessionUiState.saveProfile({
+    provider: "anthropic",
+    modelId: currentModelId || "",
+    thinkingLevel: currentThinkingLevel,
+  }).catch(() => {});
   if (thinkingBtn) {
     const levelLabel = formatThinkingLevelLabel(currentThinkingLevel);
     thinkingBtn.textContent = t("settings.thinkingCompact", { level: levelLabel });
