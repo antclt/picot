@@ -82,9 +82,7 @@ describe("setupGitPanel integration", () => {
     // Allow the microtask queue to flush (send is called synchronously inside command)
     await Promise.resolve();
 
-    const statusCommand = runtime.sent.find(
-      (m) => m.command?.type === "status",
-    );
+    const statusCommand = runtime.sent.find((m) => m.command?.type === "status");
     expect(statusCommand).toBeDefined();
     expect(statusCommand.workspaceGeneration).toBe(0);
   });

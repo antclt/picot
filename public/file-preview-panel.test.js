@@ -869,3 +869,52 @@ describe("FilePreviewPanel workspace restore", () => {
     p.destroy();
   });
 });
+
+describe("FilePreviewPanel git diff tabs", () => {
+  test("openDiff mounts a diff renderer and sets activeContent", () => {
+    const p = createPanel();
+    const id = p.openDiff({
+      displayPath: "src/main.js",
+      comparison: "changes",
+      rawPatch:
+        "--- a/src/main.js\n+++ b/src/main.js\n@@ -1,1 +1,2 @@\n-old line\n+new line\n+added line",
+    });
+
+    expect(id).toBe("git-diff");
+    expect(p.activeContent).toEqual({ kind: "diff", id: "git-diff" });
+    expect(p.diffTabs.has("git-diff")).toBe(true);
+    // The diff renderer should have mounted content into the panel.
+    expect(content.children.length).toBeGreaterThan(0);
+    expect(panel.classList.contains("collapsed")).toBe(false);
+    p.destroy();
+  });
+
+  test("closeDiffTab removes the tab and deactivates", () => {
+    const p = createPanel();
+    p.openDiff({
+      displayPath: "src/main.js",
+      comparison: "changes",
+      rawPatch: "test patch",
+    });
+
+    expect(p.diffTabs.size).toBe(1);
+    const result = p.closeDiffTab("git-diff");
+    expect(result).toBe(true);
+    expect(p.diffTabs.has("git-diff")).toBe(false);
+    p.destroy();
+  });
+
+  test("openDiff renders a diff tab in the tab bar", () => {
+    const p = createPanel();
+    p.openDiff({
+      displayPath: "src/app.ts",
+      comparison: "staged",
+      rawPatch: "test",
+    });
+
+    const diffTab = tabBar.querySelector('[data-diff-id="git-diff"]');
+    expect(diffTab).not.toBeNull();
+    expect(diffTab.classList.contains("diff-tab")).toBe(true);
+    p.destroy();
+  });
+});
