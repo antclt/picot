@@ -174,7 +174,6 @@ describe("JS t() literal key references", () => {
     "ui/markdown.js",
     "ui/tool-card.js",
     "pinned-items.js",
-    "sidebar-workspace-group.js",
     "workspace-projects.js",
     "workspace-quick-info.js",
     "ephemeral-chat-view.js",

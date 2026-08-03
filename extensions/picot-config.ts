@@ -27,6 +27,7 @@ import {
   type TelegramBotIdentity,
   type TelegramWorkerStatusLike,
 } from "./pi-chat-setup";
+import { generateTitleForSession } from "./session-title";
 import {
   buildSkillInventory,
   mutateSkillEnabled,
@@ -72,8 +73,43 @@ type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "
 type ConfigContext = {
   modelRegistry?: CatalogRegistry;
   cwd?: string;
+  model?: unknown;
+  sessionManager?: { getSessionFile: () => string | undefined };
   isProjectTrusted?: () => boolean;
 };
+
+type ListedSession = { path?: string };
+
+async function renameHistoricalSession(filePath: unknown, requestedName: unknown) {
+  if (typeof filePath !== "string" || typeof requestedName !== "string") {
+    throw new Error("Session path and name are required.");
+  }
+  const name = requestedName.trim();
+  if (!name) throw new Error("Session name cannot be empty.");
+  if ([...name].length > 200) throw new Error("Session name cannot exceed 200 characters.");
+  if (path.extname(filePath).toLowerCase() !== ".jsonl") {
+    throw new Error("Session is not available.");
+  }
+  let canonicalTarget: string;
+  try {
+    canonicalTarget = fs.realpathSync.native(filePath);
+  } catch {
+    throw new Error("Session is not available.");
+  }
+  const sessions = (await SessionManager.listAll()) as ListedSession[];
+  const managed = sessions.find((session) => {
+    if (typeof session.path !== "string") return false;
+    try {
+      return fs.realpathSync.native(session.path) === canonicalTarget;
+    } catch {
+      return false;
+    }
+  });
+  if (!managed) throw new Error("Session is not available.");
+  const manager = SessionManager.open(canonicalTarget);
+  manager.appendSessionInfo(name);
+  return { filePath: canonicalTarget, name };
+}
 
 type SkillInventoryMutation = {
   scope?: unknown;
@@ -674,6 +710,20 @@ export async function handlePicotConfig(
 
   try {
     switch (op) {
+      case "rename_historical_session": {
+        const result = await renameHistoricalSession(params.filePath, params.name);
+        return { ok: true, data: result };
+      }
+      case "generate_session_title": {
+        const sessionFile = ctx.sessionManager?.getSessionFile();
+        if (!sessionFile) throw new Error("The active session has not been saved yet.");
+        const modelRuntime = await ModelRuntime.create();
+        const title = await generateTitleForSession(sessionFile, {
+          model: ctx.model,
+          modelRuntime,
+        });
+        return { ok: true, data: { title } };
+      }
       case "list_model_catalog": {
         const catalog = await buildModelCatalog(requireRegistry(), preferences);
         return { ok: true, data: catalog };

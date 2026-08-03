@@ -218,7 +218,7 @@ export class MessageRenderer {
     return div;
   }
 
-  renderAssistantMessage(message, isStreaming = false, isHistory = false) {
+  renderAssistantMessage(message, isStreaming = false, isHistory = false, targetContainer = null) {
     const welcome = this.container.querySelector(".welcome");
     if (welcome) welcome.remove();
 
@@ -255,7 +255,8 @@ export class MessageRenderer {
     }
 
     const hasText = rawStreamingText.trim().length > 0;
-    if (message.usage?.cost && !hasThinking) {
+    const isProcessMessage = targetContainer !== null;
+    if (!isProcessMessage && message.usage?.cost && !hasThinking) {
       const cost = message.usage.cost.total;
       if (cost > 0) {
         usageHtml = `<span class="message-usage">$${cost.toFixed(4)}</span>`;
@@ -266,7 +267,7 @@ export class MessageRenderer {
 
     if (!isStreaming && isHistory && !contentHtml) return null;
 
-    const showFooter = !isStreaming && (hasText || usageHtml);
+    const showFooter = !isStreaming && !isProcessMessage && (hasText || usageHtml);
     const footerHtml = showFooter
       ? `<div class="message-footer">${hasText ? `<button class="message-copy-btn" aria-label="${this.escapeHtml(t("messages.copyMessage"))}" title="${this.escapeHtml(t("messages.copyMessage"))}">${COPY_ICON}</button>` : ""}${usageHtml}</div>`
       : "";
@@ -278,8 +279,8 @@ export class MessageRenderer {
 
     this._setupThinkingToggles(div);
     this._setupCodeCopyButtons(div);
-    if (!isStreaming && hasText) this._setupCopyBtn(div);
-    this.container.appendChild(div);
+    if (!isStreaming && hasText && !isProcessMessage) this._setupCopyBtn(div);
+    (targetContainer || this.container).appendChild(div);
     if (!isHistory) this.scrollToBottom();
 
     return div;
@@ -347,7 +348,11 @@ export class MessageRenderer {
 
     if (thinking) this.updateStreamingThinking(messageElement, thinking);
 
-    messageElement._streamingRawText = text;
+    // Only overwrite the accumulated raw text when the update actually contains
+    // text content. If the final message_end event carries only tool_use blocks
+    // (no text), we must keep the text that streamed in earlier so that
+    // finalizeStreamingMessage can re-render it correctly.
+    if (text) messageElement._streamingRawText = text;
     const thinkingBlock = contentDiv.querySelector(".streaming-thinking");
     const rendered = renderStreamingMarkdown(text);
     if (thinkingBlock) {
@@ -357,8 +362,8 @@ export class MessageRenderer {
         textNode.className = "streaming-text";
         contentDiv.appendChild(textNode);
       }
-      this._replaceMarkup(textNode, rendered);
-    } else {
+      this._replaceMarkup(textNode, text ? rendered : textNode.innerHTML);
+    } else if (text) {
       this._replaceMarkup(contentDiv, rendered);
     }
     this._setupCodeCopyButtons(contentDiv);

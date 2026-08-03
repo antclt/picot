@@ -131,6 +131,17 @@ impl PiLaunchResolver {
         self.run_pi_command(&["install", source]).map(|_| ())
     }
 
+    /// Resolve the bundled `pi` binary path (as a spawnable command string,
+    /// with any Windows verbatim prefix stripped) and its augmented `PATH`
+    /// env var. Exposed for callers (e.g. model connectivity checks) that
+    /// need to spawn the embedded CLI directly rather than through
+    /// `run_pi_command`.
+    pub fn resolve_bundled_pi_for_spawn(&self) -> Result<(String, String), String> {
+        let binary = self.resolve_bundled_pi()?;
+        let binary_str = strip_verbatim_prefix(&binary.to_string_lossy());
+        Ok((binary_str, build_augmented_path()))
+    }
+
     pub fn remove_pi_package(&self, source: &str) -> Result<(), String> {
         self.run_pi_command(&["remove", source]).map(|_| ())
     }

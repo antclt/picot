@@ -3,6 +3,10 @@
 use crate::host_data::{HostDataError, HostDataPlane, WriteFileResult};
 use crate::host_git;
 use crate::host_router::{HostRouter, RoutedAction, PROTOCOL_VERSION};
+use crate::markitdown_preview::{
+    ConversionOutcome, DependencyReason, MarkitdownPreviewService, INPUT_BYTE_CAP,
+};
+use crate::model_health::{self, ModelTestOutcome, ModelTestRequest};
 use tauri_plugin_dialog::DialogExt;
 use crate::native_pi_manager::NativePiManager;
 use crate::pi_launch::{list_installed_apps, open_external, open_in_app, PiLaunchResolver};
@@ -47,6 +51,7 @@ struct HostState {
     auth: Arc<Mutex<RemoteAuth>>,
     session_owners: Mutex<std::collections::HashMap<RuntimeTarget, String>>,
     data: HostDataPlane,
+    markitdown: MarkitdownPreviewService,
     pi_launch: PiLaunchResolver,
     port: u16,
     terminal_manager: TerminalManager,
@@ -145,6 +150,7 @@ impl HostServer {
             auth,
             session_owners: Mutex::new(std::collections::HashMap::new()),
             data,
+            markitdown: MarkitdownPreviewService::default(),
             pi_launch: PiLaunchResolver::new(static_dir.clone()),
             port: address.port(),
             terminal_manager,
@@ -174,6 +180,8 @@ impl HostServer {
             .service(static_service);
         let app = Router::new()
             .route("/health", get(health))
+            .route("/health/runtime", get(health_runtime))
+            .route("/health/models/test", post(health_model_test))
             .route("/v2/ws", get(websocket_upgrade))
             .route("/v2/bootstrap", get(bootstrap_target))
             .route("/v2/sessions", get(list_all_sessions_http))
@@ -184,6 +192,9 @@ impl HostServer {
                 get(read_file_content).put(write_file_content),
             )
             .route("/api/files/raw", get(raw_file_content))
+            .route("/api/git/status", get(git_status))
+            .route("/api/git/diff", get(git_file_diff))
+            .route("/api/git/stat", get(git_stat_handler))
             .route("/api/file-mentions", get(file_mentions))
             .route("/v2/new-session", post(new_session))
             .route("/v2/resolve-workspace", post(resolve_workspace))
@@ -247,12 +258,92 @@ impl Drop for HostServer {
 }
 
 async fn health(State(state): State<Arc<HostState>>) -> Json<Value> {
+    let runtime_count = state.runtimes.statuses().map(|s| s.len()).unwrap_or(0);
     Json(json!({
         "status": "ok",
         "protocolVersion": PROTOCOL_VERSION,
         "piVersion": crate::pi_launch::locked_pi_version(),
         "lanUrl": local_lan_url_with_port(state.port).unwrap_or_default(),
+        "runtimeCount": runtime_count,
     }))
+}
+
+/// L2 health check — reports the coordinator's live view of every tracked
+/// runtime (workspace/session/instance + lifecycle state), plus a summary
+/// count broken down by state. Useful for detecting stuck/crashed runtimes
+/// without needing to inspect individual sessions.
+async fn health_runtime(
+    State(state): State<Arc<HostState>>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let statuses = state.runtimes.statuses().map_err(|message| {
+        api_error_with_detail(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "statuses_unavailable",
+            &message,
+        )
+    })?;
+    let mut by_state: HashMap<String, usize> = HashMap::new();
+    for status in &statuses {
+        let key = serde_json::to_value(status.state)
+            .ok()
+            .and_then(|v| v.as_str().map(str::to_string))
+            .unwrap_or_else(|| "unknown".to_string());
+        *by_state.entry(key).or_insert(0) += 1;
+    }
+    Ok(Json(json!({
+        "status": "ok",
+        "runtimeCount": statuses.len(),
+        "byState": by_state,
+        "runtimes": statuses,
+    })))
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ModelTestBody {
+    provider_name: String,
+    provider: Value,
+    model: Value,
+}
+
+/// L3 health check — verifies real connectivity to a specific provider/model
+/// pair by shelling out to the bundled `pi` CLI with an isolated, throwaway
+/// config dir (so no user config, session, or credential state is touched)
+/// and a minimal, retry-disabled, non-interactive prompt.
+async fn health_model_test(
+    State(state): State<Arc<HostState>>,
+    Json(body): Json<ModelTestBody>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let request = ModelTestRequest {
+        provider_name: body.provider_name,
+        provider: body.provider,
+        model: body.model,
+    };
+    let pi_launch = state.pi_launch.clone();
+    let outcome = tokio::task::spawn(async move {
+        model_health::run_model_test(&pi_launch, request, model_health::DEFAULT_TEST_TIMEOUT).await
+    })
+    .await
+    .map_err(|error| {
+        api_error_with_detail(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "model_test_panicked",
+            &error.to_string(),
+        )
+    })?;
+    match outcome {
+        Ok(outcome) => Ok(Json(model_test_outcome_json(outcome))),
+        Err(message) => Err(api_error_with_detail(
+            StatusCode::BAD_REQUEST,
+            "invalid_request",
+            &message,
+        )),
+    }
+}
+
+fn model_test_outcome_json(outcome: ModelTestOutcome) -> Value {
+    serde_json::to_value(outcome)
+        .unwrap_or_else(|_| json!({ "ok": false, "error": "serialization_failed" }))
 }
 
 /// Returns the first non-loopback IPv4 LAN address of this machine,
@@ -439,6 +530,58 @@ async fn read_file_content(
     State(state): State<Arc<HostState>>,
     Query(query): Query<FilePreviewQuery>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    if let Some(source) = state
+        .data
+        .read_convertible_file(&query.workspace_id, &query.path)
+        .map_err(host_data_http_error)?
+    {
+        let mut response = json!({
+            "path": source.path,
+            "content": "",
+            "size": source.size,
+            "mtimeMs": source.mtime_ms,
+            "mimeType": source.mime_type,
+            "isBinary": false,
+            "truncated": false,
+            "editable": false,
+        });
+        let outcome = if source.size > INPUT_BYTE_CAP || source.bytes.len() as u64 > INPUT_BYTE_CAP
+        {
+            ConversionOutcome::Failed
+        } else {
+            state.markitdown.convert(&source.suffix, source.bytes).await
+        };
+        match outcome {
+            ConversionOutcome::Ready(markdown) => {
+                response["content"] = Value::String(markdown);
+                response["previewStatus"] = Value::String("ready".into());
+                response["renderAs"] = Value::String("markdown".into());
+            }
+            ConversionOutcome::DependencyUnavailable {
+                reason,
+                display_command,
+            } => {
+                response["previewStatus"] = Value::String("dependencyUnavailable".into());
+                let (reason, python_version) = match reason {
+                    DependencyReason::PythonMissing => ("pythonMissing", None),
+                    DependencyReason::PythonTooOld { version } => ("pythonTooOld", Some(version)),
+                    DependencyReason::MarkitdownMissing => ("markitdownMissing", None),
+                    DependencyReason::MarkitdownIncompatible => ("markitdownIncompatible", None),
+                };
+                response["dependencyReason"] = Value::String(reason.into());
+                if let Some(version) = python_version {
+                    response["pythonVersion"] = Value::String(version);
+                }
+                if let Some(command) = display_command {
+                    response["displayCommand"] = Value::String(command);
+                }
+            }
+            ConversionOutcome::Failed => {
+                response["previewStatus"] = Value::String("conversionFailed".into());
+            }
+        }
+        return Ok(Json(response));
+    }
     let content = state
         .data
         .read_file_content(&query.workspace_id, &query.path)
@@ -483,6 +626,51 @@ async fn file_mentions(
     let result = state
         .data
         .search_file_mentions(&query.workspace_id, &query.query)
+        .map_err(host_data_http_error)?;
+    serde_json::to_value(result)
+        .map(Json)
+        .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "serialization_failed"))
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GitStatusQuery {
+    workspace_id: String,
+}
+
+async fn git_status(
+    State(state): State<Arc<HostState>>,
+    Query(query): Query<GitStatusQuery>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let result = state
+        .data
+        .git_status(&query.workspace_id)
+        .map_err(host_data_http_error)?;
+    serde_json::to_value(result)
+        .map(Json)
+        .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "serialization_failed"))
+}
+
+async fn git_file_diff(
+    State(state): State<Arc<HostState>>,
+    Query(query): Query<FilePreviewQuery>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let result = state
+        .data
+        .git_file_diff(&query.workspace_id, &query.path)
+        .map_err(host_data_http_error)?;
+    serde_json::to_value(result)
+        .map(Json)
+        .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "serialization_failed"))
+}
+
+async fn git_stat_handler(
+    State(state): State<Arc<HostState>>,
+    Query(query): Query<GitStatusQuery>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let result = state
+        .data
+        .git_stat(&query.workspace_id)
         .map_err(host_data_http_error)?;
     serde_json::to_value(result)
         .map(Json)
@@ -1520,6 +1708,17 @@ fn api_error(status: StatusCode, code: &'static str) -> (StatusCode, Json<Value>
     (status, Json(json!({ "error": { "code": code } })))
 }
 
+fn api_error_with_detail(
+    status: StatusCode,
+    code: &'static str,
+    message: &str,
+) -> (StatusCode, Json<Value>) {
+    (
+        status,
+        Json(json!({ "error": { "code": code, "message": message } })),
+    )
+}
+
 async fn send_error(
     socket: &mut WebSocket,
     request_id: Option<&str>,
@@ -1687,6 +1886,109 @@ mod tests {
             .await
             .unwrap();
         assert!(index.contains("Picot native host"));
+
+        host.stop();
+        fs::remove_dir_all(temp).unwrap();
+    }
+
+    #[tokio::test]
+    async fn health_runtime_reports_zero_runtimes_when_idle() {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let temp = std::env::temp_dir().join(format!("picot-host-runtime-{nonce}"));
+        let public = temp.join("public");
+        fs::create_dir_all(&public).unwrap();
+        fs::write(public.join("index.html"), "<h1>Picot native host</h1>").unwrap();
+        let metadata = MetadataStore::open(&temp.join("picot.sqlite3")).unwrap();
+        let auth = Arc::new(Mutex::new(RemoteAuth::new(Arc::new(Mutex::new(metadata)))));
+        let host = HostServer::start(public, NativePiManager::new(32), auth)
+            .await
+            .unwrap();
+
+        let body: serde_json::Value = reqwest::get(format!("{}/health/runtime", host.origin()))
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert_eq!(body["status"], "ok");
+        assert_eq!(body["runtimeCount"], 0);
+        assert!(body["runtimes"].as_array().unwrap().is_empty());
+
+        host.stop();
+        fs::remove_dir_all(temp).unwrap();
+    }
+
+    #[tokio::test]
+    async fn health_model_test_reports_connectivity_failure_for_unreachable_provider() {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let temp = std::env::temp_dir().join(format!("picot-host-model-test-{nonce}"));
+        let public = temp.join("public");
+        fs::create_dir_all(&public).unwrap();
+        fs::write(public.join("index.html"), "<h1>Picot native host</h1>").unwrap();
+        let metadata = MetadataStore::open(&temp.join("picot.sqlite3")).unwrap();
+        let auth = Arc::new(Mutex::new(RemoteAuth::new(Arc::new(Mutex::new(metadata)))));
+        let host = HostServer::start(public, NativePiManager::new(32), auth)
+            .await
+            .unwrap();
+
+        let client = reqwest::Client::new();
+        let response = client
+            .post(format!("{}/health/models/test", host.origin()))
+            .json(&json!({
+                "providerName": "probe-unreachable",
+                "provider": {
+                    "baseUrl": "https://model-test.invalid",
+                    "api": "openai-completions",
+                    "apiKey": "literal-test-key",
+                },
+                "model": { "id": "does-not-matter" },
+            }))
+            .send()
+            .await
+            .unwrap();
+        assert!(response.status().is_success());
+        let body: serde_json::Value = response.json().await.unwrap();
+        assert_eq!(body["ok"], false);
+        assert!(body["error"].as_str().is_some());
+
+        host.stop();
+        fs::remove_dir_all(temp).unwrap();
+    }
+
+    #[tokio::test]
+    async fn health_model_test_rejects_missing_model_id() {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let temp = std::env::temp_dir().join(format!("picot-host-model-test-invalid-{nonce}"));
+        let public = temp.join("public");
+        fs::create_dir_all(&public).unwrap();
+        fs::write(public.join("index.html"), "<h1>Picot native host</h1>").unwrap();
+        let metadata = MetadataStore::open(&temp.join("picot.sqlite3")).unwrap();
+        let auth = Arc::new(Mutex::new(RemoteAuth::new(Arc::new(Mutex::new(metadata)))));
+        let host = HostServer::start(public, NativePiManager::new(32), auth)
+            .await
+            .unwrap();
+
+        let client = reqwest::Client::new();
+        let response = client
+            .post(format!("{}/health/models/test", host.origin()))
+            .json(&json!({
+                "providerName": "probe",
+                "provider": {},
+                "model": {},
+            }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), reqwest::StatusCode::BAD_REQUEST);
 
         host.stop();
         fs::remove_dir_all(temp).unwrap();

@@ -2,7 +2,15 @@
 // ABOUTME: Renders untrusted repository paths with DOM text nodes and delegates writes to GitClient.
 
 import { t } from "./i18n.js";
-import { createSectionChevron } from "./sidebar-workspace-group.js";
+
+function createSectionChevron() {
+  const chevron = document.createElement("span");
+  chevron.className = "section-chevron";
+  chevron.setAttribute("aria-hidden", "true");
+  chevron.innerHTML =
+    '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>';
+  return chevron;
+}
 
 const GROUPS = ["staged", "changes", "untracked", "conflicted"];
 

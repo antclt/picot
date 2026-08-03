@@ -117,6 +117,10 @@ export class FilePreviewPanel {
     this.state = new FileTabState({ storage: this.storage });
     this.currentRenderer = null;
     this.workspaceRoot = "";
+    // gitDiff cache: tabId → { supported, patch, isNewFile, isDeletedFile } | null
+    this.gitDiffCache = new Map();
+    // In-flight diff fetch abort controllers: tabId → AbortController
+    this.gitDiffControllers = new Map();
     this.loadTokens = new Map();
     this.loadAbortControllers = new Map();
     this.savePromises = new Map();
@@ -201,6 +205,8 @@ export class FilePreviewPanel {
     if (this.activeContent?.kind === "transient") this._deactivateCurrent();
 
     if (existing) {
+      if (metadata.mode === "diff") this.state.updateTab(existing.id, { mode: "diff" });
+      if (metadata.mode === "diff") void this._fetchGitDiff(existing.id, existing.filePath);
       if (currentTab?.id !== existing.id) {
         if (this._isConversionTab(currentTab)) this._abortTabLoad(currentTab?.id);
         this._captureActiveRenderer();
@@ -228,6 +234,7 @@ export class FilePreviewPanel {
       metadata.mode ??
       (classifyFilePath(normalizedPath).contentType === "text" ? "edit" : "preview");
     const tab = this.state.openFile(normalizedPath, { ...metadata, mode: defaultMode });
+    if (metadata.mode === "diff") void this._fetchGitDiff(tab.id, tab.filePath);
     this._openPanel();
     this._renderTabBar();
     await this._loadTabContent(tab);
@@ -758,6 +765,8 @@ export class FilePreviewPanel {
 
     this._clearAutoSave(tabId);
     this._abortTabLoad(tabId);
+    this._abortGitDiff(tabId);
+    this.gitDiffCache.delete(tabId);
     this.loadTokens.delete(tabId);
     const wasActive = this.state.activeTabId === tabId;
     if (wasActive) this._destroyRenderer();
@@ -910,6 +919,8 @@ export class FilePreviewPanel {
       });
       this.state.persist();
       await this._mountIfActive(tab.id);
+      // Fire-and-forget git diff fetch (non-blocking, only when a workspace is known)
+      if (this.workspaceRoot) void this._fetchGitDiff(tab.id, tab.filePath);
       return true;
     } catch (error) {
       if (error?.name === "AbortError" || controller.signal.aborted) {
@@ -952,6 +963,51 @@ export class FilePreviewPanel {
 
   _abortAllTabLoads() {
     for (const tabId of this.loadAbortControllers.keys()) this._abortTabLoad(tabId);
+    for (const tabId of [...this.gitDiffControllers.keys()]) this._abortGitDiff(tabId);
+    this.gitDiffCache.clear();
+  }
+
+  _abortGitDiff(tabId) {
+    const ctrl = this.gitDiffControllers.get(tabId);
+    if (ctrl) {
+      ctrl.abort();
+      this.gitDiffControllers.delete(tabId);
+    }
+  }
+
+  async _fetchGitDiff(tabId, filePath) {
+    this._abortGitDiff(tabId);
+    const ctrl = new AbortController();
+    this.gitDiffControllers.set(tabId, ctrl);
+    try {
+      const res = await this.fileApi?.readGitDiff?.(filePath, { signal: ctrl.signal });
+      if (!res) {
+        this.gitDiffCache.set(tabId, null);
+        return;
+      }
+      if (!res.ok) {
+        this.gitDiffCache.set(tabId, null);
+        return;
+      }
+      const data = await res.json();
+      if (!data.supported) {
+        this.gitDiffCache.set(tabId, null);
+        return;
+      }
+      this.gitDiffCache.set(tabId, data);
+    } catch (e) {
+      if (e?.name !== "AbortError") this.gitDiffCache.set(tabId, null);
+      return;
+    } finally {
+      if (this.gitDiffControllers.get(tabId) === ctrl) this.gitDiffControllers.delete(tabId);
+    }
+    // Refresh toolbar to show/hide the Diff button
+    this._renderToolbar();
+    // If the active tab is already in diff mode, re-mount to show the diff
+    const activeTab = this.state.getActiveTab();
+    if (activeTab?.id === tabId && activeTab?.mode === "diff") {
+      await this._mountRenderer(this.state.getTab(tabId));
+    }
   }
 
   async _mountIfActive(tabId) {
@@ -991,6 +1047,7 @@ export class FilePreviewPanel {
       mode: tab.mode || "preview",
       readOnly: tab.mode !== "edit" || !this._isEditable(tab),
       wrapLines: this.wrapLines,
+      gitDiff: this.gitDiffCache.get(tab.id) ?? undefined,
       onChange: (newContent) => {
         if (this._interactionLocked) return;
         const freshTab = this.state.getTab(tab.id);
@@ -1198,8 +1255,9 @@ export class FilePreviewPanel {
 
   async _setMode(mode) {
     const tab = this.state.getActiveTab();
-    if (!tab || !["preview", "edit"].includes(mode)) return false;
+    if (!tab || !["preview", "edit", "diff"].includes(mode)) return false;
     if (mode === "edit" && !this._isEditable(tab)) return false;
+    if (mode === "diff" && !this.gitDiffCache.has(tab.id)) return false;
     if (tab.mode === mode) return true;
     this._captureActiveRenderer();
     this.state.updateTab(tab.id, { mode });
@@ -1218,6 +1276,7 @@ export class FilePreviewPanel {
       reload: document.getElementById("file-preview-reload"),
       search: document.getElementById("file-preview-search"),
       goToLine: document.getElementById("file-preview-go-to-line"),
+      diff: document.getElementById("file-preview-mode-diff"),
       goToLineInput: document.getElementById("file-preview-go-to-line-input"),
       copy: document.getElementById("file-preview-copy"),
       openDesktop: document.getElementById("file-preview-open"),
@@ -1237,6 +1296,7 @@ export class FilePreviewPanel {
     });
     this._listen(this.controls.preview, "click", () => void this._setMode("preview"));
     this._listen(this.controls.edit, "click", () => void this._setMode("edit"));
+    this._listen(this.controls.diff, "click", () => void this._setMode("diff"));
     this._listen(this.controls.save, "click", () => {
       const tab = this.state.getActiveTab();
       if (tab) void this._saveTab(tab.id);
@@ -1341,15 +1401,29 @@ export class FilePreviewPanel {
       contentType !== "convertible" &&
       (contentType !== "markdown" || tab.mode === "edit");
 
+    const hasDiff = tab
+      ? this.gitDiffCache.has(tab.id) && this.gitDiffCache.get(tab.id) !== null
+      : false;
     if (controls.preview) {
       controls.preview.disabled = !hasText;
-      controls.preview.classList.toggle("active", tab?.mode !== "edit");
-      controls.preview.setAttribute("aria-pressed", String(tab?.mode !== "edit"));
+      controls.preview.classList.toggle(
+        "active",
+        hasText && tab?.mode !== "edit" && tab?.mode !== "diff",
+      );
+      controls.preview.setAttribute(
+        "aria-pressed",
+        String(hasText && tab?.mode !== "edit" && tab?.mode !== "diff"),
+      );
     }
     if (controls.edit) {
       controls.edit.disabled = !editable;
       controls.edit.classList.toggle("active", tab?.mode === "edit");
       controls.edit.setAttribute("aria-pressed", String(tab?.mode === "edit"));
+    }
+    if (controls.diff) {
+      controls.diff.disabled = !hasDiff;
+      controls.diff.classList.toggle("active", tab?.mode === "diff");
+      controls.diff.setAttribute("aria-pressed", String(tab?.mode === "diff"));
     }
     if (controls.save) controls.save.disabled = !tab?.dirty || !editable || tab.saving;
     if (controls.reload) controls.reload.disabled = !tab || tab.loading;

@@ -72,7 +72,8 @@ describe("composer slash menu", () => {
     input.setSelectionRange(input.value.length, input.value.length);
     await controller.update();
 
-    expect(menu.textContent).toContain("Skills");
+    // Ensure the menu shows skill commands (heading may be i18n‑translated).
+    expect(menu.textContent.toLowerCase()).toMatch(/skill/);
     expect(menu.querySelectorAll(".skill-slash-option")).toHaveLength(1);
     expect(menu.textContent).toContain("Research");
     expect(menu.textContent).not.toContain("Settings");

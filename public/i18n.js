@@ -19,6 +19,7 @@ let enMessages = {};
 let activeMessages = {};
 let currentLocale = "en";
 let currentPreference = "system";
+let initialized = false;
 let localeLoadSequence = 0;
 const listeners = new Set();
 const warnedKeys = new Set();
@@ -144,7 +145,7 @@ export function t(key, params = {}) {
   if (fromActive !== undefined) return interpolate(fromActive, params);
   const fromEn = lookup(enMessages, key);
   if (fromEn !== undefined) return interpolate(fromEn, params);
-  if (!warnedKeys.has(key)) {
+  if (initialized && !warnedKeys.has(key)) {
     warnedKeys.add(key);
     console.warn(`[i18n] missing key: ${key}`);
   }
@@ -220,6 +221,7 @@ export async function initI18n() {
     currentPreference = "system";
   }
 
+  initialized = true;
   document.documentElement.lang = BCP47_TAG[currentLocale] || "en";
   applyTranslations(document);
   notifyLocaleChange();

@@ -24,5 +24,5 @@ namespaced `picot.*` adapters for Pi-owned behavior absent from RPC.
 
 - Local WebViews and authorized remote clients share one origin and one protocol.
 - Runtime feature code cannot depend on paths, ports, subprocess frames, or per-process HTTP routes.
-- The legacy embedded server and duplicate runtime handlers must be deleted at cutover.
+- The legacy embedded server and its duplicate runtime handlers were deleted at cutover.
 - Development may select legacy or native startup, but a Pi process can never run both paths.

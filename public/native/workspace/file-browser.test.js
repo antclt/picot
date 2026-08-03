@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
-import { beforeEach, describe, expect, it } from "vitest";
-import { NativeFileBrowser } from "./file-browser.js";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { NativeFileBrowser, toggleExclusiveSidePanel } from "./file-browser.js";
 
 function deferred() {
   let resolve;
@@ -15,6 +15,12 @@ function fakeGateway(handler) {
   return { listFiles: handler };
 }
 
+async function settleUntil(predicate) {
+  for (let index = 0; index < 10 && !predicate(); index += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+}
+
 describe("NativeFileBrowser", () => {
   let container;
   let pathEl;
@@ -25,6 +31,8 @@ describe("NativeFileBrowser", () => {
     pathEl = document.createElement("div");
     document.body.append(container, pathEl);
   });
+
+  afterEach(() => vi.unstubAllGlobals());
 
   it("lists workspace-relative entries scoped through the data gateway", async () => {
     const gateway = fakeGateway(async (workspaceId, path) => {
@@ -51,9 +59,7 @@ describe("NativeFileBrowser", () => {
     await browser.load();
 
     container.querySelector(".file-item").click();
-    await Promise.resolve();
-    await Promise.resolve();
-
+    await settleUntil(() => browser.currentPath === "src");
     expect(browser.currentPath).toBe("src");
     expect(browser.getParentPath()).toBe("");
   });
@@ -94,5 +100,92 @@ describe("NativeFileBrowser", () => {
     await browser.load("../etc");
 
     expect(container.textContent).toContain("outside the registered workspace");
+  });
+
+  it("shows workspace changes and opens them directly in diff mode", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          isGitRepository: true,
+          files: [{ path: "src/app.js", status: "modified", code: "M" }],
+        }),
+      })),
+    );
+    const onFileSelect = vi.fn();
+    const browser = new NativeFileBrowser(
+      container,
+      pathEl,
+      fakeGateway(async () => ({ entries: [] })),
+      "workspace-a",
+      { onFileSelect },
+    );
+
+    await browser.load();
+    const diffButton = [...container.querySelectorAll(".file-browser-view-switch button")].find(
+      (button) => button.textContent === "Diff",
+    );
+    diffButton.click();
+    container.querySelector(".file-change-item").click();
+
+    expect(container.textContent).toContain("Changes");
+    expect(container.textContent).toContain("src/app.js");
+    expect(onFileSelect).toHaveBeenCalledWith(
+      expect.objectContaining({ relativePath: "src/app.js", mode: "diff" }),
+    );
+  });
+
+  it("switches between file and diff views", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          isGitRepository: true,
+          files: [{ path: "changed.js", status: "modified", code: "M" }],
+        }),
+      })),
+    );
+    const browser = new NativeFileBrowser(
+      container,
+      pathEl,
+      fakeGateway(async () => ({
+        entries: [{ name: "regular.js", relativePath: "regular.js", kind: "file" }],
+      })),
+      "workspace-a",
+    );
+
+    await browser.load();
+    expect(container.textContent).toContain("regular.js");
+    expect(container.textContent).not.toContain("changed.js");
+
+    [...container.querySelectorAll(".file-browser-view-switch button")]
+      .find((button) => button.textContent === "Diff")
+      .click();
+    expect(container.textContent).toContain("changed.js");
+    expect(container.textContent).not.toContain("regular.js");
+  });
+});
+
+describe("toggleExclusiveSidePanel", () => {
+  it("opens one side panel while closing the other", () => {
+    const files = document.createElement("div");
+    const diff = document.createElement("div");
+    files.className = "collapsed";
+
+    expect(toggleExclusiveSidePanel(files, [diff])).toBe(true);
+    expect(files.classList.contains("collapsed")).toBe(false);
+    expect(diff.classList.contains("collapsed")).toBe(true);
+
+    expect(toggleExclusiveSidePanel(diff, [files])).toBe(true);
+    expect(diff.classList.contains("collapsed")).toBe(false);
+    expect(files.classList.contains("collapsed")).toBe(true);
+  });
+
+  it("closes the active panel when toggled again", () => {
+    const panel = document.createElement("div");
+    expect(toggleExclusiveSidePanel(panel)).toBe(false);
+    expect(panel.classList.contains("collapsed")).toBe(true);
   });
 });

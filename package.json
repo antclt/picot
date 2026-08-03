@@ -1,6 +1,6 @@
 {
   "name": "picot",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "description": "Local Codex-style desktop GUI for the Pi coding agent",
   "keywords": [
     "picot",
@@ -66,6 +66,7 @@
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-dialog": "^2.7.1",
     "@tauri-apps/plugin-fs": "^2.5.1",
+    "@tauri-apps/plugin-notification": "^2.3.3",
     "@tauri-apps/plugin-process": "^2.3.1",
     "@tauri-apps/plugin-shell": "^2.3.5",
     "@tauri-apps/plugin-updater": "^2.10.1",

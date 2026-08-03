@@ -1,4 +1,4 @@
-import { t } from "../i18n.js";
+import { onLocaleChange, t } from "../i18n.js";
 
 const DEFAULT_MIN_WIDTH = 260;
 const DEFAULT_MAX_WIDTH = 560;
@@ -39,7 +39,11 @@ export function setupResizablePanel(
       : "app-side-panel-resize-handle";
   handle.setAttribute("role", "separator");
   handle.setAttribute("aria-orientation", "vertical");
-  handle.setAttribute("title", t("migrated.ui.resizablePanel.title.resizePanel"));
+  const applyHandleTitle = () => {
+    handle.setAttribute("title", t("migrated.ui.resizablePanel.title.resizePanel"));
+  };
+  applyHandleTitle();
+  const unsubscribeLocaleChange = onLocaleChange(applyHandleTitle);
   if (!handle.parentElement) {
     panel.append(handle);
   }
@@ -77,6 +81,7 @@ export function setupResizablePanel(
     document.removeEventListener("pointermove", onPointerMove);
     document.removeEventListener("pointerup", onPointerUp);
     document.body.classList.remove("is-resizing-side-panel");
+    unsubscribeLocaleChange();
   };
 }
 

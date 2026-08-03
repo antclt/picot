@@ -1,6 +1,6 @@
 [package]
 name = "picot"
-version = "0.3.3"
+version = "0.3.4"
 description = "Pi Agent Desktop - session manager for pi coding agent"
 authors = ["Pi Desktop"]
 edition = "2021"
@@ -20,6 +20,7 @@ tauri-plugin-shell = "2"
 tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
 tauri-plugin-log = "2"
+tauri-plugin-notification = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["full"] }

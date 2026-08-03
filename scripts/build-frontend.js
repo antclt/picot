@@ -11,6 +11,7 @@
  *   public/vendor/codemirror.js     — all CodeMirror runtime exports used by the app
  *   public/vendor/pdf.js            — PDF.js facade (getDocument, GlobalWorkerOptions)
  *   public/vendor/pdf.worker.js     — PDF.js worker
+ *   public/vendor/tauri-notification.js — Tauri notification browser facade
  */
 
 const path = require("node:path");
@@ -52,6 +53,11 @@ const entries = [
     ...common,
     entryPoints: [path.join(ROOT, "public", "terminal-vendor-entry.js")],
     outfile: path.join(OUT_DIR, "xterm.js"),
+  },
+  {
+    ...common,
+    entryPoints: [path.join(ROOT, "public", "tauri-notification-vendor-entry.js")],
+    outfile: path.join(OUT_DIR, "tauri-notification.js"),
   },
 ];
 

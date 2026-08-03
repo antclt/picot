@@ -375,10 +375,14 @@ body.file-preview-resizing {
 
 .file-code-editor {
   height: 100%;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .file-code-editor .cm-editor {
   height: 100%;
+  min-height: 0;
+  overflow: hidden;
   font-size: var(--font-size-md);
 }
 
@@ -386,7 +390,19 @@ body.file-preview-resizing {
   min-width: var(--file-preview-line-number-gutter);
 }
 
+.file-code-editor .cm-gutters {
+  background: var(--bg-solid);
+  color: var(--text-dim);
+  border-right: 1px solid var(--border);
+}
+
+.file-code-editor .cm-activeLineGutter {
+  background: var(--bg-glass-hover);
+  color: var(--text-secondary);
+}
+
 .file-code-editor .cm-scroller {
+  overflow: auto;
   font-family: "SF Mono", Menlo, Monaco, "Courier New", monospace;
 }
 
@@ -409,7 +425,8 @@ body.file-preview-resizing {
 }
 
 .file-image-img {
-  max-width: 100%;
+  /* design-token-ignore: preview media needs a readable content-width cap */
+  max-width: min(100%, 640px);
   max-height: 100%;
   object-fit: contain;
   border-radius: var(--radius-xs);
@@ -455,4 +472,131 @@ body.file-preview-resizing {
   .file-preview-tab-close {
     opacity: 1;
   }
+}
+
+/* ── Git diff view ─────────────────────────────────────────────────── */
+
+.file-diff-view {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  overflow: auto;
+}
+
+.file-diff-empty {
+  padding: var(--space-3) var(--space-4);
+  color: var(--text-dim);
+  font-size: var(--font-size-sm);
+  font-family: "SF Mono", Menlo, Monaco, "Courier New", monospace;
+}
+
+.file-diff-collapse {
+  padding: 2px var(--space-4);
+  color: var(--text-dim);
+  background: var(--bg-panel);
+  font-size: var(--font-size-xs, 11px);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  font-family: "SF Mono", Menlo, Monaco, "Courier New", monospace;
+}
+
+.file-diff-line {
+  display: flex;
+  min-width: 100%;
+  line-height: 1.6;
+  font-size: var(--font-size-md);
+  font-family: "SF Mono", Menlo, Monaco, "Courier New", monospace;
+  border-left: 3px solid transparent;
+}
+
+.file-diff-line--added {
+  background: rgba(0, 200, 80, 0.1);
+  border-left-color: #4ade80;
+}
+
+.file-diff-line--removed {
+  background: rgba(240, 60, 60, 0.12);
+  border-left-color: #f87171;
+}
+
+.file-diff-gutter {
+  min-width: 44px;
+  padding: 0 var(--space-2);
+  text-align: right;
+  color: var(--text-dim);
+  background: var(--bg-panel);
+  border-right: 1px solid var(--border);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.file-diff-sign {
+  width: 20px;
+  padding: 0 var(--space-1);
+  flex-shrink: 0;
+  font-weight: 600;
+  user-select: none;
+}
+
+.file-diff-line--added .file-diff-sign {
+  color: #4ade80;
+}
+.file-diff-line--removed .file-diff-sign {
+  color: #f87171;
+}
+.file-diff-line:not(.file-diff-line--added):not(.file-diff-line--removed) .file-diff-sign {
+  color: var(--text-dim);
+}
+
+.file-diff-content {
+  padding: 0 var(--space-2) 0 0;
+  white-space: pre;
+  color: var(--text-primary);
+  flex-shrink: 0;
+}
+
+/* ── Git status badges in the file tree ────────────────────────────── */
+
+.file-git-badge {
+  margin-left: auto;
+  padding: 0 var(--space-1);
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 700;
+  font-family: "SF Mono", Menlo, Monaco, "Courier New", monospace;
+  line-height: 16px;
+  min-width: 16px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.file-git-badge[data-git-status="M"] {
+  background: rgba(234, 179, 8, 0.18);
+  color: #ca8a04;
+}
+.file-git-badge[data-git-status="A"] {
+  background: rgba(34, 197, 94, 0.18);
+  color: #16a34a;
+}
+.file-git-badge[data-git-status="D"] {
+  background: rgba(239, 68, 68, 0.18);
+  color: #dc2626;
+}
+.file-git-badge[data-git-status="R"] {
+  background: rgba(139, 92, 246, 0.18);
+  color: #7c3aed;
+}
+.file-git-badge[data-git-status="U"] {
+  background: rgba(99, 102, 241, 0.15);
+  color: #4f46e5;
+}
+.file-git-badge[data-git-status="C"] {
+  background: rgba(239, 68, 68, 0.22);
+  color: #b91c1c;
+}
+.file-git-badge[data-git-status="I"] {
+  background: var(--bg-glass);
+  color: var(--text-dim);
 }
