@@ -453,7 +453,15 @@
     "deleteSessionRunning": "无法删除正在运行的会话",
     "archiveDisabledActive": "无法归档当前会话",
     "archiveDisabledStreaming": "无法归档正在流式输出的会话",
-    "archiveDisabledRunning": "无法归档正在运行的会话"
+    "archiveDisabledRunning": "无法归档正在运行的会话",
+    "favourite": "收藏",
+    "unfavourite": "取消收藏",
+    "archiveAll": "归档所有会话",
+    "pin": "置顶",
+    "unpin": "取消置顶",
+    "sessionActions": "会话操作",
+    "renameErrorGeneric": "重命名失败，请重试。",
+    "focus": "聚焦"
   },
   "updater": {
     "update": "更新",

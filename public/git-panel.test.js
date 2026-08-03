@@ -103,11 +103,11 @@ describe("GitPanel", () => {
     expect(panel.container.querySelector(".git-entry")?.classList.contains("git-tree-row")).toBe(
       true,
     );
-    // Directory rows show the folder emoji as the expand/collapse affordance
-    // (📁 collapsed, 📂 expanded), matching File Browser's icon vocabulary.
+    // Directory rows render a Material folder icon (open when expanded) from
+    // the shared file-type vocabulary, matching File Browser's icon set.
     expect(
-      panel.container.querySelector(".git-directory-heading .git-tree-folder-icon")?.textContent,
-    ).toBe("📂");
+      panel.container.querySelector(".git-directory-heading .git-tree-folder-icon svg"),
+    ).not.toBeNull();
     expect(panel.container.querySelector(".git-directory-heading.collapsed")).toBeNull();
   });
 

@@ -453,7 +453,15 @@
     "deleteSessionRunning": "No se puede eliminar una sesión en ejecución",
     "archiveDisabledActive": "No se puede archivar la sesión activa",
     "archiveDisabledStreaming": "No se puede archivar una sesión en streaming",
-    "archiveDisabledRunning": "No se puede archivar una sesión en ejecución"
+    "archiveDisabledRunning": "No se puede archivar una sesión en ejecución",
+    "favourite": "Favorito",
+    "unfavourite": "Quitar favorito",
+    "archiveAll": "Archivar todas las sesiones",
+    "pin": "Anclar",
+    "unpin": "Desanclar",
+    "sessionActions": "Acciones de sesión",
+    "renameErrorGeneric": "No se pudo cambiar el nombre de la sesión.",
+    "focus": "Enfoque"
   },
   "updater": {
     "update": "Actualizar",

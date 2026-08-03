@@ -159,7 +159,7 @@ impl HostServer {
             git_events,
             skill_registry,
             install_secret,
-            app_handle: app_handle,
+            app_handle,
         });
         let index = static_dir.join("index.html");
         let static_service = ServeDir::new(static_dir).fallback(ServeFile::new(index));
@@ -196,6 +196,7 @@ impl HostServer {
             .route("/api/git/diff", get(git_file_diff))
             .route("/api/git/stat", get(git_stat_handler))
             .route("/api/file-mentions", get(file_mentions))
+            .route("/api/workspace-info", get(workspace_info_handler))
             .route("/v2/new-session", post(new_session))
             .route("/v2/resolve-workspace", post(resolve_workspace))
             .fallback_service(static_service)
@@ -672,6 +673,33 @@ async fn git_stat_handler(
         .data
         .git_stat(&query.workspace_id)
         .map_err(host_data_http_error)?;
+    serde_json::to_value(result)
+        .map(Json)
+        .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "serialization_failed"))
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct WorkspaceInfoQuery {
+    workspace_id: Option<String>,
+    workspace_path: Option<String>,
+}
+
+async fn workspace_info_handler(
+    State(state): State<Arc<HostState>>,
+    Query(query): Query<WorkspaceInfoQuery>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    // The sidebar passes the workspace's on-disk path (projectPath), not
+    // the internal workspace ID. Try both: first by workspace_id (when
+    // available), then fall back to treating workspace_path as the root.
+    let result = if let Some(ws_id) = &query.workspace_id {
+        state.data.workspace_info(ws_id)
+    } else if let Some(ws_path) = &query.workspace_path {
+        state.data.workspace_info_by_path(ws_path)
+    } else {
+        Err(HostDataError::UnknownWorkspace)
+    }
+    .map_err(host_data_http_error)?;
     serde_json::to_value(result)
         .map(Json)
         .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "serialization_failed"))

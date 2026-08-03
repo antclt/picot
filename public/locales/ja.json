@@ -453,7 +453,15 @@
     "deleteSessionRunning": "実行中のセッションは削除できません",
     "archiveDisabledActive": "アクティブなセッションはアーカイブできません",
     "archiveDisabledStreaming": "ストリーミング中のセッションはアーカイブできません",
-    "archiveDisabledRunning": "実行中のセッションはアーカイブできません"
+    "archiveDisabledRunning": "実行中のセッションはアーカイブできません",
+    "favourite": "お気に入り",
+    "unfavourite": "お気に入り解除",
+    "archiveAll": "すべてのセッションをアーカイブ",
+    "pin": "ピン留め",
+    "unpin": "ピン留め解除",
+    "sessionActions": "セッション操作",
+    "renameErrorGeneric": "セッション名を変更できませんでした。",
+    "focus": "フォーカス"
   },
   "updater": {
     "update": "更新",

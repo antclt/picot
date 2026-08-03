@@ -11,8 +11,11 @@ use std::time::{Duration, Instant};
 
 use crate::window_owner::OwnerId;
 
+#[allow(dead_code)]
 pub const SKILL_SOURCE_TTL: Duration = Duration::from_secs(10 * 60);
+#[allow(dead_code)]
 pub const MAX_SKILL_SOURCES_PER_OWNER: usize = 8;
+#[allow(dead_code)]
 const SOURCE_ID_BYTES: usize = 32;
 const INVALID_SOURCE: &str = "invalid or expired skill source";
 
@@ -42,6 +45,7 @@ struct RegistryState {
 struct Entry {
     binding: SkillSourceBinding,
     expires_at: Instant,
+    #[allow(dead_code)]
     issued_at: Instant,
 }
 
@@ -65,6 +69,7 @@ impl SkillSourceRegistry {
         }
     }
 
+    #[allow(dead_code)]
     pub fn issue(
         &self,
         owner_id: OwnerId,

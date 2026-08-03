@@ -1029,16 +1029,12 @@ function enterFocus(project) {
   sidebarEl.querySelector(".sidebar-header")?.after(focusContainer);
 
   // Filter sessions for this project
-  const projectSessions = (sidebar.sessions || []).filter(
-    (s) => s.projectPath === project.path,
-  );
+  const projectSessions = (sidebar.sessions || []).filter((s) => s.projectPath === project.path);
 
   focusSidebar = new FocusSidebar(focusContainer, {
     project,
     sessions: projectSessions,
-    activeSessionFile: sidebar.sessions?.find(
-      (s) => s.id === target.sessionId,
-    )?.filePath,
+    activeSessionFile: sidebar.sessions?.find((s) => s.id === target.sessionId)?.filePath,
     onSessionSelect: (session) => {
       const handler = createSessionSelectionHandler({
         switchSession,
@@ -1424,6 +1420,14 @@ async function adoptTarget(nextTarget, { updateRoute = true } = {}) {
   streamingElement = null;
   adapter.subscribeTarget(target);
   sidebar?.setActive(target.sessionId);
+  // When the workspace changes, the cached session list is stale — reload it
+  // so the sidebar reflects the new project's sessions. Same-workspace
+  // session switches skip this (the list is already current). Without this
+  // the sidebar never populated after bootstrap, because the initial
+  // sidebar.load() at startup runs before the workspace is resolved.
+  if (nextTarget.workspaceId !== previousTarget.workspaceId) {
+    sidebar?.load().catch(showError);
+  }
   sessionInfo.refresh();
   headerStatusBar?.reset?.();
   setSessionCost(0);
@@ -1715,11 +1719,13 @@ function showError(error) {
 function updateComposerModel(model) {
   currentModelId = model?.id ?? null;
   // Persist the model change to session UI state
-  sessionUiState.saveProfile({
-    provider: "anthropic",
-    modelId: currentModelId || "",
-    thinkingLevel: currentThinkingLevel,
-  }).catch(() => {});
+  sessionUiState
+    .saveProfile({
+      provider: "anthropic",
+      modelId: currentModelId || "",
+      thinkingLevel: currentThinkingLevel,
+    })
+    .catch(() => {});
   currentModelContextWindow =
     Number(model?.contextWindow) || findModelContextWindow(currentModelId);
   contextUsage.setContextWindowSize(currentModelContextWindow);
@@ -1730,11 +1736,13 @@ function updateComposerModel(model) {
 
 function updateComposerThinking(level) {
   currentThinkingLevel = level ?? "off";
-  sessionUiState.saveProfile({
-    provider: "anthropic",
-    modelId: currentModelId || "",
-    thinkingLevel: currentThinkingLevel,
-  }).catch(() => {});
+  sessionUiState
+    .saveProfile({
+      provider: "anthropic",
+      modelId: currentModelId || "",
+      thinkingLevel: currentThinkingLevel,
+    })
+    .catch(() => {});
   if (thinkingBtn) {
     const levelLabel = formatThinkingLevelLabel(currentThinkingLevel);
     thinkingBtn.textContent = t("settings.thinkingCompact", { level: levelLabel });

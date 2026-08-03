@@ -453,7 +453,15 @@
     "deleteSessionRunning": "Cannot delete a running session",
     "archiveDisabledActive": "Cannot archive the active session",
     "archiveDisabledStreaming": "Cannot archive a streaming session",
-    "archiveDisabledRunning": "Cannot archive a running session"
+    "archiveDisabledRunning": "Cannot archive a running session",
+    "favourite": "Favourite",
+    "unfavourite": "Unfavourite",
+    "archiveAll": "Archive all sessions",
+    "pin": "Pin",
+    "unpin": "Unpin",
+    "sessionActions": "Session actions",
+    "renameErrorGeneric": "Could not rename session. Try again.",
+    "focus": "Focus"
   },
   "updater": {
     "update": "Update",

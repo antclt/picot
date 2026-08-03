@@ -1,58 +1,22 @@
 // ABOUTME: Owns the Git tab, status groups, and safe user-visible Git actions.
 // ABOUTME: Renders untrusted repository paths with DOM text nodes and delegates writes to GitClient.
 
+import { createFileTypeIcon } from "./file-type-icons.js";
 import { t } from "./i18n.js";
+import { createIcon } from "./icons.js";
 
 function createSectionChevron() {
   const chevron = document.createElement("span");
   chevron.className = "section-chevron";
   chevron.setAttribute("aria-hidden", "true");
-  chevron.innerHTML =
-    '<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>';
+  chevron.append(createIcon("chevron-down", { size: 16 }));
   return chevron;
 }
 
+// Object-icon rendering for Git entries uses the shared Material file-type
+// vocabulary from `file-type-icons.js`, so the Git tree stays visually
+// consistent with the File Browser and File Preview tabs.
 const GROUPS = ["staged", "changes", "untracked", "conflicted"];
-
-// Extension-based emoji icons — mirrors the File Browser tree so Git entries
-// share the same visual vocabulary as regular workspace files.
-const FILE_ICONS = {
-  js: "📄",
-  ts: "📄",
-  jsx: "📄",
-  tsx: "📄",
-  py: "🐍",
-  rb: "💎",
-  go: "📄",
-  rs: "🦀",
-  html: "🌐",
-  css: "🎨",
-  svg: "🎨",
-  json: "📋",
-  yaml: "📋",
-  yml: "📋",
-  toml: "📋",
-  xml: "📋",
-  csv: "📋",
-  md: "📝",
-  txt: "📝",
-  rst: "📝",
-  png: "🖼️",
-  jpg: "🖼️",
-  jpeg: "🖼️",
-  gif: "🖼️",
-  webp: "🖼️",
-  ico: "🖼️",
-  env: "🔒",
-  gitignore: "🔒",
-  lock: "🔒",
-  default: "📄",
-};
-
-function getFileIcon(name) {
-  const ext = name.split(".").pop()?.toLowerCase() || "";
-  return FILE_ICONS[ext] || FILE_ICONS.default;
-}
 
 export class GitPanel {
   constructor({ container, client, openDiff, onDiffRequest, onStatus, fileList } = {}) {
@@ -526,7 +490,13 @@ export class GitPanel {
       const icon = document.createElement("span");
       icon.className = "git-tree-folder-icon";
       icon.setAttribute("aria-hidden", "true");
-      icon.textContent = this.folded.has(dirKey) ? "📁" : "📂";
+      icon.append(
+        createFileTypeIcon({
+          name: segment,
+          isDirectory: true,
+          expanded: !this.folded.has(dirKey),
+        }),
+      );
       const label = document.createElement("span");
       label.className = "git-tree-label";
       label.textContent = `${prefix ? `${prefix}/` : ""}${segment}`;
@@ -556,7 +526,7 @@ export class GitPanel {
       const icon = document.createElement("span");
       icon.className = "git-tree-file-icon";
       icon.setAttribute("aria-hidden", "true");
-      icon.textContent = getFileIcon(fileName);
+      icon.append(createFileTypeIcon({ name: fileName }));
       const label = document.createElement("span");
       label.className = "git-tree-label";
       label.textContent = fileName;
