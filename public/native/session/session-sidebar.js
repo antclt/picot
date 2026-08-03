@@ -208,7 +208,7 @@ const TRASH_ICON = `
 export class SessionSidebar {
   constructor(
     container,
-    { data, runtime, control, config, getTarget, onSelect, onCreateSession, onSessionsLoaded },
+    { data, runtime, control, config, getTarget, onSelect, onCreateSession, onSessionsLoaded, onFocusProject },
   ) {
     this.container = container;
     this.data = data;
@@ -219,6 +219,7 @@ export class SessionSidebar {
     this.onSelect = onSelect;
     this.onCreateSession = onCreateSession;
     this.onSessionsLoaded = onSessionsLoaded;
+    this.onFocusProject = onFocusProject;
 
     this.sessions = [];
     this.activeSessionId = getTarget()?.sessionId ?? null;
@@ -797,6 +798,12 @@ export class SessionSidebar {
         </button>`
       : "";
 
+    const focusButtonHtml = project.isCurrent
+      ? `<button class="project-focus-btn" title="Focus on this workspace" aria-label="Focus on ${escapeHtml(project.name)}">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>`
+      : "";
+
     const header = this.#sectionHeader(
       `project-group-header${collapsed ? " collapsed" : ""}`,
       `<span class="chevron folder-icon">
@@ -805,7 +812,8 @@ export class SessionSidebar {
       </span>
       <span class="project-name" title="${escapeHtml(project.path)}">${escapeHtml(project.name)}</span>
       <span class="project-count">${project.sessions.length}</span>
-      ${newChatButtonHtml}`,
+      ${newChatButtonHtml}
+      ${focusButtonHtml}`,
     );
 
     header.querySelector(".project-new-chat-btn")?.addEventListener("click", (event) => {
@@ -816,6 +824,11 @@ export class SessionSidebar {
       create?.catch((error) => {
         console.error("[Sidebar] Failed to start new chat:", error);
       });
+    });
+
+    header.querySelector(".project-focus-btn")?.addEventListener("click", (event) => {
+      event.stopPropagation();
+      this.onFocusProject?.(project);
     });
 
     const list = document.createElement("div");

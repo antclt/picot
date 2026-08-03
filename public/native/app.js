@@ -1,6 +1,7 @@
 import { FilePreviewPanel } from "../file-preview-panel.js";
 import { initI18n, onLocaleChange, t } from "../i18n.js";
 import { reconcileSnapshotTarget } from "../session/bootstrap-target.js";
+import { FocusSidebar } from "./session/focus-sidebar.js";
 import { SessionUiStateStore } from "../session-ui-state.js";
 import { dispatchSuperAgentTaskNative } from "../super-agent/native-dispatch.js";
 import { isSuperAgentProjectPath } from "../super-agent/session.js";
@@ -741,6 +742,7 @@ function setupSessionSidebar() {
     },
     onCreateSession: createSessionViaHost,
     onSessionsLoaded: subscribeToLiveSessions,
+    onFocusProject: (project) => enterFocus(project),
   });
 
   setupSessionSearchDialog({
@@ -993,6 +995,74 @@ async function bindDispatchedChildSession(instanceId, boundSessionId) {
   ).catch((error) => console.warn("[SuperAgent] failed to bind child session:", error));
 }
 
+// ── Workspace Focus mode ────────────────────────────────────────────────
+// Focus replaces the full session sidebar with a single-project view.
+// A right-arrow button on each current-project header triggers enterFocus.
+// The sidebar-toggle button exits focus back to the full session list.
+
+let focusSidebar = null;
+let focusActive = false;
+
+function enterFocus(project) {
+  if (!project || !sidebar) return;
+  const sidebarEl = document.getElementById("sidebar");
+  const sessionListEl = document.getElementById("session-list");
+  if (!sidebarEl || !sessionListEl) return;
+
+  // If already in focus for the same project, do nothing
+  if (focusActive && focusSidebar?.project?.path === project.path) return;
+
+  // Exit previous focus if switching projects
+  if (focusSidebar) {
+    focusSidebar.destroy();
+    focusSidebar = null;
+  }
+
+  focusActive = true;
+  sidebarEl.classList.add("focus-mode");
+
+  // Hide the normal session list container and create a focus container
+  sessionListEl.classList.add("hidden");
+  const focusContainer = document.createElement("div");
+  focusContainer.className = "focus-sidebar-container";
+  focusContainer.id = "focus-sidebar-container";
+  sidebarEl.querySelector(".sidebar-header")?.after(focusContainer);
+
+  // Filter sessions for this project
+  const projectSessions = (sidebar.sessions || []).filter(
+    (s) => s.projectPath === project.path,
+  );
+
+  focusSidebar = new FocusSidebar(focusContainer, {
+    project,
+    sessions: projectSessions,
+    activeSessionFile: sidebar.sessions?.find(
+      (s) => s.id === target.sessionId,
+    )?.filePath,
+    onSessionSelect: (session) => {
+      const handler = createSessionSelectionHandler({
+        switchSession,
+        openSessionInProject,
+        onError: showError,
+      });
+      handler(session);
+    },
+    data,
+    workspaceId: target.workspaceId,
+  });
+  focusSidebar.render();
+}
+
+function exitFocus() {
+  if (!focusActive) return;
+  focusActive = false;
+  focusSidebar?.destroy();
+  focusSidebar = null;
+  document.getElementById("sidebar")?.classList.remove("focus-mode");
+  document.getElementById("focus-sidebar-container")?.remove();
+  document.getElementById("session-list")?.classList.remove("hidden");
+}
+
 function setupSidebarToggle() {
   const sidebarEl = document.getElementById("sidebar");
   const toggleBtn = document.getElementById("sidebar-toggle");
@@ -1012,6 +1082,10 @@ function setupSidebarToggle() {
   }
 
   toggleBtn.addEventListener("click", () => {
+    if (focusActive) {
+      exitFocus();
+      return;
+    }
     setCollapsed(!sidebarEl.classList.contains("collapsed"));
   });
   overlay?.addEventListener("click", () => setCollapsed(true));

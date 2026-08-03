@@ -264,3 +264,145 @@
 .sidebar-overlay.visible {
   display: block;
 }
+
+/* ── Workspace Focus mode ───────────────────────────────────────────── */
+
+.sidebar.focus-mode .sidebar-search-wrap,
+.sidebar.focus-mode #new-session-btn,
+.sidebar.focus-mode #open-folder-btn,
+.sidebar.focus-mode #refresh-sessions-btn {
+  display: none;
+}
+
+.sidebar.focus-mode .sidebar-actions {
+  margin-left: auto;
+}
+
+.focus-sidebar-container {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-height: 0;
+  overflow: auto;
+  padding: 0 var(--space-2) var(--space-2);
+}
+
+.focus-info-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  border-radius: var(--radius-md);
+  background: var(--bg-glass);
+  border: 1px solid var(--border);
+}
+
+.focus-info-path {
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.focus-info-branch {
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+}
+
+.focus-info-count {
+  font-size: var(--font-size-xs);
+  color: var(--text-dim);
+}
+
+.focus-session-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.focus-session-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-1-5) var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  transition: background var(--duration) var(--ease);
+}
+
+.focus-session-row:hover {
+  background: var(--bg-glass-hover);
+}
+
+.focus-session-row.active {
+  background: var(--accent-subtle);
+}
+
+.focus-session-name {
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.focus-session-preview {
+  font-size: var(--font-size-xs);
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.focus-show-more {
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--font-size-xs);
+  padding: var(--space-1) var(--space-2);
+  text-align: center;
+}
+
+.focus-show-more:hover {
+  color: var(--text-primary);
+}
+
+.focus-empty {
+  color: var(--text-dim);
+  font-size: var(--font-size-sm);
+  padding: var(--space-2);
+  text-align: center;
+}
+
+/* Focus button in project group header */
+.project-focus-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 2px;
+  border-radius: var(--radius-sm);
+  opacity: 0;
+  transition: opacity var(--duration) var(--ease), background var(--duration) var(--ease);
+}
+
+.project-group-header:hover .project-focus-btn {
+  opacity: 1;
+}
+
+.project-focus-btn:hover {
+  background: var(--bg-glass-hover);
+  color: var(--text-primary);
+}
