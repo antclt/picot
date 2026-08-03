@@ -972,18 +972,22 @@ export class SessionSidebar {
     this.contextMenu = null;
   }
 
-  async autoGenerateTitle(sessionId) {
+  // `target` lets callers generate a title for a session that isn't the
+  // foreground one (e.g. a background tab whose turn just settled) — the
+  // config RPC and rename both need to be routed to that session, not
+  // whichever one happens to be focused right now.
+  async autoGenerateTitle(sessionId, target) {
     if (!sessionId || this.autoTitleAttempted.has(sessionId)) return;
     const session = this.sessions.find((candidate) => candidate.id === sessionId);
     if (!session) return;
     const currentName = String(session.name || "").trim();
     if (currentName && currentName !== "Untitled" && currentName !== "New Session") return;
-    this.autoTitleAttempted.add(sessionId);
-    await this.#generateTitle(session);
+    const ok = await this.#generateTitle(session, target ?? this.getTarget());
+    if (ok) this.autoTitleAttempted.add(sessionId);
   }
 
-  async #generateTitle(session) {
-    if (!this.config) return;
+  async #generateTitle(session, target = this.getTarget()) {
+    if (!this.config) return false;
     const item = this.container.querySelector(
       `.session-item[data-session-id="${cssEscape(session.id)}"]`,
     );
@@ -992,10 +996,14 @@ export class SessionSidebar {
     if (titleEl) titleEl.textContent = t("sidebar.generatingTitle");
 
     try {
-      const result = await this.config.call("generate_session_title", {}, { timeoutMs: 100_000 });
+      const result = await this.config.call(
+        "generate_session_title",
+        {},
+        { timeoutMs: 100_000, target },
+      );
       const title = result?.data?.title?.trim();
       if (!result?.ok || !title) throw new Error(result?.error || t("sidebar.generateTitleError"));
-      await this.runtime.request({ type: "set_session_name", name: title }, this.getTarget(), {
+      await this.runtime.request({ type: "set_session_name", name: title }, target, {
         idempotencyKey: randomId(),
       });
       session.name = title;
@@ -1003,9 +1011,11 @@ export class SessionSidebar {
         titleEl.textContent = title;
         titleEl.title = title;
       }
+      return true;
     } catch (error) {
       if (titleEl) titleEl.textContent = previousTitle;
       console.error("[Sidebar] Generate title failed:", error);
+      return false;
     }
   }
 

@@ -35,7 +35,10 @@ import {
 } from "./features/rpiv-todo-mirror.js";
 import { setupTerminalPanel } from "./features/terminal-panel-integration.js";
 import { createNotificationCenter } from "./notifications/notification-center.js";
-import { createTaskCompletionNotifications } from "./notifications/task-completion-notifications.js";
+import {
+  createNativeTaskNotificationSender,
+  createTaskCompletionNotifications,
+} from "./notifications/task-completion-notifications.js";
 import { setupSessionInfo } from "./session/session-info.js";
 import { createSessionSelectionHandler } from "./session/session-navigation.js";
 import { setupSessionSearchDialog } from "./session/session-search-dialog.js";
@@ -91,6 +94,9 @@ const convNav = new ConvNav({
   badgeEl: scrollBottomBadge,
 });
 const notifications = createNotificationCenter();
+const sendNativeTaskNotification = createNativeTaskNotificationSender({
+  invoke: globalThis.__TAURI__?.core?.invoke,
+});
 const taskCompletionNotifications = createTaskCompletionNotifications({
   resolveTask: (notificationTarget) =>
     sidebar?.sessions?.find(
@@ -100,16 +106,7 @@ const taskCompletionNotifications = createTaskCompletionNotifications({
     ) ?? null,
   title: (task) => task?.name || task?.firstMessage || t("settings.taskCompleteTitle"),
   body: () => t("settings.taskCompleteMessage"),
-  showNotification: ({ title, body, target: notificationTarget, task }) => {
-    const invoke = globalThis.__TAURI__?.core?.invoke;
-    if (!invoke || !task?.projectPath || !notificationTarget?.sessionId) return;
-    return invoke("show_task_completion_notification", {
-      title,
-      body,
-      projectPath: task.projectPath,
-      sessionId: notificationTarget.sessionId,
-    });
-  },
+  showNotification: sendNativeTaskNotification,
 });
 
 setupMessagesInsets({
@@ -921,6 +918,7 @@ async function handleBackgroundRuntimeEvent(frame) {
     case "agent_end":
       sidebar?.setStreaming(sessionId, false);
       sidebar?.markUnread(sessionId);
+      void sidebar?.autoGenerateTitle(sessionId, frame.target);
       break;
     case "message_end":
       if (frame.event.message?.role === "assistant") sidebar?.markUnread(sessionId);

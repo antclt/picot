@@ -23,6 +23,7 @@
   justify-content: center;
   min-height: var(--control-height-md);
   font-size: var(--font-size-md);
+  line-height: 1;
   cursor: pointer;
 }
 
@@ -53,6 +54,8 @@
 }
 
 .ui-icon-button--sm {
+  min-height: var(--control-height-sm);
+  height: var(--control-height-sm);
   width: var(--control-height-sm);
 }
 
@@ -82,7 +85,7 @@
 .ui-button--ghost,
 .ui-icon-button--ghost {
   background: transparent;
-  border-color: transparent;
+  border: none;
   color: var(--text-dim);
 }
 

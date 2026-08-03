@@ -10,6 +10,18 @@ function targetKey(target = {}) {
   return target.instanceId || target.sessionId || null;
 }
 
+export function createNativeTaskNotificationSender({ invoke } = {}) {
+  return ({ title, body, target }) => {
+    if (!invoke || !target?.workspaceId || !target?.sessionId) return;
+    return invoke("show_task_completion_notification", {
+      title,
+      body,
+      workspaceId: target.workspaceId,
+      sessionId: target.sessionId,
+    });
+  };
+}
+
 export function createTaskCompletionNotifications({
   storage = globalThis.localStorage,
   notificationApi = { isPermissionGranted, requestPermission, sendNotification },

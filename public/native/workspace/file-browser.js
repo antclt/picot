@@ -214,7 +214,8 @@ export class NativeFileBrowser {
     const count = document.createElement("span");
     count.className = "ui-badge file-changes-count";
     count.textContent = String(this.#gitFiles.length);
-    heading.append(label, count);
+    label.append(count);
+    heading.append(label);
     if (this.#gitStat?.isGitRepository) {
       const stat = document.createElement("span");
       stat.className = "file-changes-stat";

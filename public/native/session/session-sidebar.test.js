@@ -99,7 +99,7 @@ describe("SessionSidebar.render", () => {
       expect(config.call).toHaveBeenCalledWith(
         "generate_session_title",
         {},
-        { timeoutMs: 100_000 },
+        { timeoutMs: 100_000, target: expect.objectContaining({ sessionId: "s-active" }) },
       ),
     );
     await vi.waitFor(() =>

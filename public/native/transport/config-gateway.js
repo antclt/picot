@@ -38,8 +38,8 @@ export class ConfigGateway {
     return this.#send(op, params, options);
   }
 
-  #send(op, params, { timeoutMs = DEFAULT_TIMEOUT_MS }) {
-    const target = this.#getTarget();
+  #send(op, params, { timeoutMs = DEFAULT_TIMEOUT_MS, target: targetOverride }) {
+    const target = targetOverride ?? this.#getTarget();
     if (!target) return Promise.reject(new Error("No active session for configuration request"));
     const id = `cfg-${randomId()}`;
     const message = `/picot-config ${JSON.stringify({ id, op, params })}`;

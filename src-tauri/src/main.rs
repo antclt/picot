@@ -165,16 +165,13 @@ async fn show_task_completion_notification(
     app: AppHandle,
     title: String,
     body: String,
-    project_path: String,
+    workspace_id: String,
     session_id: String,
 ) -> Result<(), String> {
-    let cwd = PathBuf::from(project_path);
-    if !cwd.is_dir() {
-        return Err(format!(
-            "Project folder no longer exists: {}",
-            cwd.display()
-        ));
-    }
+    let host = app
+        .try_state::<HostServer>()
+        .ok_or_else(|| "Host server is not ready".to_string())?;
+    let cwd = host.workspace_root_path(&workspace_id)?;
 
     #[cfg(target_os = "macos")]
     let _ = notify_rust::set_application(&app.config().identifier);

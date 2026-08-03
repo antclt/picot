@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { createTaskCompletionNotifications } from "./task-completion-notifications.js";
+import {
+  createNativeTaskNotificationSender,
+  createTaskCompletionNotifications,
+} from "./task-completion-notifications.js";
 
 function runtimeFrame(type, instanceId = "instance-a") {
   return { type: "runtime_event", target: { instanceId }, event: { type } };
@@ -28,6 +31,25 @@ function setup({ storedValue, permission = true } = {}) {
 }
 
 describe("task completion notifications", () => {
+  it("invokes the native notification without sidebar task metadata", async () => {
+    const invoke = vi.fn().mockResolvedValue(undefined);
+    const send = createNativeTaskNotificationSender({ invoke });
+
+    await send({
+      title: "Task completed",
+      body: "Finished",
+      target: { workspaceId: "workspace-a", sessionId: "session-a" },
+      task: null,
+    });
+
+    expect(invoke).toHaveBeenCalledWith("show_task_completion_notification", {
+      title: "Task completed",
+      body: "Finished",
+      workspaceId: "workspace-a",
+      sessionId: "session-a",
+    });
+  });
+
   it("notifies once when a running task settles", async () => {
     const { control, showNotification, task } = setup();
     control.handleRuntimeFrame(runtimeFrame("agent_start"));
