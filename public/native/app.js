@@ -42,6 +42,7 @@ import { createNotificationCenter } from "./notifications/notification-center.js
 import { createTaskCompletionNotifications } from "./notifications/task-completion-notifications.js";
 import { EphemeralChatView } from "./session/ephemeral-chat-view.js";
 import { WorkspaceFocusSidebar } from "./session/focus-sidebar.js";
+import { QuickChatDialog } from "./session/quick-chat-dialog.js";
 import { setupSessionInfo } from "./session/session-info.js";
 import { createSessionSelectionHandler } from "./session/session-navigation.js";
 import { setupSessionSearchDialog } from "./session/session-search-dialog.js";
@@ -280,7 +281,11 @@ const sideChatManager = new SideChatManager({
   createView: (runtime) => {
     // Render the ephemeral chat view inside the transient tab. The view
     // owns its own message list / composer and is bound to the runtime.
-    const view = new EphemeralChatView({ runtime });
+    const view = new EphemeralChatView({
+      runtime,
+      kind: runtime.kind,
+      toolsEnabled: runtime.kind === "side-chat",
+    });
     return { element: view.element, destroy: () => view.destroy() };
   },
 });
@@ -296,6 +301,53 @@ if (sideChatButton) {
       return;
     }
     await sideChatManager.create();
+  });
+}
+
+// ── Quick Chat ───────────────────────────────────────────────────────────
+// Non-modal floating dialog bound to a dedicated `pi --mode rpc --no-tools`
+// process in an OS-temp cwd. One per workspace window; New Chat replaces the
+// single instance via ephemeral_replace.
+const quickChatDialog = new QuickChatDialog({
+  runtime,
+  hostRequest: (payload) =>
+    runtime.sendHostRequest
+      ? runtime.sendHostRequest(payload)
+      : fetch("/v2/host", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(payload),
+        }).then(async (response) => {
+          if (!response.ok) throw new Error(`host request failed: ${response.status}`);
+          return response.json();
+        }),
+  getWorkspaceId: () => target.workspaceId,
+  dialogRoot: document.getElementById("quick-chat-dialog-root"),
+  chipRoot: document.getElementById("quick-chat-chip-root"),
+  boundsElement: document.querySelector(".main"),
+  confirmDiscard: async () => {
+    const answer = window.confirm(t("ephemeral.confirmDiscard"));
+    return answer ? "discard" : "cancel";
+  },
+  createView: (runtime) => {
+    // Quick Chat runs with --no-tools, so the view renders without the
+    // tool card renderer (toolsEnabled false by kind).
+    const view = new EphemeralChatView({
+      runtime,
+      kind: runtime.kind,
+      toolsEnabled: runtime.kind === "side-chat",
+    });
+    return { element: view.element, destroy: () => view.destroy() };
+  },
+});
+const quickChatButton = document.getElementById("quick-chat-btn");
+if (quickChatButton) {
+  setButtonIcon(quickChatButton, "message-circle", { size: 16 });
+  quickChatButton.classList.remove("hidden");
+  quickChatButton.addEventListener("click", () => {
+    void quickChatDialog.open().catch((error) => {
+      console.error("[Quick Chat] open failed:", error);
+    });
   });
 }
 const sessionCostEl = document.getElementById("session-cost");

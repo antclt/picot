@@ -151,6 +151,14 @@
                             </svg>
                         </button>
                         <button
+                            class="ui-icon-button ui-icon-button--sm ui-icon-button--ghost icon-btn hidden"
+                            id="quick-chat-btn"
+                            title="Quick Chat"
+                            aria-label="Quick Chat"
+                            data-i18n-title="nav.quickChat"
+                            data-i18n-aria-label="nav.quickChat"
+                        ></button>
+                        <button
                             class="ui-icon-button ui-icon-button--sm ui-icon-button--ghost icon-btn"
                             id="refresh-sessions-btn"
                             title="Refresh sessions" data-i18n-title="sidebar.refreshSessions"
@@ -473,6 +481,9 @@
                 <div class="workspace-content">
                     <!-- Main Chat Area -->
                     <div class="main">
+                <!-- Quick Chat floating dialog + minimized chip roots -->
+                <div class="quick-chat-dialog-root" id="quick-chat-dialog-root"></div>
+                <div class="quick-chat-chip-root" id="quick-chat-chip-root"></div>
                 <!-- Super Agent Chat Header web component (shown when SA is active) -->
                 <sa-chat-header
                     class="super-agent-chat-header hidden"
