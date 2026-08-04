@@ -1,16 +1,16 @@
 // ABOUTME: Element-scoped chat view for one ephemeral runtime: messages, tools,
 // ABOUTME: composer, dialogs, and usage — reusing the shared render helpers.
 
-import { setupVoiceInput } from "./app/voice-input.js";
-import { setupComposerCommandMenu } from "./composer-command-menu.js";
-import { setupComposerImageAttachments } from "./composer-image-attachments.js";
-import { onLocaleChange, t } from "./i18n.js";
-import { createIcon } from "./icons.js";
-import { processImageFile, processImagePayload } from "./image-attachments.js";
-import { setupAtFileMention } from "./ui/at-file-mention.js";
-import { DialogHandler } from "./ui/dialogs.js";
-import { MessageRenderer } from "./ui/message-renderer.js";
-import { ToolCardRenderer } from "./ui/tool-card.js";
+import { onLocaleChange, t } from "../../i18n.js";
+import { createIcon } from "../../icons.js";
+import { setupAtFileMention } from "../../ui/at-file-mention.js";
+import { MessageRenderer } from "../../ui/message-renderer.js";
+import { ToolCardRenderer } from "../../ui/tool-card.js";
+import { DialogHandler } from "./dialog-handler.js";
+import { setupComposerCommandMenu } from "./ephemeral/composer-command-menu.js";
+import { setupComposerImageAttachments } from "./ephemeral/composer-image-attachments.js";
+import { processImageFile, processImagePayload } from "./ephemeral/image-attachments.js";
+import { setupVoiceInput } from "./ephemeral/voice-input.js";
 
 // Monotonic counter guarantees unique mention-popup ids across ephemeral views.
 let ephemeralPopupSeq = 0;
@@ -192,9 +192,9 @@ export class EphemeralChatView {
       imagePreviews: this._imagePreviews,
       processImageFile,
       processImagePayload,
-      pickImageFiles: this.runtime?.transport?.pickImageFiles?.bind(this.runtime.transport),
+      pickImageFiles: undefined,
       getWorkspacePath: undefined,
-      isNativeAvailable: () => Boolean(this.runtime?.transport?.capabilities?.native),
+      isNativeAvailable: () => true,
       t,
     });
     this._commandMenuController = setupComposerCommandMenu({
@@ -423,17 +423,7 @@ export class EphemeralChatView {
       // the runtime's pending-request setup order: the cache is a fast
       // read, and if it misses, the live query takes over.
       let models = [];
-      if (typeof this.runtime.transport?.getCachedModels === "function") {
-        try {
-          const cached = await this.runtime.transport.getCachedModels();
-          if (Array.isArray(cached?.models)) models = cached.models;
-        } catch {
-          // cache unavailable — fall through to the live query
-        }
-      }
-      if (models.length === 0) {
-        models = await this.runtime.getAvailableModels();
-      }
+      models = await this.runtime.getAvailableModels();
       if (this.destroyed || this._modelMenu.classList.contains("hidden")) return;
       this._renderModelMenu(models);
     } catch {

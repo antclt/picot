@@ -40,6 +40,7 @@ import {
 import { setupTerminalPanel } from "./features/terminal-panel-integration.js";
 import { createNotificationCenter } from "./notifications/notification-center.js";
 import { createTaskCompletionNotifications } from "./notifications/task-completion-notifications.js";
+import { EphemeralChatView } from "./session/ephemeral-chat-view.js";
 import { WorkspaceFocusSidebar } from "./session/focus-sidebar.js";
 import { setupSessionInfo } from "./session/session-info.js";
 import { createSessionSelectionHandler } from "./session/session-navigation.js";
@@ -276,9 +277,11 @@ const sideChatManager = new SideChatManager({
     const answer = window.confirm(t("ephemeral.confirmCloseSideChat"));
     return answer ? "discard" : "cancel";
   },
-  createView: (_runtime) => {
-    // Side chat uses EphemeralChatView — placeholder for now.
-    return null;
+  createView: (runtime) => {
+    // Render the ephemeral chat view inside the transient tab. The view
+    // owns its own message list / composer and is bound to the runtime.
+    const view = new EphemeralChatView(runtime);
+    return { element: view.element, destroy: () => view.destroy() };
   },
 });
 if (sideChatButton) {
