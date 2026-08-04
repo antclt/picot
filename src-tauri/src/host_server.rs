@@ -1661,6 +1661,57 @@ async fn dispatch_host_operation(
             .map_err(|message| ("skill_install_failed", message))?;
             Ok(json!({ "type": "host_response", "requestId": request_id, "operation": "skill_install_links", "result": result }))
         }
+        "ephemeral_create" => {
+            let kind = frame
+                .get("kind")
+                .and_then(Value::as_str)
+                .ok_or(("invalid_ephemeral_kind", "kind is required".into()))?;
+            let ephemeral_kind = match kind {
+                "side-chat" => crate::host_ephemeral::EphemeralKind::SideChat,
+                "quick-chat" => crate::host_ephemeral::EphemeralKind::QuickChat,
+                _ => return Err(("invalid_ephemeral_kind", "kind must be side-chat or quick-chat".into())),
+            };
+            // Resolve the workspace cwd from the workspaceId.
+            let workspace_id = frame
+                .get("workspaceId")
+                .and_then(Value::as_str)
+                .ok_or(("invalid_workspace", "workspaceId is required".into()))?;
+            let workspace_cwd = state
+                .data
+                .workspace_root_path(workspace_id)
+                .map_err(host_data_error)?;
+            let cwd_str = workspace_cwd.to_string_lossy().into_owned();
+            let runtimes = state.runtimes.clone();
+            let launch = state.pi_launch.clone();
+            let descriptor = crate::host_ephemeral::create_ephemeral(
+                ephemeral_kind,
+                &cwd_str,
+                &runtimes,
+                &launch,
+            )
+            .map_err(|message| ("ephemeral_create_failed", message))?;
+            Ok(json!({
+                "type": "host_response",
+                "requestId": request_id,
+                "operation": "ephemeral_create",
+                "descriptor": descriptor,
+            }))
+        }
+        "ephemeral_close" => {
+            let instance_id = frame
+                .get("instanceId")
+                .and_then(Value::as_str)
+                .ok_or(("invalid_instance", "instanceId is required".into()))?;
+            let runtimes = state.runtimes.clone();
+            crate::host_ephemeral::close_ephemeral(&runtimes, instance_id)
+                .map_err(|message| ("ephemeral_close_failed", message))?;
+            Ok(json!({
+                "type": "host_response",
+                "requestId": request_id,
+                "operation": "ephemeral_close",
+                "ok": true,
+            }))
+        }
         _ => Err((
             "host_operation_unimplemented",
             "Host operation is not implemented on protocol v2".into(),

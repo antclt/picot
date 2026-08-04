@@ -788,7 +788,8 @@
     "statusReady": "準備完了",
     "statusStreaming": "生成中",
     "statusError": "エラー",
-    "statusDisconnected": "切断済み"
+    "statusDisconnected": "切断済み",
+    "confirmCloseSideChat": "サイドチャットを破棄しますか？"
   },
   "fileMention": {
     "listLabel": "ファイル"

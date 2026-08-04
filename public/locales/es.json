@@ -788,7 +788,8 @@
     "statusReady": "Listo",
     "statusStreaming": "Generando",
     "statusError": "Error",
-    "statusDisconnected": "Desconectado"
+    "statusDisconnected": "Desconectado",
+    "confirmCloseSideChat": "¿Descartar chat lateral?"
   },
   "fileMention": {
     "listLabel": "Archivos"

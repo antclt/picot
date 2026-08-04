@@ -52,6 +52,19 @@ export class RuntimeGateway {
     }
   }
 
+  // Send a host_request (control plane) operation. Used by ephemeral chats
+  // (ephemeral_create / ephemeral_close / ephemeral_update_ui) and other
+  // host-side state mutations.
+  sendHostRequest(payload, requestIdOverride = null) {
+    return this.#send(
+      {
+        type: "host_request",
+        ...payload,
+      },
+      requestIdOverride,
+    );
+  }
+
   snapshot(sessionId) {
     if (!sessionId) return Promise.reject(new Error("snapshot requires sessionId"));
     return this.#send({ type: "runtime_snapshot_request", sessionId });

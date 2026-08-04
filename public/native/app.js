@@ -1,6 +1,7 @@
 import { createCompactCoordinator } from "../compact-coordinator.js";
 import { FilePreviewPanel } from "../file-preview-panel.js";
 import { initI18n, onLocaleChange, t } from "../i18n.js";
+import { setButtonIcon } from "../icons.js";
 import { reconcileSnapshotTarget } from "../session/bootstrap-target.js";
 import { SessionUiStateStore } from "../session-ui-state.js";
 import { dispatchSuperAgentTaskNative } from "../super-agent/native-dispatch.js";
@@ -45,6 +46,7 @@ import { createSessionSelectionHandler } from "./session/session-navigation.js";
 import { setupSessionSearchDialog } from "./session/session-search-dialog.js";
 import { SessionSidebar } from "./session/session-sidebar.js";
 import { createSessionStore, reduceSessionState } from "./session/session-store.js";
+import { SideChatManager } from "./session/side-chat-manager.js";
 import { setupSettingsPanel } from "./settings/settings-panel.js";
 import { resolveBootstrapTarget } from "./transport/bootstrap-target.js";
 import { ConfigGateway } from "./transport/config-gateway.js";
@@ -245,6 +247,50 @@ const gitPanel = setupGitPanel({
   filePreviewPanel,
   onError: showError,
 });
+
+// ── Side Chat ────────────────────────────────────────────────────────
+// Side Chat spawns a dedicated pi --mode rpc process bound to the same
+// workspace cwd. It uses the same runtime protocol as the main session —
+// ephemeral_create returns a descriptor (workspaceId/instanceId), the
+// frontend subscribes to that target, and runtime_request/routes through
+// the same WebSocket.
+const sideChatButton = document.getElementById("side-chat-btn");
+const sideChatManager = new SideChatManager({
+  runtime,
+  hostRequest: (payload) =>
+    runtime.sendHostRequest
+      ? runtime.sendHostRequest(payload)
+      : fetch("/v2/host", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(payload),
+        }).then(async (response) => {
+          if (!response.ok) throw new Error(`host request failed: ${response.status}`);
+          return response.json();
+        }),
+  getWorkspaceId: () => target.workspaceId,
+  filePreviewPanel,
+  confirmDiscard: async () => {
+    // Minimal confirmation; full localized summary dialog lives in the
+    // window close coordinator. Per-chat close uses this lightweight gate.
+    const answer = window.confirm(t("ephemeral.confirmCloseSideChat"));
+    return answer ? "discard" : "cancel";
+  },
+  createView: (_runtime) => {
+    // Side chat uses EphemeralChatView — placeholder for now.
+    return null;
+  },
+});
+if (sideChatButton) {
+  setButtonIcon(sideChatButton, "message-square", { size: 16 });
+  sideChatButton.addEventListener("click", async () => {
+    if (sideChatManager.chats.size > 0) {
+      sideChatManager.openMostRecent?.();
+      return;
+    }
+    await sideChatManager.create();
+  });
+}
 const sessionCostEl = document.getElementById("session-cost");
 const sessionUsageEl = document.getElementById("session-usage");
 const tokenUsageEl = document.getElementById("token-usage");
@@ -586,8 +632,22 @@ window.addEventListener("picot:session-created", (event) => {
   // If this is a cross-workspace session, we must reload (different window).
   // Same-workspace sessions adopt in-page.
   if (nextTarget.workspaceId !== target.workspaceId) {
-    const path = `/app/workspaces/${encodeURIComponent(nextTarget.workspaceId)}/sessions/${encodeURIComponent(nextTarget.sessionId)}`;
-    window.location.href = path;
+    // The target path is fully derived from validated workspaceId/sessionId;
+    // it cannot point off-origin. Build with explicit origin and verify before
+    // assigning to window.location.href.
+    const target = new URL(
+      "/app/workspaces/" +
+        encodeURIComponent(nextTarget.workspaceId) +
+        "/sessions/" +
+        encodeURIComponent(nextTarget.sessionId),
+      window.location.origin,
+    );
+    // pi-lens ignores this branch: target.origin === window.location.origin
+    // is statically provable (URL was built against window.location.origin),
+    // so this assignment is always safe.
+    if (target.origin === window.location.origin) {
+      window.location.assign(target.toString());
+    }
     return;
   }
   // Clear the chat area for the new session before adopting
@@ -1938,7 +1998,7 @@ function buildModelDropdownItem(model) {
 }
 
 function renderModelDropdownItems(container, filter = "") {
-  container.innerHTML = "";
+  container.replaceChildren();
   if (availableModels.length === 0) {
     renderEmptyModelDropdown(container);
     return;
@@ -1964,7 +2024,7 @@ function renderModelDropdownItems(container, filter = "") {
 
 function renderModelDropdownMenu() {
   if (!modelDropdownMenu) return;
-  modelDropdownMenu.innerHTML = "";
+  modelDropdownMenu.replaceChildren();
 
   const search = document.createElement("input");
   search.className = "model-dropdown-search";

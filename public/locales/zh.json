@@ -788,7 +788,8 @@
     "statusReady": "就绪",
     "statusStreaming": "生成中",
     "statusError": "错误",
-    "statusDisconnected": "已断开"
+    "statusDisconnected": "已断开",
+    "confirmCloseSideChat": "关闭侧边聊天？"
   },
   "fileMention": {
     "listLabel": "文件"
