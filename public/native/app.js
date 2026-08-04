@@ -2,7 +2,6 @@ import { FilePreviewPanel } from "../file-preview-panel.js";
 import { initI18n, onLocaleChange, t } from "../i18n.js";
 import { reconcileSnapshotTarget } from "../session/bootstrap-target.js";
 import { SessionUiStateStore } from "../session-ui-state.js";
-import { createSidebarResizer } from "../sidebar-resizer.js";
 import { dispatchSuperAgentTaskNative } from "../super-agent/native-dispatch.js";
 import { isSuperAgentProjectPath } from "../super-agent/session.js";
 import { isSuperAgentEnabled } from "../super-agent/settings.js";
@@ -245,24 +244,6 @@ const _gitPanel = setupGitPanel({
   filePreviewPanel,
   onError: showError,
 });
-// Resizable sidebars — drag handle on inner edge, persisted to localStorage.
-// Mirrors feature-v3: left sidebar uses --sidebar-width, right file/git
-// sidebar uses --file-sidebar-width. Both clamp between 200-500px.
-createSidebarResizer({
-  sidebarEl: document.getElementById("sidebar"),
-  side: "left",
-  storageKey: "picot-sidebar-width",
-  minWidth: 200,
-  maxWidth: 500,
-});
-createSidebarResizer({
-  sidebarEl: document.getElementById("file-sidebar"),
-  side: "right",
-  storageKey: "picot-file-sidebar-width",
-  minWidth: 200,
-  maxWidth: 500,
-});
-
 const sessionCostEl = document.getElementById("session-cost");
 const sessionUsageEl = document.getElementById("session-usage");
 const tokenUsageEl = document.getElementById("token-usage");
@@ -1115,6 +1096,18 @@ function setupSidebarToggle() {
     minWidth: 200,
     maxWidth: 480,
     side: "left",
+  });
+
+  // File/Git sidebar — right-edge panel, drag handle on the left side.
+  // Uses the native --panel-width CSS variable (same as super-agent runtime
+  // panel). Width persists to localStorage under a separate key.
+  const fileSidebarEl = document.getElementById("file-sidebar");
+  setupResizablePanel(fileSidebarEl, {
+    storageKey: "pi-studio-file-sidebar-width",
+    defaultWidth: 260,
+    minWidth: 200,
+    maxWidth: 500,
+    side: "right",
   });
 }
 

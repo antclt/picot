@@ -21,28 +21,6 @@
   margin-left: calc(var(--sidebar-width) * -1);
 }
 
-/* Reusable drag handle between a sidebar and the main content area.
-   Width is driven by the --sidebar-width / --file-sidebar-width CSS custom
-   property updated by sidebar-resizer.js during drag. */
-.sidebar-resizer {
-  width: 4px;
-  cursor: col-resize;
-  background: transparent;
-  flex-shrink: 0;
-  z-index: 101;
-  position: relative;
-  transition: background 0.15s var(--ease);
-}
-.sidebar-resizer:hover,
-.sidebar-resizer.dragging {
-  background: var(--border);
-}
-/* Hide handle when the adjacent sidebar is collapsed. */
-.sidebar.collapsed + .sidebar-resizer,
-.sidebar-resizer:has(+ .file-sidebar.collapsed) {
-  display: none;
-}
-
 .sidebar-header {
   display: flex;
   align-items: center;

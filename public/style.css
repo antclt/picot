@@ -539,8 +539,8 @@ body {
   padding: 0.25rem 0;
 }
 .file-sidebar {
-  width: var(--file-sidebar-width);
-  min-width: var(--file-sidebar-width);
+  width: var(--panel-width, var(--file-sidebar-width));
+  min-width: var(--panel-width, var(--file-sidebar-width));
   background: var(--bg-frosted);
   backdrop-filter: blur(var(--blur-heavy)) saturate(1.5);
   -webkit-backdrop-filter: blur(var(--blur-heavy)) saturate(1.5);
