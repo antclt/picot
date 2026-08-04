@@ -125,7 +125,8 @@
     "expandAllTools": "Expandir todas las herramientas",
     "expandAllToolsDesc": "Expandir todas las tarjetas de herramientas",
     "collapseAllTools": "Colapsar todas las herramientas",
-    "collapseAllToolsDesc": "Colapsar todas las tarjetas de herramientas"
+    "collapseAllToolsDesc": "Colapsar todas las tarjetas de herramientas",
+    "compacting": "Compactando…"
   },
   "messages": {
     "attachedImage": "Imagen adjunta",

@@ -125,7 +125,8 @@
     "expandAllTools": "Expand All Tools",
     "expandAllToolsDesc": "Expand all tool cards",
     "collapseAllTools": "Collapse All Tools",
-    "collapseAllToolsDesc": "Collapse all tool cards"
+    "collapseAllToolsDesc": "Collapse all tool cards",
+    "compacting": "Compacting…"
   },
   "messages": {
     "attachedImage": "Attached image",

@@ -125,7 +125,8 @@
     "expandAllTools": "すべてのツールを展開",
     "expandAllToolsDesc": "すべてのツールカードを展開する",
     "collapseAllTools": "すべてのツールを折りたたむ",
-    "collapseAllToolsDesc": "すべてのツールカードを折りたたむ"
+    "collapseAllToolsDesc": "すべてのツールカードを折りたたむ",
+    "compacting": "コンパクト中…"
   },
   "messages": {
     "attachedImage": "添付画像",

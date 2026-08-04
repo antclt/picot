@@ -125,7 +125,8 @@
     "expandAllTools": "展开所有工具",
     "expandAllToolsDesc": "展开所有工具卡片",
     "collapseAllTools": "折叠所有工具",
-    "collapseAllToolsDesc": "折叠所有工具卡片"
+    "collapseAllToolsDesc": "折叠所有工具卡片",
+    "compacting": "压缩中…"
   },
   "messages": {
     "attachedImage": "附加图片",
