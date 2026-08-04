@@ -280,7 +280,7 @@ const sideChatManager = new SideChatManager({
   createView: (runtime) => {
     // Render the ephemeral chat view inside the transient tab. The view
     // owns its own message list / composer and is bound to the runtime.
-    const view = new EphemeralChatView(runtime);
+    const view = new EphemeralChatView({ runtime });
     return { element: view.element, destroy: () => view.destroy() };
   },
 });
