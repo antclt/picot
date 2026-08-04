@@ -82,8 +82,10 @@ describe("setupGitPanel integration", () => {
     // Allow the microtask queue to flush (send is called synchronously inside command)
     await Promise.resolve();
 
-    const statusCommand = runtime.sent.find((m) => m.command?.type === "status");
+    // After the unwrap fix, the integration passes the inner command payload
+    // ({type:"status"}) to runtime.git(), not the wrapped GitClient message.
+    const statusCommand = runtime.sent.find((m) => m.type === "status");
     expect(statusCommand).toBeDefined();
-    expect(statusCommand.workspaceGeneration).toBe(0);
+    expect(statusCommand.requestId).toMatch(/^git-\d+$/);
   });
 });

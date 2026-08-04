@@ -522,6 +522,7 @@ pub fn parse_porcelain_v2_z(bytes: &[u8]) -> ParsedStatus {
     }
 }
 
+#[allow(dead_code)]
 impl GitService {
     pub fn new() -> Self {
         Self {

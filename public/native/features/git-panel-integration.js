@@ -22,8 +22,16 @@ export function setupGitPanel({
 
   const client = new GitClient({
     send: (message) => {
+      // runtime.git() wraps the payload into { type: "git_command", command }
+      // for the backend. Passing the full GitClient message would double-wrap
+      // it, so the backend would see /command/type = "git_command" instead of
+      // "status" and reject it as "unsupported Git command".
+      const payload =
+        message.type === "git_ai_commit_message"
+          ? { type: "git_ai_commit_message", requestId: message.requestId }
+          : { ...message.command, requestId: message.requestId };
       runtime
-        .git(message, getTarget())
+        .git(payload, getTarget())
         .then((response) => {
           if (response) handleFrame({ ...response, requestId: message.requestId });
         })
