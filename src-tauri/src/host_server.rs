@@ -1741,6 +1741,28 @@ async fn dispatch_host_operation(
                 "ok": true,
             }))
         }
+        "ephemeral_replace" => {
+            // Replace the single Quick Chat instance (New Chat semantics).
+            let workspace_id = frame
+                .get("workspaceId")
+                .and_then(Value::as_str)
+                .ok_or(("invalid_workspace", "workspaceId is required".into()))?;
+            let workspace_cwd = state
+                .data
+                .workspace_root_path(workspace_id)
+                .map_err(host_data_error)?;
+            let cwd_str = workspace_cwd.to_string_lossy().into_owned();
+            let runtimes = state.runtimes.clone();
+            let launch = state.pi_launch.clone();
+            let descriptor = crate::host_ephemeral::replace_quick(&cwd_str, &runtimes, &launch)
+                .map_err(|message| ("ephemeral_replace_failed", message))?;
+            Ok(json!({
+                "type": "host_response",
+                "requestId": request_id,
+                "operation": "ephemeral_replace",
+                "descriptor": descriptor,
+            }))
+        }
         _ => Err((
             "host_operation_unimplemented",
             "Host operation is not implemented on protocol v2".into(),
