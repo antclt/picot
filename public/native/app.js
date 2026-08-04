@@ -1,8 +1,8 @@
 import { FilePreviewPanel } from "../file-preview-panel.js";
 import { initI18n, onLocaleChange, t } from "../i18n.js";
 import { reconcileSnapshotTarget } from "../session/bootstrap-target.js";
-import { FocusSidebar } from "./session/focus-sidebar.js";
 import { SessionUiStateStore } from "../session-ui-state.js";
+import { createSidebarResizer } from "../sidebar-resizer.js";
 import { dispatchSuperAgentTaskNative } from "../super-agent/native-dispatch.js";
 import { isSuperAgentProjectPath } from "../super-agent/session.js";
 import { isSuperAgentEnabled } from "../super-agent/settings.js";
@@ -39,6 +39,7 @@ import {
 import { setupTerminalPanel } from "./features/terminal-panel-integration.js";
 import { createNotificationCenter } from "./notifications/notification-center.js";
 import { createTaskCompletionNotifications } from "./notifications/task-completion-notifications.js";
+import { FocusSidebar } from "./session/focus-sidebar.js";
 import { setupSessionInfo } from "./session/session-info.js";
 import { createSessionSelectionHandler } from "./session/session-navigation.js";
 import { setupSessionSearchDialog } from "./session/session-search-dialog.js";
@@ -244,6 +245,24 @@ const _gitPanel = setupGitPanel({
   filePreviewPanel,
   onError: showError,
 });
+// Resizable sidebars — drag handle on inner edge, persisted to localStorage.
+// Mirrors feature-v3: left sidebar uses --sidebar-width, right file/git
+// sidebar uses --file-sidebar-width. Both clamp between 200-500px.
+createSidebarResizer({
+  sidebarEl: document.getElementById("sidebar"),
+  side: "left",
+  storageKey: "picot-sidebar-width",
+  minWidth: 200,
+  maxWidth: 500,
+});
+createSidebarResizer({
+  sidebarEl: document.getElementById("file-sidebar"),
+  side: "right",
+  storageKey: "picot-file-sidebar-width",
+  minWidth: 200,
+  maxWidth: 500,
+});
+
 const sessionCostEl = document.getElementById("session-cost");
 const sessionUsageEl = document.getElementById("session-usage");
 const tokenUsageEl = document.getElementById("token-usage");
