@@ -158,6 +158,9 @@ export class WorkspaceFocusSidebar {
   }
 
   // Fallback session row builder when buildSessionItem is not provided.
+  // Mirrors the normal sidebar's #buildItem title logic: session.name if
+  // present, otherwise the first message, otherwise the empty placeholder.
+  // Never falls back to the session ID — the ID is not user-facing.
   #buildSessionRow(session) {
     const row = document.createElement("button");
     row.type = "button";
@@ -166,14 +169,10 @@ export class WorkspaceFocusSidebar {
     }`;
     const name = document.createElement("span");
     name.className = "focus-session-name";
-    name.textContent = session.name || session.id?.slice(0, 8) || "Untitled";
+    const title = session.name || session.firstMessage || t("sidebar.emptySession");
+    name.textContent = title;
+    name.title = title;
     row.appendChild(name);
-    if (session.firstMessage) {
-      const preview = document.createElement("span");
-      preview.className = "focus-session-preview";
-      preview.textContent = session.firstMessage.slice(0, 80);
-      row.appendChild(preview);
-    }
     row.addEventListener("click", () => this.onSessionSelect?.(session));
     return row;
   }
