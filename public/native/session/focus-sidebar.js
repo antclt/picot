@@ -1,32 +1,155 @@
-// ABOUTME: Focus mode sidebar that replaces the full session list with a single-project view.
-// ABOUTME: Shows only the focused workspace's sessions + workspace info card (branch, path, counts).
-
+// ABOUTME: Task-workbench sidebar shown when a workspace enters Focus mode.
+// ABOUTME: Renders back/new-task controls, a workspace info card, and a session list.
 import { onLocaleChange, t } from "../../i18n.js";
+import { createIcon } from "../../icons.js";
 
-const VISIBLE_INITIAL = 10;
+const INITIAL_LIMIT = 5;
+const STEP = 10;
 
-export class FocusSidebar {
-  constructor(container, { project, sessions, activeSessionFile, onSessionSelect, data, workspaceId } = {}) {
+function folderNameOf(project) {
+  if (!project) return "";
+  if (project.folderName) return project.folderName;
+  if (project.dirName) return project.dirName;
+  const path = typeof project.path === "string" ? project.path : "";
+  const segments = path.split(/[/\\]/).filter(Boolean);
+  return segments[segments.length - 1] || path;
+}
+
+function createIconRow(rowClass, iconClass, valueClass) {
+  const row = document.createElement("div");
+  row.className = `wqi-row ${rowClass}`;
+  const icon = document.createElement("span");
+  icon.className = iconClass;
+  icon.setAttribute("aria-hidden", "true");
+  const value = document.createElement("span");
+  value.className = `wqi-row-value ${valueClass}`;
+  row.append(icon, value);
+  return { row, value };
+}
+
+export class WorkspaceFocusSidebar {
+  constructor(container, options = {}) {
     this.container = container;
-    this.project = project;
-    this.sessions = sessions || [];
-    this.activeSessionFile = activeSessionFile || null;
-    this.onSessionSelect = onSessionSelect || (() => {});
-    this.data = data;
-    this.workspaceId = workspaceId;
-    this.visibleCount = VISIBLE_INITIAL;
+    this.project = options.project || null;
+    this.activeSessionFile = options.activeSessionFile || null;
+    this.unread = options.unread instanceof Set ? options.unread : new Set();
+    this.streaming = options.streaming instanceof Set ? options.streaming : new Set();
+    this.buildSessionItem = options.buildSessionItem || null;
+    this.isArchived = typeof options.isArchived === "function" ? options.isArchived : null;
+    this.cardInfo = options.cardInfo || null;
+    this.onBack = options.onBack || null;
+    this.onNewTask = options.onNewTask || null;
+    this.onSessionSelect = options.onSessionSelect || null;
+    this.onDelete = options.onDelete || null;
+    this.onRename = options.onRename || null;
+    this.initialLimit = INITIAL_LIMIT;
+    this.step = STEP;
+    // Default to fully expanded so the active session is never hidden, even
+    // when it is an older entry beyond the initial limit.
+    this.visibleCount = Number.POSITIVE_INFINITY;
     this.unsubscribeLocale = onLocaleChange(() => this.render());
   }
 
-  setActiveSession(sessionFile) {
-    this.activeSessionFile = sessionFile;
-    this.render();
+  setProjectState({ project, activeSessionFile, unread, streaming, cardInfo } = {}) {
+    if (project !== undefined) this.project = project;
+    if (activeSessionFile !== undefined) this.activeSessionFile = activeSessionFile;
+    if (unread !== undefined) this.unread = unread instanceof Set ? unread : new Set();
+    if (streaming !== undefined) this.streaming = streaming instanceof Set ? streaming : new Set();
+    if (cardInfo !== undefined) this.cardInfo = cardInfo;
   }
 
-  updateSessions(sessions) {
-    this.sessions = sessions || [];
-    this.visibleCount = VISIBLE_INITIAL;
-    this.render();
+  render() {
+    const root = document.createElement("div");
+    root.className = "workspace-focus-sidebar";
+
+    const back = document.createElement("button");
+    back.type = "button";
+    back.className = "focus-back-btn";
+    const backIcon = document.createElement("span");
+    backIcon.className = "focus-back-icon";
+    backIcon.setAttribute("aria-hidden", "true");
+    const backGlyph = createIcon("chevron-left", { size: 14 });
+    if (backGlyph) backIcon.appendChild(backGlyph);
+    back.appendChild(backIcon);
+    const backLabel = document.createElement("span");
+    backLabel.textContent = t("workspace.back");
+    back.appendChild(backLabel);
+    back.addEventListener("click", () => this.onBack?.());
+    root.appendChild(back);
+
+    // Workspace info card — same shape/content as the sidebar hover card
+    // (.workspace-quick-info), but without the Pin/Unpin control.
+    root.appendChild(this._buildCard());
+
+    const newTask = document.createElement("button");
+    newTask.type = "button";
+    newTask.className = "focus-new-task-btn";
+    newTask.textContent = t("workspace.newTask");
+    newTask.addEventListener("click", () => this.onNewTask?.(this.project));
+    root.appendChild(newTask);
+
+    const allSessions = Array.isArray(this.project?.sessions) ? this.project.sessions : [];
+    const sessions = this.isArchived
+      ? allSessions.filter((session) => !this.isArchived(session.filePath))
+      : allSessions;
+    const list = document.createElement("div");
+    list.className = "focus-session-list";
+    const visible = sessions.slice(0, this.visibleCount);
+    for (const session of visible) {
+      if (this.buildSessionItem) {
+        const item = this.buildSessionItem({
+          session,
+          project: this.project,
+          isActive: session.filePath === this.activeSessionFile,
+          isUnread: this.unread.has(session.filePath),
+          isStreaming: this.streaming.has(session.filePath),
+          showPinButton: false,
+          showArchiveButton: false,
+          showDeleteButton: true,
+          onSelect: (s, p) => this.onSessionSelect?.(s, p),
+          onDelete: (filePath) => this.onDelete?.(filePath),
+          onRename: (filePath, targetSession, item) =>
+            this.onRename?.(filePath, targetSession, item),
+        });
+        list.appendChild(item);
+      } else {
+        list.appendChild(this.#buildSessionRow(session));
+      }
+    }
+    root.appendChild(list);
+
+    const total = sessions.length;
+    const hasMore = this.visibleCount < total;
+    const canShowLess = this.visibleCount > this.initialLimit && total > this.initialLimit;
+    if (hasMore || canShowLess) {
+      const toggleRow = document.createElement("div");
+      toggleRow.className = "focus-sessions-toggle-row";
+      if (hasMore) {
+        const showMore = document.createElement("button");
+        showMore.type = "button";
+        showMore.className = "focus-sessions-toggle";
+        showMore.textContent = t("workspace.showMore");
+        showMore.addEventListener("click", () => {
+          this.visibleCount += this.step;
+          this.render();
+        });
+        toggleRow.appendChild(showMore);
+      }
+      if (canShowLess) {
+        const showLess = document.createElement("button");
+        showLess.type = "button";
+        showLess.className = "focus-sessions-toggle focus-sessions-toggle-less";
+        showLess.textContent = t("sidebar.showLess");
+        showLess.addEventListener("click", () => {
+          this.visibleCount = this.initialLimit;
+          this.render();
+        });
+        toggleRow.appendChild(showLess);
+      }
+      root.appendChild(toggleRow);
+    }
+
+    this.container.replaceChildren(root);
   }
 
   destroy() {
@@ -34,70 +157,7 @@ export class FocusSidebar {
     this.container?.replaceChildren();
   }
 
-  async render() {
-    if (!this.container) return;
-    this.container.replaceChildren();
-
-    // Workspace info card (hover-style quick info)
-    const infoCard = document.createElement("div");
-    infoCard.className = "focus-info-card";
-    let branch = "";
-    let path = this.project?.path || "";
-    if (this.data && this.workspaceId) {
-      try {
-        const response = await this.data.workspaceInfo(this.workspaceId);
-        const info = response?.info;
-        if (info?.gitBranch) branch = info.gitBranch;
-        if (info?.path) path = info.path;
-      } catch { /* leave defaults */ }
-    }
-
-    const pathEl = document.createElement("div");
-    pathEl.className = "focus-info-path";
-    pathEl.textContent = path;
-    pathEl.title = path;
-    infoCard.appendChild(pathEl);
-
-    if (branch) {
-      const branchEl = document.createElement("div");
-      branchEl.className = "focus-info-branch";
-      branchEl.textContent = `⎇ ${branch}`;
-      infoCard.appendChild(branchEl);
-    }
-
-    const countEl = document.createElement("div");
-    countEl.className = "focus-info-count";
-    countEl.textContent = `${this.sessions.length} sessions`;
-    infoCard.appendChild(countEl);
-
-    this.container.appendChild(infoCard);
-
-    // Session list (only this project's sessions)
-    const list = document.createElement("div");
-    list.className = "focus-session-list";
-    const visible = this.sessions.slice(0, this.visibleCount);
-    for (const session of visible) {
-      list.appendChild(this.#buildSessionRow(session));
-    }
-    if (this.sessions.length > this.visibleCount) {
-      const more = document.createElement("button");
-      more.className = "focus-show-more";
-      more.textContent = `${t("sidebar.showMore")} (${this.sessions.length - this.visibleCount})`;
-      more.addEventListener("click", () => {
-        this.visibleCount = this.sessions.length;
-        this.render();
-      });
-      list.appendChild(more);
-    }
-    if (this.sessions.length === 0) {
-      const empty = document.createElement("p");
-      empty.className = "focus-empty";
-      empty.textContent = t("sidebar.emptySession") || "No sessions";
-      list.appendChild(empty);
-    }
-    this.container.appendChild(list);
-  }
-
+  // Fallback session row builder when buildSessionItem is not provided.
   #buildSessionRow(session) {
     const row = document.createElement("button");
     row.type = "button";
@@ -114,7 +174,44 @@ export class FocusSidebar {
       preview.textContent = session.firstMessage.slice(0, 80);
       row.appendChild(preview);
     }
-    row.addEventListener("click", () => this.onSessionSelect(session));
+    row.addEventListener("click", () => this.onSessionSelect?.(session));
     return row;
+  }
+
+  _buildCard() {
+    const info = this.cardInfo || {};
+    const card = document.createElement("div");
+    card.className = "workspace-quick-info workspace-focus-card";
+
+    const headerRow = document.createElement("div");
+    headerRow.className = "wqi-header-row";
+    const folderIcon = document.createElement("span");
+    folderIcon.className = "wqi-folder-icon";
+    folderIcon.setAttribute("aria-hidden", "true");
+    const folderEl = document.createElement("span");
+    folderEl.className = "wqi-folder-name";
+    folderEl.textContent = info.folder || folderNameOf(this.project);
+    headerRow.append(folderIcon, folderEl);
+
+    const content = document.createElement("div");
+    content.className = "wqi-content";
+
+    const countRow = createIconRow("wqi-count-row", "wqi-count-icon", "wqi-count");
+    countRow.value.textContent = info.count != null ? String(info.count) : "";
+    const pathRow = createIconRow("wqi-path-row", "wqi-path-icon", "wqi-path");
+    pathRow.value.textContent = info.path || this.project?.path || "";
+    content.append(countRow.row, pathRow.row);
+
+    if (info.repository) {
+      const gitRegion = document.createElement("div");
+      gitRegion.className = "wqi-git-region";
+      const repoRow = createIconRow("wqi-repo-row", "wqi-repo-icon", "wqi-repo");
+      repoRow.value.textContent = info.repository;
+      gitRegion.appendChild(repoRow.row);
+      content.appendChild(gitRegion);
+    }
+
+    card.append(headerRow, content);
+    return card;
   }
 }

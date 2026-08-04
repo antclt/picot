@@ -38,7 +38,7 @@ import {
 import { setupTerminalPanel } from "./features/terminal-panel-integration.js";
 import { createNotificationCenter } from "./notifications/notification-center.js";
 import { createTaskCompletionNotifications } from "./notifications/task-completion-notifications.js";
-import { FocusSidebar } from "./session/focus-sidebar.js";
+import { WorkspaceFocusSidebar } from "./session/focus-sidebar.js";
 import { setupSessionInfo } from "./session/session-info.js";
 import { createSessionSelectionHandler } from "./session/session-navigation.js";
 import { setupSessionSearchDialog } from "./session/session-search-dialog.js";
@@ -1028,13 +1028,24 @@ function enterFocus(project) {
   focusContainer.id = "focus-sidebar-container";
   sidebarEl.querySelector(".sidebar-header")?.after(focusContainer);
 
-  // Filter sessions for this project
-  const projectSessions = (sidebar.sessions || []).filter((s) => s.projectPath === project.path);
+  // The focused project's sessions come from the sidebar's projects list.
+  const projectSessions =
+    Array.isArray(project.sessions) && project.sessions.length > 0
+      ? project.sessions
+      : (sidebar.sessions || []).filter((s) => s.projectPath === project.path);
 
-  focusSidebar = new FocusSidebar(focusContainer, {
-    project,
-    sessions: projectSessions,
-    activeSessionFile: sidebar.sessions?.find((s) => s.id === target.sessionId)?.filePath,
+  const focusCardInfo = {
+    folder: project.folderName || project.name,
+    path: project.path,
+    count: projectSessions.length,
+  };
+
+  focusSidebar = new WorkspaceFocusSidebar(focusContainer, {
+    project: { ...project, sessions: projectSessions },
+    cardInfo: focusCardInfo,
+    activeSessionFile: projectSessions.find((s) => s.id === target.sessionId)?.filePath,
+    onBack: () => exitFocus(),
+    onNewTask: () => spawnSessionViaHost(target.workspaceId),
     onSessionSelect: (session) => {
       const handler = createSessionSelectionHandler({
         switchSession,
@@ -1043,8 +1054,9 @@ function enterFocus(project) {
       });
       handler(session);
     },
-    data,
-    workspaceId: target.workspaceId,
+    onDelete: (filePath) => sidebar.deleteSession?.(filePath),
+    onRename: (filePath, sessionItem, el) => sidebar.renameSession?.(filePath, sessionItem, el),
+    isArchived: (filePath) => sidebar.isArchived?.(filePath) ?? false,
   });
   focusSidebar.render();
 }
