@@ -283,16 +283,19 @@ async function hydrateHeaderSessionStats() {
   if (!headerStatusBar) return;
   const generation = ++statsHydrationGeneration;
   try {
-    const response = await runtime.request({ type: "get_session_stats" }, target);
-    if (!response?.success || !response?.data) return;
+    const frame = await runtime.request({ type: "get_session_stats" }, target);
+    // runtime.request resolves with the full runtime_response frame; the pi
+    // result lives in frame.response.
+    const result = frame?.response ?? frame;
+    if (!result?.success || !result?.data) return;
     if (generation !== statsHydrationGeneration) return;
-    if (!response.data.sessionFile) return;
+    if (!result.data.sessionFile) return;
     const activeSessionFile = activeSessionFileForStatusBar();
-    if (activeSessionFile && response.data.sessionFile !== activeSessionFile) return;
+    if (activeSessionFile && result.data.sessionFile !== activeSessionFile) return;
     headerStatusBar.hydrateSessionStats({
-      sessionFile: response.data.sessionFile,
-      tokens: response.data.tokens,
-      cost: response.data.cost,
+      sessionFile: result.data.sessionFile,
+      tokens: result.data.tokens,
+      cost: result.data.cost,
     });
   } catch {
     // Aggregate hydration is best-effort; the current-context path still works.
