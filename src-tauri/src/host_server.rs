@@ -7,7 +7,6 @@ use crate::markitdown_preview::{
     ConversionOutcome, DependencyReason, MarkitdownPreviewService, INPUT_BYTE_CAP,
 };
 use crate::model_health::{self, ModelTestOutcome, ModelTestRequest};
-use tauri_plugin_dialog::DialogExt;
 use crate::native_pi_manager::NativePiManager;
 use crate::pi_launch::{list_installed_apps, open_external, open_in_app, PiLaunchResolver};
 use crate::remote_auth::RemoteAuth;
@@ -37,6 +36,7 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use tauri_plugin_dialog::DialogExt;
 use tokio::sync::oneshot;
 use tower::ServiceBuilder;
 use tower_http::services::{ServeDir, ServeFile};
@@ -58,6 +58,9 @@ struct HostState {
     terminal_events: tokio::sync::broadcast::Sender<(OwnerId, Value)>,
     git_service: Arc<crate::git_service::GitService>,
     git_events: tokio::sync::broadcast::Sender<(String, Value)>,
+    // Reserved for future host commands that need the registry instance;
+    // skill_install_links currently uses install_links_static instead.
+    #[allow(dead_code)]
     skill_registry: Arc<crate::skill_source_registry::SkillSourceRegistry>,
     install_secret: String,
     app_handle: Option<tauri::AppHandle>,
@@ -1260,16 +1263,18 @@ async fn dispatch(
             client_id,
             request_id,
             frame,
-        } => host_git::dispatch(
-            &state.git_service,
-            &state.data,
-            &state.pi_launch,
-            &state.git_events,
-            &client_id,
-            &request_id,
-            &frame,
-        )
-        .await,
+        } => {
+            host_git::dispatch(
+                &state.git_service,
+                &state.data,
+                &state.pi_launch,
+                &state.git_events,
+                &client_id,
+                &request_id,
+                &frame,
+            )
+            .await
+        }
         RoutedAction::Terminal {
             client_id,
             request_id,
@@ -1594,22 +1599,28 @@ async fn dispatch_host_operation(
         }
         "pick_skill_source" => {
             let Some(app) = state.app_handle.clone() else {
-                return Err(("host_operation_failed", "Folder picker is not available".into()));
+                return Err((
+                    "host_operation_failed",
+                    "Folder picker is not available".into(),
+                ));
             };
-            let path = tokio::task::spawn_blocking(move || {
-                app.dialog().file().blocking_pick_folder()
-            })
-            .await
-            .map_err(|error| ("host_operation_failed", error.to_string()))?;
+            let path =
+                tokio::task::spawn_blocking(move || app.dialog().file().blocking_pick_folder())
+                    .await
+                    .map_err(|error| ("host_operation_failed", error.to_string()))?;
             let Some(picked) = path else {
-                return Ok(json!({ "type": "host_response", "requestId": request_id, "operation": "pick_skill_source", "sourceId": null }));
+                return Ok(
+                    json!({ "type": "host_response", "requestId": request_id, "operation": "pick_skill_source", "sourceId": null }),
+                );
             };
             let source_id = picked
                 .as_path()
                 .ok_or(("invalid_path", "Selected folder is not a local path".into()))?
                 .to_string_lossy()
                 .into_owned();
-            Ok(json!({ "type": "host_response", "requestId": request_id, "operation": "pick_skill_source", "sourceId": source_id }))
+            Ok(
+                json!({ "type": "host_response", "requestId": request_id, "operation": "pick_skill_source", "sourceId": source_id }),
+            )
         }
         "skill_scan_install_source" => {
             let source_id = frame
@@ -1625,7 +1636,9 @@ async fn dispatch_host_operation(
             .await
             .map_err(|error| ("host_operation_failed", error.to_string()))?
             .map_err(|message| ("skill_scan_failed", message))?;
-            Ok(json!({ "type": "host_response", "requestId": request_id, "operation": "skill_scan_install_source", "scan": result }))
+            Ok(
+                json!({ "type": "host_response", "requestId": request_id, "operation": "skill_scan_install_source", "scan": result }),
+            )
         }
         "skill_install_links" => {
             let source_id = frame
@@ -1638,7 +1651,10 @@ async fn dispatch_host_operation(
                 .get("scope")
                 .and_then(Value::as_str)
                 .filter(|value| *value == "global" || *value == "project")
-                .ok_or(("invalid_scope", "scope must be 'global' or 'project'".into()))?
+                .ok_or((
+                    "invalid_scope",
+                    "scope must be 'global' or 'project'".into(),
+                ))?
                 .to_owned();
             let scan_revision = frame
                 .get("scanRevision")
@@ -1654,12 +1670,20 @@ async fn dispatch_host_operation(
             let install_secret = state.install_secret.clone();
             let owned_selection = selection.clone();
             let result = tokio::task::spawn_blocking(move || {
-                crate::skill_source_registry::install_links_static(&source_id, &scope, &scan_revision, &owned_selection, &install_secret)
+                crate::skill_source_registry::install_links_static(
+                    &source_id,
+                    &scope,
+                    &scan_revision,
+                    &owned_selection,
+                    &install_secret,
+                )
             })
             .await
             .map_err(|error| ("host_operation_failed", error.to_string()))?
             .map_err(|message| ("skill_install_failed", message))?;
-            Ok(json!({ "type": "host_response", "requestId": request_id, "operation": "skill_install_links", "result": result }))
+            Ok(
+                json!({ "type": "host_response", "requestId": request_id, "operation": "skill_install_links", "result": result }),
+            )
         }
         "ephemeral_create" => {
             let kind = frame
@@ -1669,7 +1693,12 @@ async fn dispatch_host_operation(
             let ephemeral_kind = match kind {
                 "side-chat" => crate::host_ephemeral::EphemeralKind::SideChat,
                 "quick-chat" => crate::host_ephemeral::EphemeralKind::QuickChat,
-                _ => return Err(("invalid_ephemeral_kind", "kind must be side-chat or quick-chat".into())),
+                _ => {
+                    return Err((
+                        "invalid_ephemeral_kind",
+                        "kind must be side-chat or quick-chat".into(),
+                    ))
+                }
             };
             // Resolve the workspace cwd from the workspaceId.
             let workspace_id = frame
@@ -1946,7 +1975,7 @@ mod tests {
         fs::write(public.join("index.html"), "<h1>Picot native host</h1>").unwrap();
         let metadata = MetadataStore::open(&temp.join("picot.sqlite3")).unwrap();
         let auth = Arc::new(Mutex::new(RemoteAuth::new(Arc::new(Mutex::new(metadata)))));
-        let host = HostServer::start(public, NativePiManager::new(32), auth)
+        let host = HostServer::start(public, NativePiManager::new(32), auth, None)
             .await
             .unwrap();
 
@@ -1982,7 +2011,7 @@ mod tests {
         fs::write(public.join("index.html"), "<h1>Picot native host</h1>").unwrap();
         let metadata = MetadataStore::open(&temp.join("picot.sqlite3")).unwrap();
         let auth = Arc::new(Mutex::new(RemoteAuth::new(Arc::new(Mutex::new(metadata)))));
-        let host = HostServer::start(public, NativePiManager::new(32), auth)
+        let host = HostServer::start(public, NativePiManager::new(32), auth, None)
             .await
             .unwrap();
 
@@ -2012,7 +2041,7 @@ mod tests {
         fs::write(public.join("index.html"), "<h1>Picot native host</h1>").unwrap();
         let metadata = MetadataStore::open(&temp.join("picot.sqlite3")).unwrap();
         let auth = Arc::new(Mutex::new(RemoteAuth::new(Arc::new(Mutex::new(metadata)))));
-        let host = HostServer::start(public, NativePiManager::new(32), auth)
+        let host = HostServer::start(public, NativePiManager::new(32), auth, None)
             .await
             .unwrap();
 
@@ -2052,7 +2081,7 @@ mod tests {
         fs::write(public.join("index.html"), "<h1>Picot native host</h1>").unwrap();
         let metadata = MetadataStore::open(&temp.join("picot.sqlite3")).unwrap();
         let auth = Arc::new(Mutex::new(RemoteAuth::new(Arc::new(Mutex::new(metadata)))));
-        let host = HostServer::start(public, NativePiManager::new(32), auth)
+        let host = HostServer::start(public, NativePiManager::new(32), auth, None)
             .await
             .unwrap();
 
@@ -2088,7 +2117,9 @@ mod tests {
         let runtimes = NativePiManager::new(32);
         let target = RuntimeTarget::new("workspace-a", "session-a", "instance-a");
         let mut fake = runtimes.register_in_memory(target.clone()).unwrap();
-        let host = HostServer::start(public, runtimes, auth).await.unwrap();
+        let host = HostServer::start(public, runtimes, auth, None)
+            .await
+            .unwrap();
         let ws_url = host.origin().replace("http://", "ws://") + "/v2/ws";
         let (mut socket, _) = tokio_tungstenite::connect_async(ws_url).await.unwrap();
         socket
@@ -2160,7 +2191,9 @@ mod tests {
         .unwrap();
         tokio::task::yield_now().await;
 
-        let host = HostServer::start(public, runtimes, auth).await.unwrap();
+        let host = HostServer::start(public, runtimes, auth, None)
+            .await
+            .unwrap();
         let ws_url = host.origin().replace("http://", "ws://") + "/v2/ws";
         let (mut socket, _) = tokio_tungstenite::connect_async(ws_url).await.unwrap();
         socket

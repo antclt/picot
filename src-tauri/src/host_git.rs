@@ -22,9 +22,12 @@ pub async fn dispatch(
         .get("workspaceId")
         .and_then(Value::as_str)
         .ok_or(("invalid_workspace", "workspaceId is required".into()))?;
-    let root = data
-        .workspace_root_path(workspace_id)
-        .map_err(|error| ("workspace_not_found", format!("Cannot resolve workspace: {error:?}")))?;
+    let root = data.workspace_root_path(workspace_id).map_err(|error| {
+        (
+            "workspace_not_found",
+            format!("Cannot resolve workspace: {error:?}"),
+        )
+    })?;
     let generation = 0;
     let owner = client_id;
     let fail = |code: &'static str, message: String| Err((code, message));
@@ -111,7 +114,15 @@ pub async fn dispatch(
                 .and_then(Value::as_str)
                 .ok_or(("git_command_failed", "invalid diff comparison".into()))?;
             let diff = service
-                .diff(snapshot_id, owner, &root, generation, group, &path, comparison)
+                .diff(
+                    snapshot_id,
+                    owner,
+                    &root,
+                    generation,
+                    group,
+                    &path,
+                    comparison,
+                )
                 .map_err(|error| ("git_command_failed", error))?;
             Ok(json!({
                 "type": "git_diff",
