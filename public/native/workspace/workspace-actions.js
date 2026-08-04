@@ -37,7 +37,9 @@ export async function createSessionViaHost(workspaceId) {
   if (!wid || !sid) throw new Error("Server returned an invalid session target");
   // SPA navigation: emit an event so app.js can adoptTarget without reloading
   window.dispatchEvent(
-    new CustomEvent("picot:session-created", { detail: { workspaceId: wid, sessionId: sid, instanceId: iid } }),
+    new CustomEvent("picot:session-created", {
+      detail: { workspaceId: wid, sessionId: sid, instanceId: iid },
+    }),
   );
 }
 

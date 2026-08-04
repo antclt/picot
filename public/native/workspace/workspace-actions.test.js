@@ -37,7 +37,11 @@ describe("workspace actions", () => {
     await vi.waitFor(() => expect(eventSpy).toHaveBeenCalled());
     expect(eventSpy).toHaveBeenCalledWith(
       expect.objectContaining({
-        detail: { workspaceId: "workspace-a", sessionId: "temporary-abc123", instanceId: "instance-xyz" },
+        detail: {
+          workspaceId: "workspace-a",
+          sessionId: "temporary-abc123",
+          instanceId: "instance-xyz",
+        },
       }),
     );
 
