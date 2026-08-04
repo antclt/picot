@@ -283,6 +283,10 @@ const sideChatManager = new SideChatManager({
 });
 if (sideChatButton) {
   setButtonIcon(sideChatButton, "message-square", { size: 16 });
+  // TEMP: show the button unconditionally so we can verify the integration end-to-end.
+  // Proper native-capability gating will be restored once nativeAvailable()/capabilities
+  // event handling lands in the new-arch app.js.
+  sideChatButton.classList.remove("hidden");
   sideChatButton.addEventListener("click", async () => {
     if (sideChatManager.chats.size > 0) {
       sideChatManager.openMostRecent?.();
