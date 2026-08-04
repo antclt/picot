@@ -39,7 +39,7 @@
     "lint:fix": "biome lint --write . --unsafe",
     "format": "biome format .",
     "format:fix": "biome format --write .",
-    "check": "biome check . && bun run check:design",
+    "check": "biome check . && bun run check:design && bun scripts/check-index-html-format.mjs",
     "check:fix": "biome check --write . --unsafe --formatter-enabled=false --linter-enabled=false && bun run check:design:fix",
     "check:design": "bun scripts/check-design-css.mjs",
     "check:design:fix": "bun scripts/check-design-css.mjs --fix",
