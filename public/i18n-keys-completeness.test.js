@@ -167,18 +167,16 @@ describe("HTML data-i18n key references", () => {
 describe("JS t() literal key references", () => {
   // Phase 1 JS files that should use t()
   const jsFiles = [
-    "app.js",
+    "native/app.js",
     "ui/context-viz.js",
     "ui/at-file-mention.js",
     "ui/message-renderer.js",
     "ui/markdown.js",
     "ui/tool-card.js",
-    "pinned-items.js",
-    "workspace-projects.js",
+    "native/session/pinned-items.js",
     "workspace-quick-info.js",
-    "ephemeral-chat-view.js",
-    "side-chat-manager.js",
-    "quick-chat-dialog.js",
+    "native/session/ephemeral-chat-view.js",
+    "native/session/side-chat-manager.js",
     "file-preview-panel.js",
   ];
 
