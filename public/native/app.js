@@ -251,16 +251,16 @@ const tokenUsageEl = document.getElementById("token-usage");
 
 // Header status bar: aggregates session IN/OUT/CACHE tokens and cost
 // from session stats + live completions. Separate from current-context.
+import { createHeaderStatusBar } from "../ui/header-status-bar.js";
+
 let headerStatusBar = null;
 if (sessionUsageEl && sessionCostEl) {
-  import("../ui/header-status-bar.js").then(({ createHeaderStatusBar }) => {
-    headerStatusBar = createHeaderStatusBar({
-      sessionCostEl,
-      sessionUsageEl,
-      tokenUsageEl,
-      getContextWindowSize: () => currentModelContextWindow,
-      t,
-    });
+  headerStatusBar = createHeaderStatusBar({
+    sessionCostEl,
+    sessionUsageEl,
+    tokenUsageEl,
+    getContextWindowSize: () => currentModelContextWindow,
+    t,
   });
 }
 
