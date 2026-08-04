@@ -235,7 +235,7 @@ window.__picotConfigCall = (op, params, options) => config.call(op, params, opti
 const contextUsage = setupContextUsage();
 const compactContextButton = document.getElementById("compact-context-btn");
 const filePreviewPanel = setupFilePreviewPanel();
-const _gitPanel = setupGitPanel({
+const gitPanel = setupGitPanel({
   runtime,
   getTarget: () => target,
   container: document.getElementById("git-panel"),
@@ -1238,33 +1238,17 @@ function setupFileBrowser() {
   });
 
   const diffSidebar = document.getElementById("diff-sidebar");
-  const diffList = document.getElementById("diff-list");
   const diffToggle = document.getElementById("diff-sidebar-toggle");
-  if (diffSidebar && diffList) {
-    const diffBrowser = new NativeFileBrowser(
-      diffList,
-      document.createElement("div"),
-      data,
-      target.workspaceId,
-      {
-        initialView: "diff",
-        showViewSwitch: false,
-        onFileSelect(entry) {
-          filePreviewPanel?.openFile(entry.relativePath, {
-            fileName: entry.name,
-            mode: "diff",
-          });
-        },
-      },
-    );
-    diffToggle?.addEventListener("click", () => {
-      const opened = toggleExclusiveSidePanel(diffSidebar, [sidebar]);
-      if (opened) diffBrowser.load().catch(showError);
-    });
-    document.getElementById("diff-sidebar-close")?.addEventListener("click", () => {
-      diffSidebar.classList.add("collapsed");
-    });
-  }
+  diffToggle?.addEventListener("click", () => {
+    // Header Git button: open the File/Git sidebar and switch to the Git tab,
+    // instead of the legacy diff-sidebar panel.
+    const fileSidebarEl = document.getElementById("file-sidebar");
+    const opened = toggleExclusiveSidePanel(fileSidebarEl, [diffSidebar]);
+    if (opened) gitPanel?.setTab("git");
+  });
+  document.getElementById("diff-sidebar-close")?.addEventListener("click", () => {
+    diffSidebar.classList.add("collapsed");
+  });
 }
 
 async function sendComposerInput({ altKey }) {
