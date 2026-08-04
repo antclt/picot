@@ -1,3 +1,4 @@
+import { createCompactCoordinator } from "../compact-coordinator.js";
 import { FilePreviewPanel } from "../file-preview-panel.js";
 import { initI18n, onLocaleChange, t } from "../i18n.js";
 import { reconcileSnapshotTarget } from "../session/bootstrap-target.js";
@@ -265,6 +266,39 @@ if (sessionUsageEl && sessionCostEl) {
 
 let sessionTotalCost = 0;
 
+// Hydrate the header status bar from authoritative get_session_stats.
+// The aggregate (IN/OUT/CACHE/cost) comes only from the server's tally, not
+// from client-side message walking — repeated mirror syncs and history
+// replay would otherwise inflate the totals.
+let statsHydrationGeneration = 0;
+function activeSessionFileForStatusBar() {
+  const sessions = sidebar?.sessions ?? [];
+  return (
+    sessions.find((s) => s.id === target.sessionId)?.filePath ??
+    sessions.find((s) => s.projectPath === store.cwd)?.filePath ??
+    null
+  );
+}
+async function hydrateHeaderSessionStats() {
+  if (!headerStatusBar) return;
+  const generation = ++statsHydrationGeneration;
+  try {
+    const response = await runtime.request({ type: "get_session_stats" }, target);
+    if (!response?.success || !response?.data) return;
+    if (generation !== statsHydrationGeneration) return;
+    if (!response.data.sessionFile) return;
+    const activeSessionFile = activeSessionFileForStatusBar();
+    if (activeSessionFile && response.data.sessionFile !== activeSessionFile) return;
+    headerStatusBar.hydrateSessionStats({
+      sessionFile: response.data.sessionFile,
+      tokens: response.data.tokens,
+      cost: response.data.cost,
+    });
+  } catch {
+    // Aggregate hydration is best-effort; the current-context path still works.
+  }
+}
+
 function computeTotalCostFromMessages(messages) {
   if (!Array.isArray(messages)) return 0;
   let total = 0;
@@ -287,20 +321,34 @@ function setSessionCost(cost) {
   sessionCostEl.title = `Session cost: $${cost.toFixed(6)}`;
 }
 
+// Compact coordinator: a single state machine that distinguishes the RPC
+// acknowledgement from Pi's actual compaction_start/compaction_end lifecycle
+// events. This prevents duplicate requests and ensures the UI only returns to
+// idle when compaction truly completes (or fails).
+const compactCoordinator = createCompactCoordinator({
+  send: async () => {
+    const frame = await runtime.request({ type: "compact" }, target, {
+      idempotencyKey: randomId(),
+    });
+    // runtime.request resolves with the full runtime_response frame; the pi
+    // compact result lives in frame.response. Extract it so the coordinator
+    // sees { success, data } rather than the transport envelope.
+    return frame?.response ?? { success: false };
+  },
+  onState: (state) => {
+    contextUsage.setCompacting(state === "requested" || state === "running");
+  },
+});
+
 async function requestManualCompaction() {
   if (
     !contextUsage.canCompact ||
     store.lifecycle === "working" ||
-    store.compaction?.status === "running"
+    store.compaction?.status === "running" ||
+    compactCoordinator.busy
   )
     return;
-  contextUsage.setCompacting(true);
-  try {
-    await runtime.request({ type: "compact" }, target, { idempotencyKey: randomId() });
-  } catch (error) {
-    contextUsage.setCompacting(false);
-    throw error;
-  }
+  await compactCoordinator.request();
 }
 
 compactContextButton?.addEventListener("click", () => requestManualCompaction().catch(showError));
@@ -360,10 +408,8 @@ const hydrateFromSnapshot = async (snapshot) => {
     currentModelContextWindow,
   );
   setSessionCost(computeTotalCostFromMessages(snapshot.state.messages ?? []));
-  // Hydrate header status bar from session stats if available
-  if (headerStatusBar) {
-    headerStatusBar.hydrateAggregate?.(snapshot.state.messages ?? []);
-  }
+  // Hydrate header status bar from authoritative get_session_stats
+  hydrateHeaderSessionStats();
   // Flush queued extension prompts after rendering is settled so inline cards
   // are not immediately destroyed by a subsequent renderHistory() clear.
   await extensionUi.flushForegroundQueue();
@@ -1316,16 +1362,27 @@ async function handleRuntimeEvent(event) {
       collapseCompletedTurn();
       break;
     case "compaction_start":
-      contextUsage.setCompacting(true);
+      compactCoordinator.started();
       break;
-    case "compaction_end":
-      contextUsage.setCompacting(false);
-      if (event.errorMessage) {
-        showError(new Error(event.errorMessage));
-      } else if (!event.aborted) {
+    case "compaction_end": {
+      const succeeded =
+        !event.errorMessage && !event.error && !event.aborted && event.result !== null;
+      compactCoordinator.ended({
+        success: succeeded,
+        error: event.errorMessage || event.error,
+      });
+      if (!succeeded) {
+        const error = event.errorMessage || event.error;
+        if (error) showError(new Error(error));
+      } else {
+        // Pi has replaced its context; the old aggregate is stale. Re-hydrate
+        // from the authoritative get_session_stats.
+        headerStatusBar?.sync?.({ currentUsage: null });
         await hydrateSnapshotOnce();
+        hydrateHeaderSessionStats();
       }
       break;
+    }
     case "message_start":
       if (event.message?.role === "user") {
         messageRenderer.renderUserMessage(event.message);
@@ -1347,7 +1404,7 @@ async function handleRuntimeEvent(event) {
         messageRenderer.finalizeStreamingMessage(streamingElement, event.message.usage ?? null);
         contextUsage.setUsage(event.message.usage ?? null, currentModelContextWindow);
         setSessionCost(sessionTotalCost + (event.message.usage?.cost?.total ?? 0));
-        headerStatusBar?.addLiveUsage?.(event.message.usage ?? null);
+        headerStatusBar?.applyLiveUsage?.(event.message.usage ?? null);
         streamingElement = null;
         convNav.notifyNewMessage();
       }
@@ -1438,6 +1495,8 @@ async function adoptTarget(nextTarget, { updateRoute = true } = {}) {
   }
   sessionInfo.refresh();
   headerStatusBar?.reset?.();
+  // Re-hydrate the aggregate stats for the new session.
+  hydrateHeaderSessionStats();
   setSessionCost(0);
   // Save the outgoing session's draft and restore the incoming session's
   if (previousTarget.sessionId && previousTarget.sessionId !== "pending-bootstrap") {
