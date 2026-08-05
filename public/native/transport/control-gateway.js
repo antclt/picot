@@ -81,8 +81,8 @@ export class HostControlGateway {
     return this.#request("pick_skill_source", { workspaceId });
   }
 
-  async scanSkillInstallSource(sourceId) {
-    return this.#request("skill_scan_install_source", { sourceId });
+  async scanSkillInstallSource(sourceId, workspaceId) {
+    return this.#request("skill_scan_install_source", { sourceId, workspaceId });
   }
 
   async installSkillLinks(request) {

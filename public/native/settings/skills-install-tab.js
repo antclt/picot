@@ -99,7 +99,7 @@ export function setupSkillsInstallTab({
         render();
         return;
       }
-      scan = await transport.scanSkillInstallSource(picked.sourceId);
+      scan = await transport.scanSkillInstallSource(picked.sourceId, getWorkspaceId?.());
       if (seq !== scanSeq) return; // superseded while scanning
       selection.clear();
       for (const item of scan.defaultSelection ?? []) selection.add(item.id);
@@ -136,6 +136,8 @@ export function setupSkillsInstallTab({
       scanRevision: scan.scanRevision,
       selection: selectedItems(),
     };
+    const workspaceId = getWorkspaceId?.();
+    if (workspaceId) pendingInstall.workspaceId = workspaceId;
     phase = "installing";
     error = null;
     render();

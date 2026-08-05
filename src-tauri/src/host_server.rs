@@ -1694,22 +1694,63 @@ async fn dispatch_host_operation(
             }))
         }
         "skill_scan_install_source" => {
+            // Resolve the opaque sourceId to its canonical path (owned by the
+            // requesting owner + workspace), then run discovery in Rust. The
+            // browser never sees the path — only the opaque scan tree.
             let source_id = frame
                 .get("sourceId")
                 .and_then(Value::as_str)
                 .filter(|value| !value.is_empty())
                 .ok_or(("invalid_source", "sourceId is required".into()))?
                 .to_owned();
-            let install_secret = state.install_secret.clone();
-            let result = tokio::task::spawn_blocking(move || {
-                crate::skill_source_registry::scan_source_static(&source_id, &install_secret)
+            let workspace_id = frame
+                .get("workspaceId")
+                .and_then(Value::as_str)
+                .filter(|value| !value.is_empty())
+                .ok_or((
+                    "invalid_workspace",
+                    "workspaceId is required to scan a skill source".into(),
+                ))?
+                .to_owned();
+            let workspace_root = state
+                .data
+                .workspace_root_path(&workspace_id)
+                .map_err(host_data_error)?;
+            let owner_id = crate::window_owner::OwnerId::from_client_id(client_id);
+            let window_label = client_id.to_owned();
+            let generation = 0u64;
+            let registry = state.skill_registry.clone();
+            let binding = tokio::task::spawn_blocking(move || {
+                registry.resolve(&source_id, &owner_id, &window_label, &workspace_root, generation)
             })
             .await
             .map_err(|error| ("host_operation_failed", error.to_string()))?
             .map_err(|message| ("skill_scan_failed", message))?;
-            Ok(
-                json!({ "type": "host_response", "requestId": request_id, "operation": "skill_scan_install_source", "scan": result }),
-            )
+            let agent_dir = dirs::home_dir()
+                .unwrap_or_else(std::env::temp_dir)
+                .join(".pi")
+                .join("agent");
+            let install_secret = state.install_secret.clone();
+            let context = crate::skill_install::InstallContext {
+                agent_dir,
+                cwd: binding.workspace_root.clone(),
+                install_secret,
+            };
+            let result = tokio::task::spawn_blocking(move || {
+                crate::skill_install::scan_install_source(&binding, &context)
+            })
+            .await
+            .map_err(|error| ("host_operation_failed", error.to_string()))?;
+            serde_json::to_value(&result)
+                .map(|scan| {
+                    json!({
+                        "type": "host_response",
+                        "requestId": request_id,
+                        "operation": "skill_scan_install_source",
+                        "scan": scan,
+                    })
+                })
+                .map_err(|error| ("host_operation_failed", error.to_string()))
         }
         "skill_install_links" => {
             let source_id = frame
@@ -1738,23 +1779,94 @@ async fn dispatch_host_operation(
                 .and_then(Value::as_array)
                 .filter(|items| !items.is_empty())
                 .ok_or(("invalid_selection", "selection array is required".into()))?;
+            let workspace_id = frame
+                .get("workspaceId")
+                .and_then(Value::as_str)
+                .filter(|value| !value.is_empty())
+                .ok_or((
+                    "invalid_workspace",
+                    "workspaceId is required to install skill links".into(),
+                ))?
+                .to_owned();
+            // Parse the selection into the typed shape the install module
+            // expects, rejecting malformed entries.
+            let parsed_selection: Vec<crate::skill_install::InstallCandidateSelection> = selection
+                .iter()
+                .map(|item| {
+                    let kind = item
+                        .get("kind")
+                        .and_then(Value::as_str)
+                        .filter(|k| *k == "group" || *k == "skill")
+                        .ok_or("invalid selection entry: kind")?;
+                    let id = item
+                        .get("id")
+                        .and_then(Value::as_str)
+                        .filter(|v| !v.is_empty())
+                        .ok_or("invalid selection entry: id")?;
+                    Ok(crate::skill_install::InstallCandidateSelection {
+                        kind: kind.to_string(),
+                        id: id.to_string(),
+                    })
+                })
+                .collect::<Result<_, String>>()
+                .map_err(|message| ("invalid_selection", message))?;
+            let workspace_root = state
+                .data
+                .workspace_root_path(&workspace_id)
+                .map_err(host_data_error)?;
+            let owner_id = crate::window_owner::OwnerId::from_client_id(client_id);
+            let window_label = client_id.to_owned();
+            let generation = 0u64;
+            let registry = state.skill_registry.clone();
+            let binding = tokio::task::spawn_blocking(move || {
+                registry.resolve(&source_id, &owner_id, &window_label, &workspace_root, generation)
+            })
+            .await
+            .map_err(|error| ("host_operation_failed", error.to_string()))?
+            .map_err(|message| ("skill_install_failed", message))?;
+            // On success, consume the sourceId so it cannot be reused — the
+            // design contract makes a successful install consume the handle.
+            let agent_dir = dirs::home_dir()
+                .unwrap_or_else(std::env::temp_dir)
+                .join(".pi")
+                .join("agent");
             let install_secret = state.install_secret.clone();
-            let owned_selection = selection.clone();
+            let context = crate::skill_install::InstallContext {
+                agent_dir,
+                cwd: binding.workspace_root.clone(),
+                install_secret,
+            };
+            let binding_clone = binding.clone();
+            let scope_clone = scope.clone();
+            let scan_revision_clone = scan_revision.clone();
             let result = tokio::task::spawn_blocking(move || {
-                crate::skill_source_registry::install_links_static(
-                    &source_id,
-                    &scope,
-                    &scan_revision,
-                    &owned_selection,
-                    &install_secret,
+                crate::skill_install::install_links(
+                    &binding_clone,
+                    &scope_clone,
+                    &scan_revision_clone,
+                    &parsed_selection,
+                    &context,
                 )
             })
             .await
             .map_err(|error| ("host_operation_failed", error.to_string()))?
             .map_err(|message| ("skill_install_failed", message))?;
-            Ok(
-                json!({ "type": "host_response", "requestId": request_id, "operation": "skill_install_links", "result": result }),
-            )
+            // Consume the handle after a successful install.
+            let registry = state.skill_registry.clone();
+            let _ = tokio::task::spawn_blocking(move || {
+                registry.consume(&binding.source_id, &binding.owner_id, binding.workspace_generation)
+            })
+            .await;
+            serde_json::to_value(&result)
+                .map(|value| {
+                    json!({
+                        "type": "host_response",
+                        "requestId": request_id,
+                        "operation": "skill_install_links",
+                        "result": value,
+                    })
+                })
+                .map_err(|error| ("host_operation_failed", error.to_string()))
         }
         "ephemeral_create" => {
             let kind = frame

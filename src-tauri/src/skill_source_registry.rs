@@ -216,6 +216,7 @@ fn canonical_dir(path: &Path) -> Result<PathBuf, String> {
 
 /// Placeholder: scans a local skill source directory for candidates.
 /// The full implementation delegates to the embedded Pi extension layer.
+#[allow(dead_code)]
 pub fn scan_source_static(
     _source_id: &str,
     _install_secret: &str,
@@ -224,6 +225,7 @@ pub fn scan_source_static(
 }
 
 /// Placeholder: installs skill links into Pi's settings.json.
+#[allow(dead_code)]
 pub fn install_links_static(
     _source_id: &str,
     _scope: &str,
