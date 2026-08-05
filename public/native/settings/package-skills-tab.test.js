@@ -233,9 +233,9 @@ describe("setupPackageSkillsTab — no mutation contract", () => {
     }
     // No mutation/toggle/install/delete/filter editor exists. Package
     // candidates render a disabled placeholder switch (enable/disable is not
-    // implemented); assert there is no ENABLED checkbox a user could act on.
+    // implemented); assert there is no ENABLED toggle a user could act on.
     const { container } = setup();
-    expect(container.querySelector('input[type="checkbox"]:not([disabled])')).toBeNull();
+    expect(container.querySelector("button.settings-toggle:not([disabled])")).toBeNull();
     expect(container.querySelector("button.package-skills-toggle")).toBeNull();
   });
 });

@@ -176,13 +176,15 @@ export function setupPackageSkillsTab({ container, rpcCommand }) {
   // visible "Enable all" affordance on package headers, but stays disabled
   // until enable/disable is implemented.
   function renderDisabledSwitch(ariaLabel) {
-    const input = el("input", {
-      type: "checkbox",
-      class: "skills-switch",
+    const button = el("button", {
+      type: "button",
+      class: "settings-toggle skills-switch",
+      "aria-checked": "false",
+      "aria-label": ariaLabel,
+      role: "switch",
       disabled: true,
-      aria: { label: ariaLabel },
     });
-    return input;
+    return button;
   }
 
   function renderEnableAllAffordance(card) {
