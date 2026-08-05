@@ -228,7 +228,6 @@ export class SessionSidebar {
     this.projectsCollapsed = readObject(STORAGE.projectsCollapsed);
     this.unread = new Set(readArray(STORAGE.unread));
     this.streaming = new Set();
-    this.autoTitleAttempted = new Set();
 
     this.searchQuery = "";
     this._searchResults = null;
@@ -972,18 +971,17 @@ export class SessionSidebar {
     this.contextMenu = null;
   }
 
-  // `target` lets callers generate a title for a session that isn't the
-  // foreground one (e.g. a background tab whose turn just settled) — the
-  // config RPC and rename both need to be routed to that session, not
-  // whichever one happens to be focused right now.
-  async autoGenerateTitle(sessionId, target) {
-    if (!sessionId || this.autoTitleAttempted.has(sessionId)) return;
+  setSessionName(sessionId, name) {
     const session = this.sessions.find((candidate) => candidate.id === sessionId);
     if (!session) return;
-    const currentName = String(session.name || "").trim();
-    if (currentName && currentName !== "Untitled" && currentName !== "New Session") return;
-    const ok = await this.#generateTitle(session, target ?? this.getTarget());
-    if (ok) this.autoTitleAttempted.add(sessionId);
+    session.name = name || "";
+    const title = session.name || session.firstMessage || "Empty session";
+    const titleEl = this.container.querySelector(
+      `.session-item[data-session-id="${cssEscape(sessionId)}"] .session-title`,
+    );
+    if (!titleEl) return;
+    titleEl.textContent = title;
+    titleEl.title = title;
   }
 
   async #generateTitle(session, target = this.getTarget()) {

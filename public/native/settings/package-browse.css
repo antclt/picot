@@ -479,7 +479,7 @@
 .pkg-manager-sidebar-row {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-0-5);
   width: 100%;
   padding: var(--space-1-5) var(--space-2);
   text-align: left;

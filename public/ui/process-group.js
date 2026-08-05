@@ -11,14 +11,14 @@ const CHEVRON_ICON =
  * process content (thinking blocks, tool cards) into `body`, then call
  * `setLabel` once the final counts are known.
  */
-export function createProcessDetailsGroup() {
+export function createProcessDetailsGroup({ expanded = false } = {}) {
   const wrapper = document.createElement("div");
-  wrapper.className = "process-details-group";
+  wrapper.className = `process-details-group${expanded ? " expanded" : ""}`;
 
   const toggle = document.createElement("button");
   toggle.type = "button";
   toggle.className = "process-details-toggle";
-  toggle.setAttribute("aria-expanded", "false");
+  toggle.setAttribute("aria-expanded", String(expanded));
 
   const chevron = document.createElement("span");
   chevron.className = "chevron";
@@ -46,6 +46,16 @@ export function createProcessDetailsGroup() {
       label.textContent = text;
     },
   };
+}
+
+/** Capture expanded groups by DOM order before history rendering replaces them. */
+export function captureExpandedProcessGroups(container) {
+  const expanded = new Set();
+  const groups = container.querySelectorAll(":scope > .process-details-group");
+  groups.forEach((group, index) => {
+    if (group.classList.contains("expanded")) expanded.add(index);
+  });
+  return expanded;
 }
 
 /** Build the localized "Process details · N steps · M tool calls" summary line. */

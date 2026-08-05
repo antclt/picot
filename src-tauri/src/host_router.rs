@@ -146,12 +146,6 @@ impl HostRouter {
 
         match frame_type {
             "terminal_command" => {
-                if client_kind != ClientKind::Desktop {
-                    return Err(RouterError::new(
-                        "remote_operation_forbidden",
-                        "Remote clients cannot use local terminals",
-                    ));
-                }
                 if frame.get("workspaceId").and_then(Value::as_str).is_none()
                     || !frame.get("payload").is_some_and(Value::is_object)
                 {
@@ -424,7 +418,7 @@ mod tests {
     }
 
     #[test]
-    fn routes_terminal_commands_only_for_desktop_clients() {
+    fn routes_terminal_commands_for_desktop_and_remote_clients() {
         let mut router = HostRouter::new();
         for (client_id, client_type) in [("window", "desktop"), ("phone", "remote")] {
             router
@@ -448,9 +442,9 @@ mod tests {
             router.route("window", &command),
             Ok(RoutedAction::Terminal { .. })
         ));
-        assert_eq!(
-            router.route("phone", &command).unwrap_err().code,
-            "remote_operation_forbidden"
-        );
+        assert!(matches!(
+            router.route("phone", &command),
+            Ok(RoutedAction::Terminal { .. })
+        ));
     }
 }

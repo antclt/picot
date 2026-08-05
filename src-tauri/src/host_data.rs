@@ -869,7 +869,10 @@ impl HostDataPlane {
                 if path.extension().and_then(|value| value.to_str()) != Some("jsonl") {
                     continue;
                 }
-                let Some(summary) = parse_session_summary(&path)? else {
+                // The sidebar normally populated this cache immediately before
+                // a session is selected. Reusing it avoids reparsing every
+                // JSONL file in every project on each session switch.
+                let Some(summary) = self.cached_session_summary(&path)? else {
                     continue;
                 };
                 if summary.id == session_id && same_dir(workspace, Path::new(&summary.project_path))
@@ -1603,11 +1606,6 @@ fn metadata_modified_at_ms(metadata: &std::fs::Metadata) -> u128 {
         .ok()
         .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
         .map_or(0, |duration| duration.as_millis())
-}
-
-fn parse_session_summary(path: &Path) -> Result<Option<SessionSummary>, HostDataError> {
-    let metadata = std::fs::metadata(path).map_err(|error| HostDataError::Io(error.to_string()))?;
-    parse_session_summary_with_metadata(path, metadata_modified_at_ms(&metadata))
 }
 
 fn parse_session_summary_with_metadata(

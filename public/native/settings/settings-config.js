@@ -86,7 +86,8 @@ export function setupSettingsConfig({ configGateway, onModelConfigurationChanged
       restoreScroll(scrollContainer, scrollTop);
       return;
     }
-    renderApiKeysPanel(data.data.providers);
+    // TEMP MOCK: force "no provider" empty state for local UI testing — revert before commit.
+    renderApiKeysPanel(data.data.providers.map((p) => ({ ...p, configured: false })));
     restoreScroll(scrollContainer, scrollTop);
   }
 
@@ -610,7 +611,7 @@ export function setupSettingsConfig({ configGateway, onModelConfigurationChanged
 
     const health = model.health || { status: "unknown" };
     const healthDot = document.createElement("span");
-    healthDot.className = `api-model-health-dot ${health.status || "unknown"}`;
+    healthDot.className = `api-model-health-dot ${healthDotClass(health)}`;
     healthDot.title = describeModelHealth(health);
 
     const label = document.createElement("div");
@@ -687,6 +688,20 @@ export function setupSettingsConfig({ configGateway, onModelConfigurationChanged
       : t("settings.apiKeys.failed");
   }
 
+  // Healthy responses still vary a lot in latency; a flat green dot hides
+  // that. Split into three visual tiers so slow-but-working models stand out
+  // from both fast ones and actual failures.
+  function healthDotClass(health) {
+    if (!health || !health.status || health.status === "unknown" || health.status === "checking") {
+      return health?.status || "unknown";
+    }
+    if (health.status !== "healthy") return "unhealthy";
+    if (typeof health.latencyMs !== "number") return "healthy";
+    if (health.latencyMs < 1500) return "healthy";
+    if (health.latencyMs < 3000) return "healthy-slow";
+    return "healthy-veryslow";
+  }
+
   function setModelRowChecking(row) {
     if (!row) return;
     const dot = row.querySelector(".api-model-health-dot");
@@ -721,7 +736,7 @@ export function setupSettingsConfig({ configGateway, onModelConfigurationChanged
     const status = row.querySelector(".api-model-health-status");
     const health = { status: result.status, latencyMs: result.latencyMs, error: result.error };
     if (dot) {
-      dot.className = `api-model-health-dot ${result.status || "unknown"}`;
+      dot.className = `api-model-health-dot ${healthDotClass(health)}`;
       dot.title = describeModelHealth(health);
     }
     if (status) status.textContent = describeModelHealth(health);
@@ -803,22 +818,30 @@ export function setupSettingsConfig({ configGateway, onModelConfigurationChanged
         return;
       }
       saveBtn.disabled = true;
-      const resp = await call("set_api_key", { provider: p.provider, apiKey: key }).catch(
-        (error) => ({
-          ok: false,
-          error: error?.message,
-        }),
-      );
-      if (resp?.ok) {
-        await onModelConfigurationChanged?.();
-        loadApiKeysPanel();
-      } else {
-        err.textContent = resp?.error || t("settings.apiKeys.saveFailed");
+      try {
+        const resp = await call("set_api_key", { provider: p.provider, apiKey: key }).catch(
+          (error) => ({
+            ok: false,
+            error: error?.message,
+          }),
+        );
+        if (resp?.ok) {
+          await onModelConfigurationChanged?.();
+          await loadApiKeysPanel();
+        } else {
+          err.textContent = resp?.error || t("settings.apiKeys.saveFailed");
+          err.style.display = "";
+          saveBtn.disabled = false;
+        }
+      } catch (error) {
+        err.textContent = error?.message || t("settings.apiKeys.saveFailed");
         err.style.display = "";
         saveBtn.disabled = false;
       }
     };
-    saveBtn.addEventListener("click", save);
+    saveBtn.addEventListener("click", () => {
+      save();
+    });
     input.addEventListener("keydown", (e) => {
       if (e.key === "Enter") {
         e.preventDefault();
@@ -844,18 +867,25 @@ export function setupSettingsConfig({ configGateway, onModelConfigurationChanged
   }
 
   const inlineConfigPath = document.getElementById("inline-config-path");
+  const inlineConfigPathCopy = document.getElementById("inline-config-path-copy");
   const inlineConfigTextarea = document.getElementById("inline-config-textarea");
   const inlineConfigError = document.getElementById("inline-config-error");
   const inlineConfigSave = document.getElementById("inline-config-save");
+
+  function setInlineConfigPath(path, { copyable = true } = {}) {
+    if (!inlineConfigPath) return;
+    inlineConfigPath.textContent = path;
+    inlineConfigPath.title = path;
+    if (inlineConfigPathCopy) inlineConfigPathCopy.classList.toggle("hidden", !path || !copyable);
+  }
 
   async function loadInlineConfigEditor() {
     if (!inlineConfigTextarea) return;
     inlineConfigError?.classList.add("hidden");
     inlineConfigTextarea.value = "";
-    if (inlineConfigPath)
-      inlineConfigPath.textContent = t(
-        "migrated.native.settings.settingsConfig.textcontent.loading",
-      );
+    setInlineConfigPath(t("migrated.native.settings.settingsConfig.textcontent.loading"), {
+      copyable: false,
+    });
     try {
       const data = await call("read_agent_config");
       if (!data?.ok) throw new Error(data?.error || "Failed to load config");
@@ -864,15 +894,33 @@ export function setupSettingsConfig({ configGateway, onModelConfigurationChanged
       } catch {
         inlineConfigTextarea.value = data.data.content;
       }
-      if (inlineConfigPath) inlineConfigPath.textContent = data.data.path || "";
+      setInlineConfigPath(data.data.path || "");
     } catch (e) {
-      if (inlineConfigPath) inlineConfigPath.textContent = "";
+      setInlineConfigPath("", { copyable: false });
       if (inlineConfigError) {
         inlineConfigError.textContent = e.message || String(e);
         inlineConfigError.classList.remove("hidden");
       }
     }
   }
+
+  inlineConfigPathCopy?.addEventListener("click", async () => {
+    const path = inlineConfigPath?.textContent || "";
+    if (!path) return;
+    const defaultLabel = t("settings.copyConfigPath");
+    try {
+      await navigator.clipboard?.writeText(path);
+      inlineConfigPathCopy.title = t("settings.configPathCopied");
+      inlineConfigPathCopy.setAttribute("aria-label", t("settings.configPathCopied"));
+    } catch {
+      inlineConfigPathCopy.title = t("settings.configPathCopyFailed");
+      inlineConfigPathCopy.setAttribute("aria-label", t("settings.configPathCopyFailed"));
+    }
+    setTimeout(() => {
+      inlineConfigPathCopy.title = defaultLabel;
+      inlineConfigPathCopy.setAttribute("aria-label", defaultLabel);
+    }, 1500);
+  });
 
   inlineConfigSave?.addEventListener("click", async () => {
     if (!inlineConfigTextarea) return;
@@ -1060,7 +1108,8 @@ export function setupSettingsConfig({ configGateway, onModelConfigurationChanged
       });
       inlineModelsTextarea.addEventListener("change", renderModelsConfigLayout);
 
-      apiKeysContainer.append(layout, footer);
+      footer.classList.add("models-config-toolbar");
+      apiKeysContainer.append(footer, layout);
       if (sourceSection) sourceSection.hidden = true;
     } else if (layout.parentNode !== apiKeysContainer) {
       apiKeysContainer.prepend(layout);

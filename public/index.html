@@ -1598,13 +1598,28 @@
                         <div class="settings-section">
                             <div class="settings-section-title" data-i18n="settings.agent">Agent</div>
                             <div class="settings-config-meta">
-                                <span class="settings-label"
+                                <span class="settings-label" data-i18n="settings.agentConfigFile"
                                     >Agent config file</span
                                 >
-                                <span
-                                    class="settings-static-value"
-                                    id="inline-config-path"
-                                ></span>
+                                <span class="settings-config-path-row">
+                                    <span
+                                        class="settings-static-value settings-config-path"
+                                        id="inline-config-path"
+                                        title=""
+                                    ></span>
+                                    <button
+                                        type="button"
+                                        class="ui-icon-button ui-icon-button--xs ui-icon-button--ghost settings-config-path-copy"
+                                        id="inline-config-path-copy"
+                                        title="Copy path" data-i18n-title="settings.copyConfigPath"
+                                        aria-label="Copy path" data-i18n-aria-label="settings.copyConfigPath"
+                                    >
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                            <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
+                                            <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
+                                        </svg>
+                                    </button>
+                                </span>
                             </div>
                             <textarea
                                 class="ui-textarea config-editor-textarea settings-config-textarea"

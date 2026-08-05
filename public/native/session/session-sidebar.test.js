@@ -81,6 +81,17 @@ describe("SessionSidebar.render", () => {
     expect(container.querySelector(".session-time")).toBeNull();
   });
 
+  it("updates a generated session name while the agent is still running", async () => {
+    const { sidebar, container } = makeSidebar([
+      { id: "s-active", timestamp: new Date().toISOString(), firstMessage: "Help me name this" },
+    ]);
+    await sidebar.load();
+
+    sidebar.setSessionName("s-active", "Generated in Parallel");
+
+    expect(container.querySelector(".session-title").textContent).toBe("Generated in Parallel");
+  });
+
   it("generates and persists a title for the active session", async () => {
     const { sidebar, container, config, runtime } = makeSidebar([
       { id: "s-active", timestamp: new Date().toISOString(), name: "Old title" },
@@ -110,23 +121,6 @@ describe("SessionSidebar.render", () => {
       ),
     );
     expect(item.querySelector(".session-title").textContent).toBe("Generated title");
-  });
-
-  it("automatically generates one title for an unnamed active session", async () => {
-    const { sidebar, config, runtime } = makeSidebar([
-      { id: "s-active", timestamp: new Date().toISOString(), firstMessage: "Help me debug it" },
-    ]);
-    await sidebar.load();
-
-    await sidebar.autoGenerateTitle("s-active");
-    await sidebar.autoGenerateTitle("s-active");
-
-    expect(config.call).toHaveBeenCalledTimes(1);
-    expect(runtime.request).toHaveBeenCalledWith(
-      { type: "set_session_name", name: "Generated title" },
-      expect.objectContaining({ sessionId: "s-active" }),
-      expect.objectContaining({ idempotencyKey: expect.any(String) }),
-    );
   });
 
   it("renames a historical session through Pi SessionManager config", async () => {
@@ -163,17 +157,6 @@ describe("SessionSidebar.render", () => {
     );
     expect(runtime.request).not.toHaveBeenCalled();
     expect(item.querySelector(".session-title").textContent).toBe("New title");
-  });
-
-  it("does not replace an existing custom title automatically", async () => {
-    const { sidebar, config } = makeSidebar([
-      { id: "s-active", timestamp: new Date().toISOString(), name: "Keep this title" },
-    ]);
-    await sidebar.load();
-
-    await sidebar.autoGenerateTitle("s-active");
-
-    expect(config.call).not.toHaveBeenCalled();
   });
 
   it("retries transient load failures before showing the manual retry error", async () => {
