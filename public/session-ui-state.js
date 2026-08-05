@@ -40,7 +40,6 @@ export class SessionUiStateStore {
       return null;
     }
   }
-
   loadDraft(sessionFile) {
     const key = normalizeSessionKey(sessionFile);
     return key ? this.drafts.get(key) || "" : "";

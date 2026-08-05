@@ -62,6 +62,11 @@ struct HostState {
     // skill_install_links currently uses install_links_static instead.
     #[allow(dead_code)]
     skill_registry: Arc<crate::skill_source_registry::SkillSourceRegistry>,
+    // Persistent per-session UI profile (provider/modelId/thinkingLevel).
+    // Keyed by session id from the frontend; survives across sessions, used
+    // to restore the composer's model + thinking level when a session is
+    // reopened. Optional so the constructor stays infallible in tests.
+    session_ui_profiles: Arc<crate::session_ui_profile_store::SessionUiProfileStore>,
     install_secret: String,
     app_handle: Option<tauri::AppHandle>,
 }
@@ -128,6 +133,15 @@ impl HostServer {
         let (git_events, _) = tokio::sync::broadcast::channel(256);
         let git_service = Arc::new(crate::git_service::GitService::new());
         let skill_registry = Arc::new(crate::skill_source_registry::SkillSourceRegistry::new());
+        // Persistent per-session UI profile (provider/modelId/thinkingLevel).
+        // Kept under the same config dir the terminal state store uses so a
+        // single ~/.config/picot holds all Picot-owned state.
+        let profile_dir = dirs::config_dir()
+            .unwrap_or_else(std::env::temp_dir)
+            .join("picot");
+        let session_ui_profiles = Arc::new(crate::session_ui_profile_store::SessionUiProfileStore::open(
+            profile_dir.join("session-ui-profiles.json"),
+        )?);
         let install_secret = {
             use base64::Engine;
             use rand::RngCore;
@@ -161,6 +175,7 @@ impl HostServer {
             git_service,
             git_events,
             skill_registry,
+            session_ui_profiles,
             install_secret,
             app_handle,
         });
@@ -1761,6 +1776,78 @@ async fn dispatch_host_operation(
                 "requestId": request_id,
                 "operation": "ephemeral_replace",
                 "descriptor": descriptor,
+            }))
+        }
+        "session_ui_profile_load" => {
+            // Look up the persisted provider/modelId/thinkingLevel for a
+            // session. The frontend identifies the session by its runtime
+            // sessionId (stable for the lifetime of the underlying file);
+            // we accept any non-empty string as a key — the store trims and
+            // bounds-checks internally.
+            let expected = frame
+                .get("expectedSessionId")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .ok_or((
+                    "invalid_session",
+                    "expectedSessionId is required".into(),
+                ))?
+                .to_owned();
+            let profiles = state.session_ui_profiles.clone();
+            let profile = tokio::task::spawn_blocking(move || profiles.load(&expected))
+                .await
+                .map_err(|error| ("host_operation_failed", error.to_string()))?
+                .map_err(|message| ("session_ui_profile_load_failed", message))?;
+            Ok(json!({
+                "type": "host_response",
+                "requestId": request_id,
+                "operation": "session_ui_profile_load",
+                "profile": profile,
+            }))
+        }
+        "session_ui_profile_save" => {
+            let expected = frame
+                .get("expectedSessionId")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .ok_or((
+                    "invalid_session",
+                    "expectedSessionId is required".into(),
+                ))?
+                .to_owned();
+            let provider = frame
+                .get("provider")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .ok_or(("invalid_provider", "provider is required".into()))?
+                .to_owned();
+            let model_id = frame
+                .get("modelId")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .ok_or(("invalid_model", "modelId is required".into()))?
+                .to_owned();
+            let thinking_level = frame
+                .get("thinkingLevel")
+                .and_then(Value::as_str)
+                .map(str::to_owned)
+                .unwrap_or_else(|| "off".to_string());
+            let profiles = state.session_ui_profiles.clone();
+            let saved = tokio::task::spawn_blocking(move || {
+                profiles.save(&expected, &provider, &model_id, &thinking_level)
+            })
+            .await
+            .map_err(|error| ("host_operation_failed", error.to_string()))?
+            .map_err(|message| ("session_ui_profile_save_failed", message))?;
+            Ok(json!({
+                "type": "host_response",
+                "requestId": request_id,
+                "operation": "session_ui_profile_save",
+                "profile": saved,
             }))
         }
         _ => Err((

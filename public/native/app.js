@@ -154,8 +154,60 @@ let currentThinkingLevel = "off";
 let currentModelId = null;
 
 // Session UI state: persists per-session model + thinking level and input draft
-// so switching between sessions restores the composer state.
-const sessionUiState = new SessionUiStateStore();
+// so switching between sessions restores the composer state. Profiles live in
+// the native host (SessionUiProfileStore) keyed by the runtime session id;
+// drafts stay window-memory because they are not worth serialising.
+const sessionUiState = new SessionUiStateStore({
+  profileClient: {
+    load: () => {
+      const sessionId = target.sessionId;
+      if (!sessionId || sessionId === "pending-bootstrap") return Promise.resolve(null);
+      return runtime.sendHostRequest
+        ? runtime
+            .sendHostRequest({
+              operation: "session_ui_profile_load",
+              expectedSessionId: sessionId,
+            })
+            .then((response) => response?.profile ?? null)
+        : fetch("/v2/host", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              operation: "session_ui_profile_load",
+              expectedSessionId: sessionId,
+            }),
+          })
+            .then(async (response) => {
+              if (!response.ok) return null;
+              const data = await response.json();
+              return data?.profile ?? null;
+            })
+            .catch(() => null);
+    },
+    save: (profile) => {
+      const sessionId = target.sessionId;
+      if (!sessionId || sessionId === "pending-bootstrap") return Promise.resolve(null);
+      const payload = {
+        operation: "session_ui_profile_save",
+        expectedSessionId: sessionId,
+        ...profile,
+      };
+      return runtime.sendHostRequest
+        ? runtime.sendHostRequest(payload).then((response) => response?.profile ?? profile)
+        : fetch("/v2/host", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(payload),
+          })
+            .then(async (response) => {
+              if (!response.ok) return profile;
+              const data = await response.json();
+              return data?.profile ?? profile;
+            })
+            .catch(() => profile);
+    },
+  },
+});
 let currentModelContextWindow = 0;
 let availableModels = [];
 let target = provisionalTargetFromRoute(route);
