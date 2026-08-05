@@ -280,7 +280,8 @@ fn validate_skill_name(name: &str) -> Vec<String> {
         .chars()
         .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-');
     if !valid {
-        errors.push("name contains invalid characters (must be lowercase a-z, 0-9, hyphens)".into());
+        errors
+            .push("name contains invalid characters (must be lowercase a-z, 0-9, hyphens)".into());
     }
     if name.starts_with('-') || name.ends_with('-') {
         errors.push("name must not start or end with a hyphen".into());
@@ -326,8 +327,7 @@ impl IgnorePattern {
             return true;
         }
         // Basename match (pattern with no '/' matches any path ending in it).
-        if !self.pattern.contains('/') && target.rsplit('/').next() == Some(self.pattern.as_str())
-        {
+        if !self.pattern.contains('/') && target.rsplit('/').next() == Some(self.pattern.as_str()) {
             return true;
         }
         // Suffix match for anchored patterns like "sub/dir".
@@ -456,7 +456,11 @@ fn push_skill(
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_default();
-    let description = frontmatter.description.unwrap_or_default().trim().to_string();
+    let description = frontmatter
+        .description
+        .unwrap_or_default()
+        .trim()
+        .to_string();
     let name = frontmatter.name.unwrap_or(parent_name);
     if description.is_empty() {
         diagnostics.push(SkillDiagnostic {
@@ -488,7 +492,10 @@ fn push_skill(
     });
 }
 
-fn discover_skills_from_root(root: &Path, diagnostics: &mut Vec<SkillDiagnostic>) -> Vec<DiscoveredSkill> {
+fn discover_skills_from_root(
+    root: &Path,
+    diagnostics: &mut Vec<SkillDiagnostic>,
+) -> Vec<DiscoveredSkill> {
     if !root.exists() {
         return Vec::new();
     }
@@ -542,10 +549,9 @@ fn discover_skills_from_root(root: &Path, diagnostics: &mut Vec<SkillDiagnostic>
                 Err(_) => continue,
             };
             let rel = to_posix(&full.strip_prefix(root).unwrap_or(&full).to_string_lossy());
-            if meta.is_dir()
-                && !matcher.ignores(&format!("{rel}/"), true) {
-                    collect(&full, root, matcher, diagnostics, out);
-                }
+            if meta.is_dir() && !matcher.ignores(&format!("{rel}/"), true) {
+                collect(&full, root, matcher, diagnostics, out);
+            }
         }
     }
     collect(root, root, &matcher, diagnostics, &mut out);
@@ -576,11 +582,18 @@ fn tree_path(skill: &DiscoveredSkill, source: &str) -> Vec<String> {
     if rel.is_empty() {
         Vec::new()
     } else {
-        rel.split('/').filter(|p| !p.is_empty()).map(String::from).collect()
+        rel.split('/')
+            .filter(|p| !p.is_empty())
+            .map(String::from)
+            .collect()
     }
 }
 
-fn build_revision(source: &str, skills: &[DiscoveredSkill], memberships: &BTreeSet<String>) -> String {
+fn build_revision(
+    source: &str,
+    skills: &[DiscoveredSkill],
+    memberships: &BTreeSet<String>,
+) -> String {
     let mut hash = Sha256::new();
     length_delimited_hash(&mut hash, "root");
     length_delimited_hash(&mut hash, source);
@@ -684,7 +697,14 @@ pub fn scan_install_source(
         if path_parts.len() == 1 {
             tree.push(SkillTreeNode::Group(group));
         } else {
-            let parent = ensure_group(&path_parts[..path_parts.len() - 1], groups, tree, key, source_id, revision);
+            let parent = ensure_group(
+                &path_parts[..path_parts.len() - 1],
+                groups,
+                tree,
+                key,
+                source_id,
+                revision,
+            );
             if let Some(SkillTreeNode::Group(parent_node)) = tree
                 .iter_mut()
                 .find(|n| matches!(n, SkillTreeNode::Group(g) if g.id == parent.id))
@@ -697,7 +717,7 @@ pub fn scan_install_source(
 
     skills.sort_by(|a, b| a.canonical_path.cmp(&b.canonical_path));
     let _ = std::mem::take(&mut skills); // reborrow sorted
-    // Re-collect sorted (the drain consumed them for the lifetime dance).
+                                         // Re-collect sorted (the drain consumed them for the lifetime dance).
     let mut sorted_skills = discover_skills_from_root(&canonical_source, &mut Vec::new());
     sorted_skills.sort_by(|a, b| a.canonical_path.cmp(&b.canonical_path));
     for skill in &sorted_skills {
@@ -721,12 +741,21 @@ pub fn scan_install_source(
         if parts.is_empty() {
             tree.push(SkillTreeNode::Candidate(candidate));
         } else {
-            let _group = ensure_group(&parts, &mut groups, &mut tree, &context.install_secret, &binding.source_id, &revision);
+            let _group = ensure_group(
+                &parts,
+                &mut groups,
+                &mut tree,
+                &context.install_secret,
+                &binding.source_id,
+                &revision,
+            );
             if let Some(SkillTreeNode::Group(group_node)) = tree
                 .iter_mut()
                 .find(|n| matches!(n, SkillTreeNode::Group(g) if g.id == _group.id))
             {
-                group_node.children.push(SkillTreeNode::Candidate(candidate));
+                group_node
+                    .children
+                    .push(SkillTreeNode::Candidate(candidate));
             }
         }
         default_selection.push(InstallCandidateSelection {
@@ -789,7 +818,9 @@ fn with_settings_lock<R>(settings_path: &Path, critical: impl FnOnce() -> R) -> 
                     Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
                     Err(error) => return Err(format!("Settings lock stat failed: {error}")),
                 }
-                std::thread::sleep(std::time::Duration::from_millis(SETTINGS_LOCK_RETRY_DELAY_MS));
+                std::thread::sleep(std::time::Duration::from_millis(
+                    SETTINGS_LOCK_RETRY_DELAY_MS,
+                ));
             }
             Err(error) => return Err(format!("Cannot acquire settings lock: {error}")),
         }
@@ -840,7 +871,10 @@ fn migrate_legacy_skills(settings: &mut Map<String, Value>) {
             settings.insert("enableSkillCommands".into(), enable.clone());
         }
     }
-    if let Some(custom) = skills_obj.get("customDirectories").and_then(|v| v.as_array()) {
+    if let Some(custom) = skills_obj
+        .get("customDirectories")
+        .and_then(|v| v.as_array())
+    {
         let dirs: Vec<Value> = custom
             .iter()
             .filter(|v| v.as_str().is_some())
@@ -859,7 +893,10 @@ fn migrate_legacy_skills(settings: &mut Map<String, Value>) {
 fn write_settings_atomically(settings_path: &Path, next: &Value) -> Result<(), String> {
     let dir = settings_path.parent().unwrap_or(Path::new(""));
     fs::create_dir_all(dir).map_err(|e| format!("Cannot create settings dir: {e}"))?;
-    let tmp = dir.join(format!(".picot-skills-{}.tmp", uuid::Uuid::new_v4().simple()));
+    let tmp = dir.join(format!(
+        ".picot-skills-{}.tmp",
+        uuid::Uuid::new_v4().simple()
+    ));
     let pretty = serde_json::to_string_pretty(next).map_err(|e| e.to_string())?;
     if let Err(error) = fs::write(&tmp, format!("{pretty}\n")) {
         let _ = fs::remove_file(&tmp);
@@ -896,20 +933,13 @@ fn existing_canonical_path(entry: &str, base_dir: &Path) -> PathBuf {
 fn flatten_candidates(node: &SkillTreeNode) -> Vec<&SkillInstallCandidate> {
     match node {
         SkillTreeNode::Candidate(c) => vec![c],
-        SkillTreeNode::Group(g) => g
-            .children
-            .iter()
-            .flat_map(flatten_candidates)
-            .collect(),
+        SkillTreeNode::Group(g) => g.children.iter().flat_map(flatten_candidates).collect(),
     }
 }
 
 fn node_by_id(tree: &[SkillTreeNode]) -> HashMap<String, &SkillTreeNode> {
     let mut nodes = HashMap::new();
-    fn visit<'a>(
-        items: &'a [SkillTreeNode],
-        nodes: &mut HashMap<String, &'a SkillTreeNode>,
-    ) {
+    fn visit<'a>(items: &'a [SkillTreeNode], nodes: &mut HashMap<String, &'a SkillTreeNode>) {
         for item in items {
             match item {
                 SkillTreeNode::Group(g) => {
@@ -1004,7 +1034,12 @@ fn build_install_preview(
             skipped.push(path.to_string_lossy().into_owned());
             continue;
         }
-        let encoded = to_posix(&path.strip_prefix(base_dir).unwrap_or(path).to_string_lossy());
+        let encoded = to_posix(
+            &path
+                .strip_prefix(base_dir)
+                .unwrap_or(path)
+                .to_string_lossy(),
+        );
         if encoded.is_empty() || encoded.starts_with("../") || encoded == ".." {
             additions.push(if encoded.is_empty() {
                 path.to_string_lossy().into_owned()
@@ -1134,7 +1169,11 @@ mod tests {
         let tmp = tempdir().unwrap();
         write_skill(&tmp.path().join("group-a/skill-one"), "skill-one", "First");
         write_skill(&tmp.path().join("group-a/skill-two"), "skill-two", "Second");
-        write_skill(&tmp.path().join("group-b/skill-three"), "skill-three", "Third");
+        write_skill(
+            &tmp.path().join("group-b/skill-three"),
+            "skill-three",
+            "Third",
+        );
         let (binding, context) = binding(tmp.path(), "secret");
         let scan = scan_install_source(&binding, &context);
         // Top level: two groups.
@@ -1158,7 +1197,11 @@ mod tests {
         let tmp = tempdir().unwrap();
         let skill_dir = tmp.path().join("no-desc");
         fs::create_dir_all(&skill_dir).unwrap();
-        fs::write(skill_dir.join("SKILL.md"), "---\nname: no-desc\n---\nbody\n").unwrap();
+        fs::write(
+            skill_dir.join("SKILL.md"),
+            "---\nname: no-desc\n---\nbody\n",
+        )
+        .unwrap();
         let (binding, context) = binding(tmp.path(), "secret");
         let scan = scan_install_source(&binding, &context);
         assert!(scan.tree.is_empty(), "no candidate should surface");
@@ -1207,10 +1250,20 @@ mod tests {
         // First scan to get a valid revision.
         let scan = scan_install_source(&binding, &context);
         let selection = scan.default_selection.clone();
-        let result = install_links(&binding, "global", &scan.scan_revision, &selection, &context)
-            .expect("install should succeed");
+        let result = install_links(
+            &binding,
+            "global",
+            &scan.scan_revision,
+            &selection,
+            &context,
+        )
+        .expect("install should succeed");
         // Already configured → skipped, nothing added.
-        assert!(result.added_entries.is_empty(), "{:?}", result.added_entries);
+        assert!(
+            result.added_entries.is_empty(),
+            "{:?}",
+            result.added_entries
+        );
         assert!(!result.skipped_entries.is_empty());
         assert!(!result.settings_changed);
     }
