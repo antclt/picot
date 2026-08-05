@@ -29,8 +29,14 @@ describe("Picot project trust bridge", () => {
     await expect(setup(choice)()).resolves.toEqual(expected);
   });
 
-  it("defaults to untrusted when UI is unavailable or cancelled", async () => {
+  it("defers to pi when UI is unavailable (preserves saved trust), and stays untrusted when cancelled", async () => {
+    // No UI: we cannot ask, so defer to pi's trust resolution (trust.json /
+    // defaultProjectTrust) rather than hard-forcing untrusted. This keeps
+    // projects the user already trusted (e.g. from the web UI) trusted.
+    await expect(setup("Trust once", false)()).resolves.toEqual({ trusted: "undecided" });
+    // With a UI, an explicit cancel still maps to untrusted.
+    await expect(setup("Cancel workspace opening")()).resolves.toEqual({ trusted: "no" });
+    // With a UI and no choice (dismissed), stays untrusted.
     await expect(setup(undefined)()).resolves.toEqual({ trusted: "no" });
-    await expect(setup("Trust once", false)()).resolves.toEqual({ trusted: "no" });
   });
 });
