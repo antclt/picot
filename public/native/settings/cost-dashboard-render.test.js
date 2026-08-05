@@ -449,10 +449,58 @@ describe("cost dashboard renderers", () => {
     const now = new Date();
     const daysAgo = (n) => new Date(now.getTime() - n * 24 * 60 * 60 * 1000).toISOString();
     const sessions = [
-      { title: "Today", model: "gpt-4.1", time: daysAgo(0), totalCost: 1, totalTokens: 100, inputTokens: 60, outputTokens: 40, toolCalls: 0, userMessages: 1, workspace: "/w", toolCostByName: {} },
-      { title: "10d ago", model: "gpt-4.1", time: daysAgo(10), totalCost: 2, totalTokens: 200, inputTokens: 120, outputTokens: 80, toolCalls: 0, userMessages: 1, workspace: "/w", toolCostByName: {} },
-      { title: "20d ago", model: "claude", time: daysAgo(20), totalCost: 4, totalTokens: 400, inputTokens: 240, outputTokens: 160, toolCalls: 0, userMessages: 1, workspace: "/w", toolCostByName: {} },
-      { title: "50d ago", model: "claude", time: daysAgo(50), totalCost: 8, totalTokens: 800, inputTokens: 480, outputTokens: 320, toolCalls: 0, userMessages: 1, workspace: "/w", toolCostByName: {} },
+      {
+        title: "Today",
+        model: "gpt-4.1",
+        time: daysAgo(0),
+        totalCost: 1,
+        totalTokens: 100,
+        inputTokens: 60,
+        outputTokens: 40,
+        toolCalls: 0,
+        userMessages: 1,
+        workspace: "/w",
+        toolCostByName: {},
+      },
+      {
+        title: "10d ago",
+        model: "gpt-4.1",
+        time: daysAgo(10),
+        totalCost: 2,
+        totalTokens: 200,
+        inputTokens: 120,
+        outputTokens: 80,
+        toolCalls: 0,
+        userMessages: 1,
+        workspace: "/w",
+        toolCostByName: {},
+      },
+      {
+        title: "20d ago",
+        model: "claude",
+        time: daysAgo(20),
+        totalCost: 4,
+        totalTokens: 400,
+        inputTokens: 240,
+        outputTokens: 160,
+        toolCalls: 0,
+        userMessages: 1,
+        workspace: "/w",
+        toolCostByName: {},
+      },
+      {
+        title: "50d ago",
+        model: "claude",
+        time: daysAgo(50),
+        totalCost: 8,
+        totalTokens: 800,
+        inputTokens: 480,
+        outputTokens: 320,
+        toolCalls: 0,
+        userMessages: 1,
+        workspace: "/w",
+        toolCostByName: {},
+      },
     ];
 
     const container = document.createElement("div");
@@ -471,23 +519,26 @@ describe("cost dashboard renderers", () => {
     expect(chip30d.getAttribute("aria-pressed")).toBe("true");
     expect(chip7d.classList.contains("is-active")).toBe(false);
     expect(chip7d.getAttribute("aria-pressed")).toBe("false");
-    expect(container.querySelectorAll("#cost-dash-sessions-panel .cost-dash-sessions-table tbody tr"))
-      .toHaveLength(3);
+    expect(
+      container.querySelectorAll("#cost-dash-sessions-panel .cost-dash-sessions-table tbody tr"),
+    ).toHaveLength(3);
 
     // Switch to 7d → only today's session survives.
     chip7d.click();
     expect(chip7d.classList.contains("is-active")).toBe(true);
     expect(chip30d.classList.contains("is-active")).toBe(false);
-    expect(container.querySelectorAll("#cost-dash-sessions-panel .cost-dash-sessions-table tbody tr"))
-      .toHaveLength(1);
+    expect(
+      container.querySelectorAll("#cost-dash-sessions-panel .cost-dash-sessions-table tbody tr"),
+    ).toHaveLength(1);
     // Persistence: the selected range is saved for the next mount.
     expect(localStorage.getItem("pi-studio-cost-filters")).toContain('"range":"7d"');
 
     // Switch to 90d → all four sessions are in range.
     chip90d.click();
     expect(chip90d.classList.contains("is-active")).toBe(true);
-    expect(container.querySelectorAll("#cost-dash-sessions-panel .cost-dash-sessions-table tbody tr"))
-      .toHaveLength(4);
+    expect(
+      container.querySelectorAll("#cost-dash-sessions-panel .cost-dash-sessions-table tbody tr"),
+    ).toHaveLength(4);
 
     vi.useRealTimers();
   });

@@ -250,13 +250,14 @@ describe("chat-settings-panel Telegram connect flow", () => {
     const panel = await mountPanel({
       read_chat_config: () => ({ ok: true, data: { content: "{}" } }),
       telegram_doctor: () => ({ ok: true, data: { report: { summary: "ready", checks: [] } } }),
-      telegram_validate: () => validateDeferred.promise.then(() => ({
-        ok: true,
-        data: {
-          bot: { username: "picot_test_bot", webUrl: "https://t.me/picot_test_bot" },
-          afterUpdateId: 42,
-        },
-      })),
+      telegram_validate: () =>
+        validateDeferred.promise.then(() => ({
+          ok: true,
+          data: {
+            bot: { username: "picot_test_bot", webUrl: "https://t.me/picot_test_bot" },
+            afterUpdateId: 42,
+          },
+        })),
       telegram_bind: () =>
         bindDeferred.promise.then(() => ({
           ok: true,
@@ -310,9 +311,7 @@ describe("chat-settings-panel Telegram connect flow", () => {
     expect(panel.querySelector("[data-status]").textContent).toContain("Telegram connected");
     // Scope to the accounts list — the doctor card also uses .chat-account-name.
     const accountCard = panel.querySelector("[data-accounts-list] .chat-account-card");
-    expect(accountCard.querySelector(".chat-account-name").textContent).toBe(
-      "@picot_test_bot",
-    );
+    expect(accountCard.querySelector(".chat-account-name").textContent).toBe("@picot_test_bot");
     expect(accountCard.querySelector(".chat-account-detail").textContent).toContain("dr_lin");
     expect(updatedListener).toHaveBeenCalledTimes(1);
     // Bind instructions cleared after success.
