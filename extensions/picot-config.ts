@@ -34,6 +34,7 @@ import {
   type SkillScope,
   type SkillTarget,
 } from "./skill-inventory";
+import { buildPackageSkillInventory } from "./package-skill-inventory";
 
 type ModelHealthStatus = "unknown" | "healthy" | "unhealthy";
 
@@ -777,6 +778,14 @@ export async function handlePicotConfig(
         await removeStoredApiKey(registry, provider);
         if (registry) await registry.refresh();
         return { ok: true, data: { provider } };
+      }
+
+      case "list_package_skill_inventory": {
+        const scope = parseSkillScope(params.scope);
+        return {
+          ok: true,
+          data: buildPackageSkillInventory(skillInventoryOptions(scope, ctx)),
+        };
       }
 
       case "list_skill_inventory": {
