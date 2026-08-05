@@ -30,10 +30,11 @@ function collectCandidates(nodes) {
   );
 }
 
-/** @param {{container:HTMLElement, transport:{pickSkillSource:()=>Promise<object|null>,scanSkillInstallSource:(sourceId:string)=>Promise<object>,installSkillLinks:(request:object)=>Promise<object>}, isProjectTrusted:()=>boolean, showSuccess?:(message:string)=>void, showError?:(message:string)=>void}} opts */
+/** @param {{container:HTMLElement, transport:{pickSkillSource:(workspaceId?:string|null)=>Promise<object|null>,scanSkillInstallSource:(sourceId:string)=>Promise<object>,installSkillLinks:(request:object)=>Promise<object>}, getWorkspaceId?:()=>string|null, isProjectTrusted:()=>boolean, showSuccess?:(message:string)=>void, showError?:(message:string)=>void}} opts */
 export function setupSkillsInstallTab({
   container,
   transport,
+  getWorkspaceId,
   isProjectTrusted,
   showSuccess,
   showError,
@@ -91,7 +92,7 @@ export function setupSkillsInstallTab({
     error = null;
     render();
     try {
-      const picked = await transport.pickSkillSource();
+      const picked = await transport.pickSkillSource(getWorkspaceId?.());
       if (seq !== scanSeq) return; // superseded by a newer chooseSource
       if (!picked?.sourceId) {
         phase = "idle";

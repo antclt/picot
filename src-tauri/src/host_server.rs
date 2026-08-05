@@ -58,9 +58,9 @@ struct HostState {
     terminal_events: tokio::sync::broadcast::Sender<(OwnerId, Value)>,
     git_service: Arc<crate::git_service::GitService>,
     git_events: tokio::sync::broadcast::Sender<(String, Value)>,
-    // Reserved for future host commands that need the registry instance;
-    // skill_install_links currently uses install_links_static instead.
-    #[allow(dead_code)]
+    // Skill source handle registry: pick_skill_source registers an opaque
+    // sourceId for a chosen directory; scan/install resolve it by owner before
+    // forwarding to the pi process. Paths never leave the host.
     skill_registry: Arc<crate::skill_source_registry::SkillSourceRegistry>,
     // Persistent per-session UI profile (provider/modelId/thinkingLevel).
     // Keyed by session id from the frontend; survives across sessions, used
@@ -1338,11 +1338,21 @@ async fn dispatch(
             )),
         },
         RoutedAction::Host {
+            client_id,
             request_id,
             operation,
             frame,
             ..
-        } => dispatch_host_operation(state, &request_id, &operation, &frame).await,
+        } => {
+            dispatch_host_operation(
+                state,
+                &client_id,
+                &request_id,
+                &operation,
+                &frame,
+            )
+            .await
+        }
         RoutedAction::Data {
             request_id, frame, ..
         } => match frame.get("operation").and_then(Value::as_str) {
@@ -1486,6 +1496,7 @@ async fn dispatch(
 
 async fn dispatch_host_operation(
     state: &HostState,
+    client_id: &str,
     request_id: &str,
     operation: &str,
     frame: &Value,
@@ -1613,29 +1624,74 @@ async fn dispatch_host_operation(
             }))
         }
         "pick_skill_source" => {
+            // Picker must never expose the chosen path to the browser. The host
+            // opens the OS folder dialog, canonicalizes the selection, and
+            // registers an opaque sourceId in SkillSourceRegistry keyed by the
+            // requesting owner + workspace. Only the sourceId crosses the wire.
             let Some(app) = state.app_handle.clone() else {
                 return Err((
                     "host_operation_failed",
                     "Folder picker is not available".into(),
                 ));
             };
+            let workspace_id = frame
+                .get("workspaceId")
+                .and_then(Value::as_str)
+                .filter(|value| !value.is_empty())
+                .ok_or((
+                    "invalid_workspace",
+                    "workspaceId is required to pick a skill source".into(),
+                ))?
+                .to_owned();
+            let workspace_root = state
+                .data
+                .workspace_root_path(&workspace_id)
+                .map_err(host_data_error)?;
+            let owner_id = crate::window_owner::OwnerId::from_client_id(client_id);
+            // The native host runs one Pi process per workspace on a single
+            // host port, so workspace_port is the host port itself and
+            // workspace_generation stays 0 (no multi-generation swap in the
+            // native architecture). The window_label is the client_id — it
+            // only needs to be unique per desktop window.
+            let port = state.port;
+            let generation = 0u64;
+            let window_label = client_id.to_owned();
             let path =
                 tokio::task::spawn_blocking(move || app.dialog().file().blocking_pick_folder())
                     .await
                     .map_err(|error| ("host_operation_failed", error.to_string()))?;
             let Some(picked) = path else {
-                return Ok(
-                    json!({ "type": "host_response", "requestId": request_id, "operation": "pick_skill_source", "sourceId": null }),
-                );
+                return Ok(json!({
+                    "type": "host_response",
+                    "requestId": request_id,
+                    "operation": "pick_skill_source",
+                    "sourceId": null,
+                }));
             };
-            let source_id = picked
+            let canonical_path = picked
                 .as_path()
                 .ok_or(("invalid_path", "Selected folder is not a local path".into()))?
-                .to_string_lossy()
-                .into_owned();
-            Ok(
-                json!({ "type": "host_response", "requestId": request_id, "operation": "pick_skill_source", "sourceId": source_id }),
-            )
+                .to_path_buf();
+            let registry = state.skill_registry.clone();
+            let source_id = tokio::task::spawn_blocking(move || {
+                registry.issue(
+                    owner_id,
+                    window_label,
+                    workspace_root,
+                    port,
+                    generation,
+                    canonical_path,
+                )
+            })
+            .await
+            .map_err(|error| ("host_operation_failed", error.to_string()))?
+            .map_err(|message| ("pick_skill_source_failed", message))?;
+            Ok(json!({
+                "type": "host_response",
+                "requestId": request_id,
+                "operation": "pick_skill_source",
+                "sourceId": source_id,
+            }))
         }
         "skill_scan_install_source" => {
             let source_id = frame

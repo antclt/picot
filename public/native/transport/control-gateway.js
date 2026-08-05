@@ -77,8 +77,8 @@ export class HostControlGateway {
 
   // Skills install flow: pick a local source directory, scan it for skill
   // candidates, then link selected candidates into Pi's settings.json.
-  async pickSkillSource() {
-    return this.#request("pick_skill_source");
+  async pickSkillSource(workspaceId) {
+    return this.#request("pick_skill_source", { workspaceId });
   }
 
   async scanSkillInstallSource(sourceId) {

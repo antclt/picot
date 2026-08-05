@@ -83,6 +83,7 @@ export function setupSettingsPanel({
     ? setupSkillsInstallTab({
         container: document.getElementById("settings-install-skills"),
         transport: control,
+        getWorkspaceId,
         isProjectTrusted: () => true,
         showSuccess: showSkillsSuccess,
         showError: showSkillsError,
