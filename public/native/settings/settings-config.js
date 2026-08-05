@@ -86,8 +86,7 @@ export function setupSettingsConfig({ configGateway, onModelConfigurationChanged
       restoreScroll(scrollContainer, scrollTop);
       return;
     }
-    // TEMP MOCK: force "no provider" empty state for local UI testing — revert before commit.
-    renderApiKeysPanel(data.data.providers.map((p) => ({ ...p, configured: false })));
+    renderApiKeysPanel(data.data.providers);
     restoreScroll(scrollContainer, scrollTop);
   }
 
@@ -1030,15 +1029,19 @@ export function setupSettingsConfig({ configGateway, onModelConfigurationChanged
     if (
       !selectedModelsConfigItem ||
       (selectedModelsConfigItem.type === "auth" &&
-        !configuredProviders.some(
-          (provider) => provider.provider === selectedModelsConfigItem.provider,
-        )) ||
+        (providerNames.includes(selectedModelsConfigItem.provider) ||
+          !configuredProviders.some(
+            (provider) => provider.provider === selectedModelsConfigItem.provider,
+          ))) ||
       (selectedModelsConfigItem.type !== "auth" && !providers[selectedModelsConfigItem.provider]) ||
       (selectedModelsConfigItem.type === "model" &&
         !providers[selectedModelsConfigItem.provider].models?.[selectedModelsConfigItem.index])
     ) {
-      selectedModelsConfigItem = configuredProviders[0]
-        ? { type: "auth", provider: configuredProviders[0].provider }
+      const defaultAuthProvider = configuredProviders.find(
+        (provider) => !providerNames.includes(provider.provider),
+      );
+      selectedModelsConfigItem = defaultAuthProvider
+        ? { type: "auth", provider: defaultAuthProvider.provider }
         : providerNames[0]
           ? { type: "provider", provider: providerNames[0] }
           : null;
@@ -1133,6 +1136,7 @@ export function setupSettingsConfig({ configGateway, onModelConfigurationChanged
     };
 
     for (const provider of configuredProviders) {
+      if (providerNames.includes(provider.provider)) continue;
       const item = document.createElement("button");
       item.type = "button";
       item.className = "models-provider-item models-auth-provider-item";
@@ -1240,6 +1244,26 @@ export function setupSettingsConfig({ configGateway, onModelConfigurationChanged
       }
     } else if (selectedModelsConfigItem.type === "provider") {
       renderProviderConfigForm(main, parsed, selectedModelsConfigItem.provider, update);
+      const catalogProvider = catalogProviders.find(
+        (candidate) => candidate.provider === selectedModelsConfigItem.provider,
+      );
+      const catalogModels = catalogProvider ? getProviderModels(catalogProvider) : [];
+      if (catalogProvider?.configured && catalogModels.length > 0) {
+        const healthSection = document.createElement("div");
+        healthSection.className = "provider-manager-health";
+        const checkHealthBtn = document.createElement("button");
+        checkHealthBtn.type = "button";
+        checkHealthBtn.className = "api-model-check-visible";
+        checkHealthBtn.textContent = t("settings.apiKeys.checkHealth");
+        checkHealthBtn.disabled = !catalogModels.some(
+          (model) => model.visible !== false && model.available,
+        );
+        checkHealthBtn.addEventListener("click", () => checkModelHealth(catalogProvider.provider));
+        healthSection.appendChild(checkHealthBtn);
+        const modelList = buildModelList(catalogProvider);
+        if (modelList) healthSection.appendChild(modelList);
+        main.appendChild(healthSection);
+      }
     } else {
       renderModelConfigForm(
         main,

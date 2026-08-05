@@ -175,6 +175,7 @@ let store = createSessionStore(target);
 let navigationGeneration = 0;
 let commandCatalog = buildCommandCatalog({});
 let streamingElement = null;
+let liveProcessGroup = null;
 let sidebar = null;
 const sessionInfo = setupSessionInfo({
   toggle: document.getElementById("session-info-toggle"),
@@ -336,6 +337,7 @@ const hydrateFromSnapshot = async (snapshot) => {
   const pi = snapshot.state.pi ?? {};
   setStatus(pi.isStreaming ? "Working…" : "Connected");
   contextUsage.setWorking(Boolean(pi.isStreaming));
+  if (pi.isStreaming) showLiveProcessIndicator();
   contextUsage.setCompacting(snapshot.state.compaction?.status === "running");
   updateComposerModel(pi.model ?? null);
   updateComposerThinking(pi.thinkingLevel ?? "off");
@@ -1269,7 +1271,8 @@ async function handleRuntimeEvent(event) {
       setStatus("Connected");
       contextUsage.setWorking(false);
       sidebar?.setStreaming(target.sessionId, false);
-      collapseCompletedTurn();
+      hideLiveProcessIndicator();
+      collapseCompletedTurn({ markDone: true });
       break;
     case "session_info_changed":
       sidebar?.setSessionName(target.sessionId, event.name);
@@ -1290,11 +1293,13 @@ async function handleRuntimeEvent(event) {
         messageRenderer.renderUserMessage(event.message);
         upsertActiveSessionFromUserMessage(event.message);
       } else if (event.message?.role === "assistant") {
+        showLiveProcessIndicator();
         streamingElement = messageRenderer.renderAssistantMessage(event.message, true);
       }
       break;
     case "message_update":
       if (!streamingElement) {
+        showLiveProcessIndicator();
         streamingElement = messageRenderer.renderAssistantMessage(event.message, true);
       } else {
         messageRenderer.updateStreamingMessage(streamingElement, event.message?.content ?? []);
@@ -1384,6 +1389,7 @@ async function adoptTarget(nextTarget, { updateRoute = true } = {}) {
   renderQueuedMessages(queuedMessages, store.queue);
   todoMirrorPanel.clear();
   streamingElement = null;
+  liveProcessGroup = null;
   adapter.subscribeTarget(target);
   sidebar?.setActive(target.sessionId);
   sessionInfo.refresh();
@@ -1440,6 +1446,7 @@ function renderHistory(messages) {
   const expandedProcessGroups = captureExpandedProcessGroups(messagesElement);
   messageRenderer.clear();
   toolRenderer.clear();
+  liveProcessGroup = null;
   if (messages.length === 0) {
     messageRenderer.renderWelcome();
     applyActiveSearchHighlight({ scrollToFirst: false });
@@ -1583,7 +1590,7 @@ function renderHistory(messages) {
  * (`agent_settled`) — while streaming, everything still renders flat and
  * expanded so the user can watch it happen live, matching pi-web.
  */
-function collapseCompletedTurn() {
+function collapseCompletedTurn({ markDone = false } = {}) {
   const children = Array.from(messagesElement.children);
   let lastUserIdx = -1;
   for (let i = children.length - 1; i >= 0; i--) {
@@ -1628,6 +1635,29 @@ function collapseCompletedTurn() {
 
   if (group.body.children.length === 0) return; // nothing to fold away; wrapper was never inserted
   group.setLabel(summarizeProcessGroup(stepCount, toolCallCount));
+  if (markDone) group.markDone();
+}
+
+/**
+ * Show a pulsing "Process details" placeholder right where the assistant's
+ * response is about to appear, so there's an immediate live-thinking cue
+ * (matching the shimmer other chat UIs use) even before
+ * `collapseCompletedTurn` builds the real group. Idempotent — only the first
+ * call in a turn actually inserts anything, so the indicator's position
+ * (right before the assistant's first message) never moves mid-turn.
+ */
+function showLiveProcessIndicator() {
+  if (liveProcessGroup) return;
+  liveProcessGroup = createProcessDetailsGroup();
+  liveProcessGroup.setLabel(t("messages.thinking"));
+  liveProcessGroup.setStreaming(true);
+  messagesElement.appendChild(liveProcessGroup.wrapper);
+  messageRenderer.forceScrollToBottom();
+}
+
+function hideLiveProcessIndicator() {
+  liveProcessGroup?.wrapper.remove();
+  liveProcessGroup = null;
 }
 
 function applyActiveSearchHighlight({ scrollToFirst = true } = {}) {

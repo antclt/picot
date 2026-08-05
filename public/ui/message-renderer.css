@@ -371,6 +371,49 @@ body.hide-thinking .thinking-block {
   gap: var(--space-1);
 }
 
+/* Streaming: pulse the label like a "thinking" indicator */
+.process-details-group.streaming .process-details-toggle .chevron {
+  display: none;
+}
+
+.process-details-group.streaming .process-details-label {
+  animation: processDetailsPulse 1.6s ease-in-out infinite;
+}
+
+@keyframes processDetailsPulse {
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* Done: green checkmark next to the label, hidden otherwise */
+.process-details-check {
+  display: none;
+  align-items: center;
+  color: var(--success, #22c55e);
+  flex-shrink: 0;
+}
+
+.process-details-group.done .process-details-check {
+  display: inline-flex;
+  animation: processDetailsCheckIn 0.25s ease;
+}
+
+@keyframes processDetailsCheckIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
 /* ═══════════════════════════════════════════════════════
 
 /* ═══════════════════════════════════════════════════════

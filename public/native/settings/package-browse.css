@@ -441,8 +441,8 @@
 .pkg-manager-shell {
   display: flex;
   gap: var(--space-3);
-  min-height: 220px;
-  max-height: 420px;
+  min-height: 420px;
+  max-height: 840px;
   margin-bottom: var(--space-2);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
@@ -651,7 +651,6 @@
 .pkg-manager-scope {
   flex-shrink: 0;
   padding: var(--space-0-5) var(--space-1);
-  font-size: var(--font-size-xs);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--text-dim);

@@ -257,7 +257,6 @@
 }
 
 .settings-static-value {
-  max-width: 56%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

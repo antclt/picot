@@ -99,6 +99,7 @@
   display: grid;
   grid-template-columns: minmax(180px, 28%) minmax(0, 1fr);
   min-height: 420px;
+  border: 1px solid var(--border);
   overflow: hidden;
   background: var(--bg-glass);
   border-radius: var(--radius-md);
@@ -203,6 +204,7 @@
 }
 
 .models-config-main {
+  padding: var(--space-2);
   min-width: 0;
   color: var(--text-primary);
 }
@@ -223,6 +225,19 @@
 }
 
 .provider-manager-model-list {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.provider-manager-health {
+  margin-top: var(--space-5);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border);
+  display: grid;
+  gap: var(--space-3);
+}
+
+.provider-manager-health .api-model-list {
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
 }
@@ -859,6 +874,11 @@
     flex-direction: column;
     align-items: flex-start;
     gap: var(--space-1-5);
+  }
+
+  .settings-config-path-row {
+    align-self: stretch;
+    justify-content: flex-end;
   }
 
   .settings-config-textarea {
