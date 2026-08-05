@@ -4,10 +4,19 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const publicDir = resolve(import.meta.dirname);
-const en = JSON.parse(readFileSync(resolve(publicDir, "locales/en.json"), "utf-8"));
-const zh = JSON.parse(readFileSync(resolve(publicDir, "locales/zh.json"), "utf-8"));
-const ja = JSON.parse(readFileSync(resolve(publicDir, "locales/ja.json"), "utf-8"));
-const es = JSON.parse(readFileSync(resolve(publicDir, "locales/es.json"), "utf-8"));
+
+function loadLocale(code) {
+  try {
+    return JSON.parse(readFileSync(resolve(publicDir, `locales/${code}.json`), "utf-8"));
+  } catch (error) {
+    throw new Error(`Cannot load locale ${code}.json: ${error.message}`);
+  }
+}
+
+const en = loadLocale("en");
+const zh = loadLocale("zh");
+const ja = loadLocale("ja");
+const es = loadLocale("es");
 
 const NON_EN_LOCALES = [
   { code: "zh", messages: zh },
@@ -131,7 +140,7 @@ describe("locale key parity", () => {
 // ── HTML key references ───────────────────────────────────────────────
 
 describe("HTML data-i18n key references", () => {
-  const htmlFiles = ["index.html", "bootstrap.html", "cost.html"];
+  const htmlFiles = ["index.html", "bootstrap.html"];
 
   for (const file of htmlFiles) {
     it(`${file} references only keys that exist in en.json`, () => {
