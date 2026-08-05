@@ -18,6 +18,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { createAgentSession, ModelRuntime, SessionManager } from "@earendil-works/pi-coding-agent";
+import { buildPackageSkillInventory } from "./package-skill-inventory";
 import {
   buildTelegramDmConfig,
   buildTelegramDoctorReport,
@@ -34,7 +35,6 @@ import {
   type SkillScope,
   type SkillTarget,
 } from "./skill-inventory";
-import { buildPackageSkillInventory } from "./package-skill-inventory";
 
 type ModelHealthStatus = "unknown" | "healthy" | "unhealthy";
 
@@ -429,14 +429,27 @@ function readConfigFile(filePath: string, fallback: string): { content: string; 
 
 function writeConfigFile(filePath: string, content: unknown): void {
   if (typeof content !== "string") throw new Error("content must be a string");
-  JSON.parse(content); // validate before writing
+  try {
+    JSON.parse(content); // validate before writing
+  } catch (error) {
+    throw new Error(
+      `content is not valid JSON: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(filePath, content, "utf8");
 }
 
 function readSettingsObject(filePath: string): Record<string, unknown> {
   if (!fs.existsSync(filePath)) return {};
-  const parsed = JSON.parse(fs.readFileSync(filePath, "utf8"));
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(fs.readFileSync(filePath, "utf8"));
+  } catch (error) {
+    throw new Error(
+      `Pi settings at ${filePath} must be valid JSON: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
     throw new Error(`Pi settings must be a JSON object: ${filePath}`);
   }
@@ -636,7 +649,12 @@ function telegramBotPayload(identity: TelegramBotIdentity) {
 
 function readAuthConfig(): Record<string, unknown> {
   if (!fs.existsSync(AUTH_CONFIG_PATH)) return {};
-  const parsed = JSON.parse(fs.readFileSync(AUTH_CONFIG_PATH, "utf8"));
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(fs.readFileSync(AUTH_CONFIG_PATH, "utf8"));
+  } catch {
+    return {};
+  }
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
   return parsed as Record<string, unknown>;
 }
