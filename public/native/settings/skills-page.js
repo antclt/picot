@@ -248,16 +248,25 @@ export function setupSkillsPage({ container, rpcCommand, showSuccess, showError 
   }
 
   function renderSwitch(checked, disabled, indeterminate, ariaLabel, onChange) {
-    const input = el("input", {
-      type: "checkbox",
-      class: "skills-switch",
-      aria: { label: ariaLabel },
+    // Reuse the General/Providers tab's sliding toggle (`.settings-toggle`)
+    // instead of a raw checkbox so Skills matches the rest of Settings.
+    // Group rows may be in a mixed state (some children on, some off); we
+    // expose that via a `data-mixed` attribute and a dedicated CSS variant.
+    const button = el("button", {
+      type: "button",
+      class: `settings-toggle skills-switch${indeterminate ? " mixed" : ""}`,
+      "aria-checked": String(Boolean(checked)),
+      "aria-label": ariaLabel,
+      role: "switch",
     });
-    input.checked = Boolean(checked);
-    input.indeterminate = Boolean(indeterminate);
-    if (disabled) input.disabled = true;
-    input.addEventListener("change", () => onChange(input.checked));
-    return input;
+    if (checked) button.classList.add("on");
+    if (indeterminate) button.dataset.mixed = "true";
+    if (disabled) button.disabled = true;
+    button.addEventListener("click", () => {
+      if (button.disabled) return;
+      onChange(!button.classList.contains("on"));
+    });
+    return button;
   }
 
   function stateBadge(state, enabled, total) {

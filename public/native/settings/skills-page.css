@@ -180,9 +180,23 @@
   color: var(--text-primary);
 }
 
+/* Skills enable/disable toggle reuses the General/Providers sliding
+   `.settings-toggle` switch (button + .on class). The `.skills-switch`
+   class adds a mixed variant for group rows whose children are partially
+   enabled — the knob sits in the middle with a muted track. */
 .skills-switch {
   flex: 0 0 auto;
-  accent-color: var(--accent);
+}
+.skills-switch.mixed {
+  background: var(--bg-glass-strong);
+}
+.skills-switch.mixed::after {
+  left: 11px;
+  background: var(--text-dim);
+}
+.skills-switch:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .skills-skill-description {
