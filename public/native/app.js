@@ -500,8 +500,6 @@ const settingsPanel = setupSettingsPanel({
 });
 setupAppUpdater({ settingsPanel });
 setupNewSessionButton({ data, workspaceId: target.workspaceId, onError: showError });
-||||||| parent of b8f2770 (feat: make workspace-path pill open the Files panel (P1-17/18))
-setupNewSessionButton({ data, workspaceId: target.workspaceId, onError: showError });
 
 // SPA session creation: when workspace-actions creates a new session via the
 // HTTP API, it emits picot:session-created with the new target. Adopt it
