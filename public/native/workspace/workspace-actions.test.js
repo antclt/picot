@@ -68,7 +68,7 @@ describe("workspace actions", () => {
     const eventSpy = vi.fn();
     window.addEventListener("picot:session-created", eventSpy);
 
-    setupNewSessionButton({ data: {}, workspaceId: "workspace-a" });
+    setupNewSessionButton({ workspaceId: "workspace-a" });
     document.getElementById("new-session-btn").click();
 
     await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
@@ -90,11 +90,8 @@ describe("workspace actions", () => {
     `;
     const invoke = vi.fn().mockResolvedValue(undefined);
     installTauriInvoke(invoke);
-    const data = {
-      workspaceInfo: vi.fn().mockResolvedValue({ info: { path: "/tmp/picot" } }),
-    };
 
-    setupNewSessionButton({ data, workspaceId: "workspace-a" });
+    setupNewSessionButton({ workspaceId: "workspace-a" });
     document
       .getElementById("composer")
       .dispatchEvent(new KeyboardEvent("keydown", { key: "n", metaKey: true, bubbles: true }));

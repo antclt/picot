@@ -119,16 +119,13 @@ export async function openSessionInProjectViaHost(session) {
  * LAN/remote clients it falls back to the host HTTP API (`POST /v2/new-session`).
  *
  * @param {object} options
- * @param {import('./data-gateway.js').HostDataGateway} options.data
  * @param {string} options.workspaceId
  * @param {(error: Error) => void} [options.onError]
  * @returns {boolean}
  */
-export function setupNewSessionButton({ data, workspaceId, onError } = {}) {
+export function setupNewSessionButton({ workspaceId, onError } = {}) {
   const button = document.getElementById("new-session-btn");
   if (!button) return false;
-
-  const invoke = resolveInvoke();
 
   button.addEventListener("click", async () => {
     button.disabled = true;

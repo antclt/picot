@@ -325,7 +325,7 @@
 .focus-session-row {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-0-5);
   padding: var(--space-1-5) var(--space-2);
   border: 0;
   border-radius: var(--radius-sm);
@@ -392,7 +392,7 @@
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
-  padding: 2px;
+  padding: var(--space-0-5);
   border-radius: var(--radius-sm);
   opacity: 0;
   transition:
@@ -525,6 +525,7 @@
   line-height: 1;
 }
 
+/* biome-ignore lint/style/noDescendingSpecificity: unrelated selectors — .workspace-focus-btn and .sidebar-update-pill.loading target different elements with no cascade overlap, so the lower-specificity .workspace-focus-btn svg still applies. */
 .workspace-focus-btn svg {
   display: block;
 }
