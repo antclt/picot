@@ -302,6 +302,24 @@ const gitPanel = setupGitPanel({
   onError: showError,
 });
 
+// Owned by setupFileBrowser() once the sidebar DOM is ready. Kept at module
+// scope so openFilesPanel() (the workspace-path pill handler) can refresh it
+// after expanding the sidebar — mirroring the toolbar button's behavior.
+let fileBrowser = null;
+
+/**
+ * Expand the file sidebar, switch to the Files tab, and (when newly opened)
+ * load the workspace root. Wired to both the #file-sidebar-toggle button and
+ * the #workspace-indicator path pill.
+ */
+function openFilesPanel() {
+  const sidebar = document.getElementById("file-sidebar");
+  if (!sidebar) return;
+  const opened = toggleExclusiveSidePanel(sidebar, [document.getElementById("diff-sidebar")]);
+  gitPanel?.setTab("files");
+  if (opened && fileBrowser?.currentPath === null) fileBrowser.load().catch(showError);
+}
+
 // ── Side Chat ────────────────────────────────────────────────────────
 // Side Chat spawns a dedicated pi --mode rpc process bound to the same
 // workspace cwd. It uses the same runtime protocol as the main session —
@@ -727,7 +745,7 @@ const settingsPanel = setupSettingsPanel({
   notify: notifications.notify,
 });
 setupAppUpdater({ settingsPanel });
-setupNewSessionButton({ data, workspaceId: target.workspaceId, onError: showError });
+setupNewSessionButton({ workspaceId: target.workspaceId, onError: showError });
 
 // SPA session creation: when workspace-actions creates a new session via the
 // HTTP API, it emits picot:session-created with the new target. Adopt it
@@ -817,7 +835,11 @@ try {
       .catch((error) => {
         console.warn("[Native] Failed to load slash commands:", error);
       }),
-    setupProjectHeader({ data, workspaceId: target.workspaceId }).catch((error) => {
+    setupProjectHeader({
+      data,
+      workspaceId: target.workspaceId,
+      onOpenFiles: openFilesPanel,
+    }).catch((error) => {
       console.warn("[Native] Failed to load project header info:", error);
     }),
     Promise.resolve(
@@ -1418,7 +1440,7 @@ function setupFileBrowser() {
   const upBtn = document.getElementById("file-sidebar-up");
   if (upBtn) upBtn.disabled = true; // disabled until we've navigated into a subdir
 
-  const browser = new NativeFileBrowser(fileList, pathEl, data, target.workspaceId, {
+  fileBrowser = new NativeFileBrowser(fileList, pathEl, data, target.workspaceId, {
     showViewSwitch: false,
     onFileOpen(entry) {
       openWorkspaceRelativePath(entry.relativePath).catch(showError);
@@ -1438,7 +1460,7 @@ function setupFileBrowser() {
 
   document.getElementById("file-sidebar-finder")?.addEventListener("click", async () => {
     try {
-      const current = browser.currentPath ?? "";
+      const current = fileBrowser.currentPath ?? "";
       await openWorkspaceRelativePath(current);
     } catch (error) {
       showError(error);
@@ -1446,10 +1468,7 @@ function setupFileBrowser() {
   });
 
   const toggleBtn = document.getElementById("file-sidebar-toggle");
-  toggleBtn?.addEventListener("click", () => {
-    const opened = toggleExclusiveSidePanel(sidebar, [document.getElementById("diff-sidebar")]);
-    if (opened && browser.currentPath === null) browser.load().catch(showError);
-  });
+  toggleBtn?.addEventListener("click", openFilesPanel);
   if (toggleBtn) {
     const shortcutLabel = isMacOS() ? "⌘B" : "Ctrl+B";
     const baseTitle = toggleBtn.title || "Files";
@@ -1458,15 +1477,14 @@ function setupFileBrowser() {
   document.addEventListener("keydown", (event) => {
     if (!isFilePanelShortcut(event)) return;
     event.preventDefault();
-    const opened = toggleExclusiveSidePanel(sidebar, [document.getElementById("diff-sidebar")]);
-    if (opened && browser.currentPath === null) browser.load().catch(showError);
+    openFilesPanel();
   });
   document.getElementById("file-sidebar-close")?.addEventListener("click", () => {
     sidebar.classList.add("collapsed");
   });
   upBtn?.addEventListener("click", () => {
-    const parent = browser.getParentPath();
-    if (parent !== null) browser.load(parent).catch(showError);
+    const parent = fileBrowser.getParentPath();
+    if (parent !== null) fileBrowser.load(parent).catch(showError);
   });
 
   const diffSidebar = document.getElementById("diff-sidebar");
