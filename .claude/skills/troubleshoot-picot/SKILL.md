@@ -57,7 +57,7 @@ Picot 用 `tauri-plugin-log`（见 `src-tauri/src/main.rs`），默认双路输�
 
 - **打包后的 .app（生产环境）** — 日志文件在系统日志目录（bundle id `works.earendil.picot`）：
   - macOS: `~/Library/Logs/works.earendil.picot/Picot.log`
-  - Windows: `%APPDATA%\works.earendil.picot\logs\Picot.log`
+  - Windows: `%LOCALAPPDATA%\works.earendil.picot\logs\Picot.log`
   - Linux: `$XDG_DATA_HOME/works.earendil.picot/logs/Picot.log`（一般是 `~/.local/share/...`）
 
   快速查看最近报错：
