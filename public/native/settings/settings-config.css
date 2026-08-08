@@ -685,7 +685,6 @@
   max-height: 2400px;
   overflow: hidden;
   opacity: 1;
-  margin: 0 12px;
   transition:
     max-height 0.2s var(--ease),
     opacity 0.16s var(--ease),
