@@ -17,8 +17,12 @@
 
 /* Header — translucent toolbar */
 .header {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  /* Flex, not grid: header-left is a fixed/shrink-0 block sized to its own
+     content (sidebar toggle + session title) and must never be squeezed.
+     header-right absorbs all remaining space and scrolls internally when its
+     pills (model dropdown, thinking tag, git branch, token usage, ...) don't
+     fit — the header bar itself no longer scrolls as a whole. */
+  display: flex;
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-1) var(--space-3);
@@ -33,13 +37,7 @@
   left: 0;
   right: 0;
   z-index: 10;
-  overflow-x: auto;
-  overflow-y: hidden;
-  scrollbar-width: none;
-}
-
-.header::-webkit-scrollbar {
-  display: none;
+  overflow: hidden;
 }
 
 .header::before {
@@ -52,15 +50,24 @@
   align-items: center;
   gap: var(--space-2);
   -webkit-app-region: no-drag;
-  min-width: 0;
 }
 
 .header-left {
-  overflow: hidden;
+  flex: 0 0 auto;
+  min-width: max-content;
 }
 
 .header-right {
+  flex: 1 1 auto;
+  min-width: 0;
   justify-content: flex-end;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+
+.header-right::-webkit-scrollbar {
+  display: none;
 }
 
 .sidebar-toggle,

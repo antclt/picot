@@ -950,6 +950,7 @@ export function setupSettingsConfig({ configGateway, onModelConfigurationChanged
   const inlineModelsInsertExample = document.getElementById("inline-models-insert-example");
   const modelsConfigDocsLink = document.getElementById("models-config-docs-link");
   let selectedModelsConfigItem = null;
+  let newModelDraft = null;
 
   const MODELS_JSON_EXAMPLE = `{
   "providers": {
@@ -1037,6 +1038,7 @@ export function setupSettingsConfig({ configGateway, onModelConfigurationChanged
       (selectedModelsConfigItem.type === "model" &&
         !providers[selectedModelsConfigItem.provider].models?.[selectedModelsConfigItem.index])
     ) {
+      newModelDraft = null;
       const defaultAuthProvider = configuredProviders.find(
         (provider) => !providerNames.includes(provider.provider),
       );
@@ -1165,7 +1167,6 @@ export function setupSettingsConfig({ configGateway, onModelConfigurationChanged
     }
 
     for (const id of providerNames) {
-      const provider = providers[id];
       const item = document.createElement("button");
       item.type = "button";
       item.className = "models-provider-item";
@@ -1180,41 +1181,6 @@ export function setupSettingsConfig({ configGateway, onModelConfigurationChanged
         renderModelsConfigLayout();
       });
       list.appendChild(item);
-
-      for (const [index, model] of (provider.models || []).entries()) {
-        const modelItem = document.createElement("button");
-        modelItem.type = "button";
-        modelItem.className = "models-model-item";
-        modelItem.classList.toggle(
-          "selected",
-          selectedModelsConfigItem?.type === "model" &&
-            selectedModelsConfigItem.provider === id &&
-            selectedModelsConfigItem.index === index,
-        );
-        modelItem.textContent = model.id || "New model";
-        modelItem.addEventListener("click", () => {
-          selectedModelsConfigItem = { type: "model", provider: id, index };
-          renderModelsConfigLayout();
-        });
-        list.appendChild(modelItem);
-      }
-
-      const addModel = document.createElement("button");
-      addModel.type = "button";
-      addModel.className = "models-model-add";
-      addModel.textContent = "+ Model";
-      addModel.addEventListener("click", () => {
-        provider.models ||= [];
-        provider.models.push({ id: "new-model" });
-        selectedModelsConfigItem = {
-          type: "model",
-          provider: id,
-          index: provider.models.length - 1,
-        };
-        sync();
-        renderModelsConfigLayout();
-      });
-      list.appendChild(addModel);
     }
     sidebar.appendChild(list);
 
@@ -1244,6 +1210,7 @@ export function setupSettingsConfig({ configGateway, onModelConfigurationChanged
       }
     } else if (selectedModelsConfigItem.type === "provider") {
       renderProviderConfigForm(main, parsed, selectedModelsConfigItem.provider, update);
+      renderModelsListSection(main, parsed, selectedModelsConfigItem.provider, update);
       const catalogProvider = catalogProviders.find(
         (candidate) => candidate.provider === selectedModelsConfigItem.provider,
       );
@@ -1264,6 +1231,8 @@ export function setupSettingsConfig({ configGateway, onModelConfigurationChanged
         if (modelList) healthSection.appendChild(modelList);
         main.appendChild(healthSection);
       }
+    } else if (selectedModelsConfigItem.type === "model-new") {
+      renderNewModelForm(main, parsed, selectedModelsConfigItem.provider, update);
     } else {
       renderModelConfigForm(
         main,
@@ -1382,6 +1351,148 @@ export function setupSettingsConfig({ configGateway, onModelConfigurationChanged
       ),
       createModelsField("API", api),
     );
+    main.append(header, form);
+  }
+
+  function renderModelsListSection(main, config, providerName, update) {
+    const provider = config.providers[providerName];
+    const models = provider.models || [];
+    const section = document.createElement("div");
+    section.className = "models-config-models-section";
+    const header = document.createElement("div");
+    header.className = "models-config-models-header";
+    const title = document.createElement("h3");
+    title.textContent = "Models";
+    const addBtn = document.createElement("button");
+    addBtn.type = "button";
+    addBtn.className = "models-model-add";
+    addBtn.textContent = "+ Add model";
+    addBtn.addEventListener("click", () => {
+      newModelDraft = { id: "" };
+      selectedModelsConfigItem = { type: "model-new", provider: providerName };
+      renderModelsConfigLayout();
+    });
+    header.append(title, addBtn);
+    section.appendChild(header);
+    if (models.length === 0) {
+      const empty = document.createElement("p");
+      empty.className = "models-config-models-empty";
+      empty.textContent = "No models configured yet.";
+      section.appendChild(empty);
+    } else {
+      const list = document.createElement("ul");
+      list.className = "models-config-models-list";
+      for (const [index, model] of models.entries()) {
+        const row = document.createElement("li");
+        row.className = "models-config-models-row";
+        const label = document.createElement("span");
+        label.textContent = model.id || "(unnamed model)";
+        const actions = document.createElement("div");
+        actions.className = "models-config-models-row-actions";
+        const editBtn = document.createElement("button");
+        editBtn.type = "button";
+        editBtn.className = "ui-button ui-button--sm";
+        editBtn.textContent = "Edit";
+        editBtn.addEventListener("click", () => {
+          selectedModelsConfigItem = { type: "model", provider: providerName, index };
+          renderModelsConfigLayout();
+        });
+        const deleteBtn = document.createElement("button");
+        deleteBtn.type = "button";
+        deleteBtn.className = "ui-button ui-button--danger ui-button--sm";
+        deleteBtn.textContent = "Delete";
+        deleteBtn.addEventListener("click", () => {
+          if (!confirm(`Delete model “${model.id || "(unnamed model)"}”?`)) return;
+          update(() => {
+            provider.models.splice(index, 1);
+          });
+        });
+        actions.append(editBtn, deleteBtn);
+        row.append(label, actions);
+        list.appendChild(row);
+      }
+      section.appendChild(list);
+    }
+    main.appendChild(section);
+  }
+
+  function renderNewModelForm(main, config, providerName, update) {
+    if (!newModelDraft) newModelDraft = { id: "" };
+    const draft = newModelDraft;
+    const header = document.createElement("div");
+    header.className = "models-config-detail-header";
+    const eyebrow = document.createElement("span");
+    eyebrow.className = "models-config-eyebrow";
+    eyebrow.textContent = "New model";
+    const cancel = document.createElement("button");
+    cancel.type = "button";
+    cancel.className = "ui-button ui-button--sm";
+    cancel.textContent = "Cancel";
+    cancel.addEventListener("click", () => {
+      newModelDraft = null;
+      selectedModelsConfigItem = { type: "provider", provider: providerName };
+      renderModelsConfigLayout();
+    });
+    header.append(eyebrow, cancel);
+
+    const form = document.createElement("div");
+    form.className = "models-config-form";
+    const bindings = [
+      ["Model ID", "id", "model-name"],
+      ["Display name", "name", "Optional"],
+      ["Context window", "contextWindow", "Optional"],
+      ["Max tokens", "maxTokens", "Optional"],
+    ];
+    for (const [label, key, placeholder] of bindings) {
+      const input = createModelsInput(draft[key], placeholder);
+      if (key === "contextWindow" || key === "maxTokens") input.type = "number";
+      input.addEventListener("input", () => {
+        const value = input.value.trim();
+        draft[key] = value
+          ? key === "contextWindow" || key === "maxTokens"
+            ? Number(value)
+            : value
+          : undefined;
+      });
+      form.appendChild(createModelsField(label, input));
+    }
+    const reasoning = document.createElement("input");
+    reasoning.type = "checkbox";
+    reasoning.checked = draft.reasoning === true;
+    reasoning.addEventListener("change", () => {
+      draft.reasoning = reasoning.checked || undefined;
+    });
+    form.appendChild(createModelsField("Reasoning model", reasoning));
+
+    const error = document.createElement("p");
+    error.className = "models-config-form-error";
+    error.hidden = true;
+
+    const save = document.createElement("button");
+    save.type = "button";
+    save.className = "ui-button ui-button--primary";
+    save.textContent = "Add model";
+    save.addEventListener("click", () => {
+      const id = (draft.id || "").trim();
+      if (!id) {
+        error.textContent = "Model ID is required.";
+        error.hidden = false;
+        return;
+      }
+      update(() => {
+        const provider = config.providers[providerName];
+        provider.models ||= [];
+        provider.models.push({ ...draft, id });
+        newModelDraft = null;
+        selectedModelsConfigItem = {
+          type: "model",
+          provider: providerName,
+          index: provider.models.length - 1,
+        };
+      });
+    });
+    form.appendChild(error);
+    form.appendChild(save);
     main.append(header, form);
   }
 
