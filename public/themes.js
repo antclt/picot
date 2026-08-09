@@ -122,9 +122,7 @@ function notifyThemeChange(themeId) {
       console.warn("[themes] theme-change listener error:", e);
     }
   }
-  window.dispatchEvent(
-    new CustomEvent("picot:theme-change", { detail: { themeId } }),
-  );
+  window.dispatchEvent(new CustomEvent("picot:theme-change", { detail: { themeId } }));
 }
 
 function setRootTheme(themeId) {

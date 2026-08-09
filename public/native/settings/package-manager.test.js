@@ -86,6 +86,7 @@ describe("setupPackageManager", () => {
         installedPath: "/Users/me/.pi/agent/npm/foo",
         packageName: "foo",
         version: "1.2.3",
+        description: "Adds foo commands to Pi.",
         disabled: false,
         counts: { extensions: 2, skills: 1, prompts: 0, themes: 0 },
         resources: [],
@@ -115,6 +116,7 @@ describe("setupPackageManager", () => {
 
     // First package is selected by default and shown in the detail pane.
     expect(detail().textContent).toContain("npm:foo");
+    expect(detail().textContent).toContain("Adds foo commands to Pi.");
   });
 
   it("switches the detail pane when a different sidebar row is clicked", async () => {
@@ -156,9 +158,12 @@ describe("setupPackageManager", () => {
   it("reveals the community browse section when the add button is clicked", () => {
     const onBrowseRevealed = vi.fn();
     setupPackageManager({ control: mockPackages([]), onBrowseRevealed });
+    const managerSection = document.getElementById("pkg-manager-section");
     const browseSection = document.getElementById("pkg-browse-section");
+    expect(managerSection.hidden).toBe(false);
     expect(browseSection.hidden).toBe(true);
     document.getElementById("pkg-manager-add-btn").click();
+    expect(managerSection.hidden).toBe(true);
     expect(browseSection.hidden).toBe(false);
     expect(onBrowseRevealed).toHaveBeenCalled();
   });

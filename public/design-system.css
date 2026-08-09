@@ -247,10 +247,8 @@
 
 /* Dark themes: lift the panel off the equally-dark backdrop with a real
    shadow and a #3a3a3a border (see comment above). */
-:root:not([data-theme="clean"]):not([data-theme="terracotta"]):not([data-theme="sage"])
-  .ui-dialog,
-:root:not([data-theme="clean"]):not([data-theme="terracotta"]):not([data-theme="sage"])
-  .dialog,
+:root:not([data-theme="clean"]):not([data-theme="terracotta"]):not([data-theme="sage"]) .ui-dialog,
+:root:not([data-theme="clean"]):not([data-theme="terracotta"]):not([data-theme="sage"]) .dialog,
 :root:not([data-theme="clean"]):not([data-theme="terracotta"]):not([data-theme="sage"])
   .settings-panel.resource-dialog,
 :root:not([data-theme="clean"]):not([data-theme="terracotta"]):not([data-theme="sage"])

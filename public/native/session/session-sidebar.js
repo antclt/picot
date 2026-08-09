@@ -144,7 +144,7 @@ function sessionTimeMs(session) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function asPinnedSuperAgentSession(session) {
+function asSuperAgentSession(session) {
   if (!session) return null;
   return {
     ...session,
@@ -208,7 +208,17 @@ const TRASH_ICON = `
 export class SessionSidebar {
   constructor(
     container,
-    { data, runtime, control, config, getTarget, onSelect, onCreateSession, onSessionsLoaded },
+    {
+      data,
+      runtime,
+      control,
+      config,
+      getTarget,
+      onSelect,
+      onCreateSession,
+      onSessionsLoaded,
+      onAgentInboxSessionChange,
+    },
   ) {
     this.container = container;
     this.data = data;
@@ -219,6 +229,7 @@ export class SessionSidebar {
     this.onSelect = onSelect;
     this.onCreateSession = onCreateSession;
     this.onSessionsLoaded = onSessionsLoaded;
+    this.onAgentInboxSessionChange = onAgentInboxSessionChange;
 
     this.sessions = [];
     this.activeSessionId = getTarget()?.sessionId ?? null;
@@ -412,7 +423,15 @@ export class SessionSidebar {
       const response = await this.data.listAllSessions(workspaceId);
       if (seq < this._loadCommitted) return;
       this._loadCommitted = seq;
-      const nextSessions = response.sessions ?? [];
+      const receivedSessions = response.sessions ?? [];
+      // The first request can race host/bootstrap registration and briefly
+      // return an empty list. Do not let that transient response erase a
+      // non-empty cache (including Agent Inbox); a post-bootstrap reload will
+      // replace it with the authoritative list moments later.
+      const nextSessions =
+        receivedSessions.length === 0 && this.sessions.length > 0
+          ? [...this.sessions]
+          : receivedSessions;
       // Preserve a just-created active session that the server hasn't persisted
       // yet. Without this, a quiet reload fired right after upsertSession (e.g.
       // on session_bound) overwrites the list with the on-disk snapshot and the
@@ -648,14 +667,10 @@ export class SessionSidebar {
     const superAgentSessions = this.sessions.filter((session) =>
       isSuperAgentProjectPath(session.projectPath),
     );
-    const pinnedSuperAgent = superAgentEnabled
-      ? asPinnedSuperAgentSession(latestSession(superAgentSessions))
+    const agentInboxSession = superAgentEnabled
+      ? asSuperAgentSession(latestSession(superAgentSessions))
       : null;
-    const pinnedSuperAgentId = pinnedSuperAgent?.id ?? null;
-
-    if (pinnedSuperAgent) {
-      this.container.appendChild(this.#buildPinnedSuperAgentGroup(pinnedSuperAgent));
-    }
+    this.onAgentInboxSessionChange?.(agentInboxSession);
 
     const favourites = [];
     const archived = [];
@@ -667,12 +682,7 @@ export class SessionSidebar {
       else regular.push(session);
     }
 
-    if (
-      !pinnedSuperAgentId &&
-      favourites.length === 0 &&
-      archived.length === 0 &&
-      regular.length === 0
-    ) {
+    if (favourites.length === 0 && archived.length === 0 && regular.length === 0) {
       this.container.innerHTML = '<div class="session-loading">No saved sessions</div>';
       return;
     }
@@ -741,23 +751,6 @@ export class SessionSidebar {
   // Group regular sessions by their originating project. The list arrives
   // sorted newest-first, so the first session from each project determines the
   // project's position without reordering projects around the active project.
-  #buildPinnedSuperAgentGroup(session) {
-    const group = document.createElement("div");
-    group.className = "super-agent-pinned-group";
-    group.appendChild(
-      this.#sectionHeader(
-        "super-agent-pinned-header",
-        '<span class="fav-star">★</span> <span>Agent Inbox</span> <span class="project-count">Pinned</span>',
-      ),
-    );
-
-    const list = document.createElement("div");
-    list.className = "project-sessions";
-    list.appendChild(this.#buildItem(session, { showArchiveButton: false }));
-    group.appendChild(list);
-    return group;
-  }
-
   #groupByProject(sessions) {
     const order = [];
     const byPath = new Map();

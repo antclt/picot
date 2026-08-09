@@ -7,7 +7,7 @@
 // contributes — plus an agent-reload action and a diagnostics/totals footer.
 // Package operations run the embedded `pi` CLI on the Rust host via the
 // HostControlGateway (`host_request` frames); `listPiPackages` returns full
-// package objects including a resolved `resources` list.
+// package objects including package-level metadata and a resolved `resources` list.
 //
 // This is a distinct concern from the community catalog browser
 // (package-browse.js), so it lives in its own module per the repo's
@@ -171,6 +171,7 @@ export function setupPackageManager(deps) {
     // package browser section (hidden by default), load it, and scroll to it.
     const browseSection = document.getElementById("pkg-browse-section");
     if (!browseSection) return;
+    if (sectionEl) sectionEl.hidden = true;
     browseSection.hidden = false;
     if (deps.onBrowseRevealed) deps.onBrowseRevealed();
     browseSection.scrollIntoView?.({ behavior: "smooth", block: "start" });
@@ -181,6 +182,7 @@ export function setupPackageManager(deps) {
   document.getElementById("pkg-browse-close-btn")?.addEventListener("click", () => {
     const browseSection = document.getElementById("pkg-browse-section");
     if (browseSection) browseSection.hidden = true;
+    if (sectionEl) sectionEl.hidden = false;
   });
 
   async function load(force = false) {
@@ -205,6 +207,7 @@ export function setupPackageManager(deps) {
           installedPath: p.installedPath || null,
           packageName: p.packageName || null,
           version: p.version || null,
+          description: p.description || null,
           disabled: Boolean(p.disabled),
           status,
           counts: p.counts || {},
@@ -355,6 +358,8 @@ export function setupPackageManager(deps) {
     if (pkg.version) statusGrid.appendChild(statusRow(t("extensions.version"), pkg.version));
     if (pkg.packageName)
       statusGrid.appendChild(statusRow(t("extensions.package"), pkg.packageName));
+    if (pkg.description)
+      statusGrid.appendChild(statusRow(t("extensions.description"), pkg.description));
     statusGrid.appendChild(statusRow(t("extensions.resources"), resourceSummary(pkg)));
     statusGrid.appendChild(statusRow(t("extensions.installPath"), installedPathLabel(pkg)));
     if (cwd) statusGrid.appendChild(statusRow(t("extensions.cwd"), cwd));

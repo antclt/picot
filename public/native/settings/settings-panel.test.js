@@ -18,7 +18,10 @@ function renderSettingsDom() {
       </aside>
       <section class="settings-content">
         <div class="settings-tab active" data-settings-panel="general"></div>
-        <div class="settings-tab" data-settings-panel="extensions"></div>
+        <div class="settings-tab" data-settings-panel="extensions">
+          <div class="settings-section" id="pkg-manager-section"></div>
+          <div class="settings-section" id="pkg-browse-section" hidden></div>
+        </div>
         <div class="settings-tab" data-settings-panel="skills"><div id="settings-skills"></div></div>
         <div class="settings-tab" data-settings-panel="usage"></div>
         <div class="settings-tab" data-settings-panel="configuration"></div>
@@ -89,7 +92,7 @@ describe("settings panel hash routing", () => {
     expect(extensionsTab.classList.contains("active")).toBe(true);
   });
 
-  it("opens sidebar resource entries as dialogs without changing the route", () => {
+  it("opens sidebar Extensions as the installed-package dialog without changing the route", () => {
     setupSettingsPanel();
 
     document.getElementById("sidebar-extensions-btn").click();
@@ -99,10 +102,23 @@ describe("settings panel hash routing", () => {
     expect(
       document.querySelector('[data-settings-panel="extensions"]').classList.contains("active"),
     ).toBe(true);
+    expect(document.getElementById("pkg-manager-section").hidden).toBe(false);
+    expect(document.getElementById("pkg-browse-section").hidden).toBe(true);
     expect(window.location.hash).toBe("");
 
     document.querySelector(".resource-dialog-header button").click();
     expect(panel.classList.contains("hidden")).toBe(true);
+  });
+
+  it("opens Settings → Extensions as the package marketplace", () => {
+    const panelApi = setupSettingsPanel();
+
+    panelApi.openSettings("extensions");
+
+    const panel = document.getElementById("settings-panel");
+    expect(panel.classList.contains("resource-dialog")).toBe(false);
+    expect(document.getElementById("pkg-manager-section").hidden).toBe(true);
+    expect(document.getElementById("pkg-browse-section").hidden).toBe(false);
   });
 
   it("opens the Skills tab through the Picot config gateway", async () => {

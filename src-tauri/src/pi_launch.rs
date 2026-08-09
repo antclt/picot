@@ -26,6 +26,8 @@ pub struct PiPackageInfo {
     pub package_name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub version: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
     /// Number of resolved extensions/skills/prompts/themes contributed by this
     /// package (read from its `pi` manifest or conventional dirs when installed).
     #[serde(skip_serializing_if = "PackageResourceCounts::is_zero")]
@@ -211,16 +213,18 @@ impl PiLaunchResolver {
                 disabled: false,
                 package_name: None,
                 version: None,
+                description: None,
                 counts: PackageResourceCounts::default(),
                 resources: Vec::new(),
             });
         }
-        // Enrich each package with its package.json name/version (when installed).
+        // Enrich each package with package.json metadata (when installed).
         for pkg in packages.iter_mut() {
             if let Some(path) = pkg.installed_path.as_deref() {
-                let (name, version) = read_package_metadata(path);
-                pkg.package_name = name;
-                pkg.version = version;
+                let metadata = read_package_metadata(path);
+                pkg.package_name = metadata.name;
+                pkg.version = metadata.version;
+                pkg.description = metadata.description;
                 pkg.resources = read_package_resources(path);
                 pkg.counts = PackageResourceCounts::from_resources(&pkg.resources);
             }
@@ -692,19 +696,30 @@ pub fn set_package_disabled(
     Ok(true)
 }
 
-/// Read package.json metadata (name + version) from an installed package path.
-pub fn read_package_metadata(installed_path: &str) -> (Option<String>, Option<String>) {
+pub struct PackageMetadata {
+    pub name: Option<String>,
+    pub version: Option<String>,
+    pub description: Option<String>,
+}
+
+/// Read package.json metadata from an installed package path.
+pub fn read_package_metadata(installed_path: &str) -> PackageMetadata {
     let path = Path::new(installed_path);
     let package_json = if path.is_dir() {
         path.join("package.json")
     } else {
         path.parent().unwrap_or(path).join("package.json")
     };
+    let empty = || PackageMetadata {
+        name: None,
+        version: None,
+        description: None,
+    };
     let Ok(contents) = std::fs::read_to_string(&package_json) else {
-        return (None, None);
+        return empty();
     };
     let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&contents) else {
-        return (None, None);
+        return empty();
     };
     let name = parsed
         .get("name")
@@ -714,7 +729,17 @@ pub fn read_package_metadata(installed_path: &str) -> (Option<String>, Option<St
         .get("version")
         .and_then(serde_json::Value::as_str)
         .map(str::to_owned);
-    (name, version)
+    let description = parsed
+        .get("description")
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_owned);
+    PackageMetadata {
+        name,
+        version,
+        description,
+    }
 }
 
 fn resource_name(relative_path: &str) -> String {

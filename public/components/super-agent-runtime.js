@@ -120,7 +120,9 @@ class SuperAgentRuntime extends HTMLElement {
   _openPanel(filter = null) {
     document.body.classList.add("super-agent-active");
     document.getElementById("super-agent-chat-header")?.classList.remove("hidden");
-    document.querySelector(".super-agent-pinned-group .session-item")?.click();
+    document.dispatchEvent(
+      new CustomEvent("sa-open-agent-inbox", { detail: { openRuntimePanel: true } }),
+    );
     document.getElementById("super-agent-sidebar-entry")?.classList.add("active");
     this.classList.remove("collapsed");
     localStorage.setItem("sa-runtime-collapsed", "0");

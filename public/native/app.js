@@ -177,6 +177,11 @@ let commandCatalog = buildCommandCatalog({});
 let streamingElement = null;
 let liveProcessGroup = null;
 let sidebar = null;
+let agentInboxNavSelectSession = null;
+// Sidebar loading starts before bootstrap/runtime awaits complete. Keep every
+// state slot used by its callbacks initialized above that startup boundary so
+// a fast session-list response cannot hit a temporal dead zone.
+let agentInboxNavSession = null;
 const sessionInfo = setupSessionInfo({
   toggle: document.getElementById("session-info-toggle"),
   panel: document.getElementById("session-info-panel"),
@@ -209,6 +214,7 @@ function markSuperAgentLaunched() {
 }
 let pendingBoundSessionFirstMessage = null;
 let superAgentEnsureInFlight = null;
+let diskHistoryFallback = null;
 
 // Maps a dispatched child runtime instanceId -> Agent Inbox task id, so
 // `session_bound` events from the background child can upgrade the task's
@@ -327,11 +333,112 @@ const extensionUi = new ExtensionUiHost({
 await extensionUi.setForegroundSession(target.sessionId, { flush: false });
 await extensionUi.flushForegroundQueue();
 
+function summarizeMessageRoles(messages) {
+  const counts = {};
+  for (const message of Array.isArray(messages) ? messages : []) {
+    const role = message?.role || "unknown";
+    counts[role] = (counts[role] || 0) + 1;
+  }
+  return counts;
+}
+
+function summarizeElementBox(element) {
+  if (!element) return null;
+  const rect = element.getBoundingClientRect();
+  const style = getComputedStyle(element);
+  return {
+    tag: element.tagName?.toLowerCase() ?? null,
+    id: element.id || null,
+    className: String(element.className || ""),
+    display: style.display,
+    visibility: style.visibility,
+    opacity: style.opacity,
+    position: style.position,
+    zIndex: style.zIndex,
+    width: Math.round(rect.width),
+    height: Math.round(rect.height),
+    top: Math.round(rect.top),
+    left: Math.round(rect.left),
+  };
+}
+
+function summarizeMessagesDom() {
+  if (!messagesElement) return null;
+  const style = getComputedStyle(messagesElement);
+  const rect = messagesElement.getBoundingClientRect();
+  const firstChildren = Array.from(messagesElement.children)
+    .slice(0, 5)
+    .map((child) => ({
+      className: String(child.className || ""),
+      textLength: child.textContent?.trim().length ?? 0,
+      textPreview: (child.textContent || "").trim().slice(0, 80),
+      box: summarizeElementBox(child),
+    }));
+  const centerX = Math.round(rect.left + rect.width / 2);
+  const centerY = Math.round(rect.top + Math.min(rect.height / 2, 160));
+  const elementAtCenter = document.elementFromPoint(centerX, centerY);
+  return {
+    bodyClass: document.body.className || null,
+    bodyRuntime: document.body.dataset.runtime || null,
+    url: window.location.href,
+    messages: summarizeElementBox(messagesElement),
+    main: summarizeElementBox(document.querySelector(".main")),
+    workspaceContent: summarizeElementBox(document.querySelector(".workspace-content")),
+    inputArea: summarizeElementBox(document.querySelector(".input-area")),
+    superAgentRuntime: summarizeElementBox(document.querySelector("super-agent-runtime")),
+    childCount: messagesElement.children.length,
+    firstChildClass: messagesElement.firstElementChild?.className ?? null,
+    userCount: messagesElement.querySelectorAll(".message.user, .user").length,
+    assistantCount: messagesElement.querySelectorAll(".message.assistant, .assistant").length,
+    toolCardCount: messagesElement.querySelectorAll(".tool-card").length,
+    processGroupCount: messagesElement.querySelectorAll(".process-details").length,
+    hasWelcome: Boolean(messagesElement.querySelector(".welcome")),
+    scrollTop: Math.round(messagesElement.scrollTop),
+    scrollHeight: messagesElement.scrollHeight,
+    clientHeight: messagesElement.clientHeight,
+    display: style.display,
+    visibility: style.visibility,
+    opacity: style.opacity,
+    overflowY: style.overflowY,
+    elementAtCenter: summarizeElementBox(elementAtCenter),
+    firstChildren,
+  };
+}
+
+function logMessagesDom(label, extra = {}) {
+  console.info(`[SESSION-LOAD] ${label}`, extra);
+  console.info(`[SESSION-LOAD] ${label} dom-json`, JSON.stringify(summarizeMessagesDom()));
+}
+
+function chooseHydrationMessages(snapshotMessages, reason) {
+  const messages = Array.isArray(snapshotMessages) ? snapshotMessages : [];
+  const fallbackMatches = diskHistoryFallback?.sessionId === target.sessionId;
+  const fallbackCount = fallbackMatches ? diskHistoryFallback.messages.length : 0;
+  const source = fallbackMatches && messages.length < fallbackCount ? "disk-fallback" : "snapshot";
+  console.info("[SESSION-LOAD] hydrate message source", {
+    reason,
+    currentSessionId: target.sessionId,
+    snapshotCount: messages.length,
+    snapshotRoles: summarizeMessageRoles(messages),
+    fallbackSessionId: diskHistoryFallback?.sessionId ?? null,
+    fallbackCount,
+    fallbackMatches,
+    source,
+  });
+  return source === "disk-fallback" ? diskHistoryFallback.messages : messages;
+}
+
 const hydrateFromSnapshot = async (snapshot) => {
+  console.info("[SESSION-LOAD] hydrate snapshot received", {
+    currentSessionId: target.sessionId,
+    snapshotTarget: snapshot?.target ?? null,
+    snapshotCount: Array.isArray(snapshot?.state?.messages) ? snapshot.state.messages.length : null,
+  });
   await adoptTarget(reconcileSnapshotTarget(target, snapshot.target));
   store = reduceSessionState(store, snapshot);
-  renderHistory(snapshot.state.messages ?? []);
-  todoMirrorPanel.hydrateFromMessages(snapshot.state.messages ?? []);
+  const messages = chooseHydrationMessages(snapshot.state.messages, "snapshot");
+  renderHistory(messages);
+  todoMirrorPanel.hydrateFromMessages(messages);
   renderQueuedMessages(queuedMessages, store.queue);
   convNav.rebuild();
   const pi = snapshot.state.pi ?? {};
@@ -341,14 +448,21 @@ const hydrateFromSnapshot = async (snapshot) => {
   contextUsage.setCompacting(snapshot.state.compaction?.status === "running");
   updateComposerModel(pi.model ?? null);
   updateComposerThinking(pi.thinkingLevel ?? "off");
-  contextUsage.setUsage(
-    findLatestAssistantUsage(snapshot.state.messages),
-    currentModelContextWindow,
-  );
-  setSessionCost(computeTotalCostFromMessages(snapshot.state.messages ?? []));
+  contextUsage.setUsage(findLatestAssistantUsage(messages), currentModelContextWindow);
+  setSessionCost(computeTotalCostFromMessages(messages));
   // Flush queued extension prompts after rendering is settled so inline cards
   // are not immediately destroyed by a subsequent renderHistory() clear.
   await extensionUi.flushForegroundQueue();
+  logMessagesDom("hydrate snapshot rendered", {
+    sessionId: target.sessionId,
+    renderedCount: messages.length,
+  });
+  requestAnimationFrame(() => {
+    logMessagesDom("hydrate snapshot rendered after frame", {
+      sessionId: target.sessionId,
+      renderedCount: messages.length,
+    });
+  });
 };
 
 runtime.subscribe((frame) => {
@@ -447,7 +561,10 @@ document.getElementById("refresh-sessions-btn")?.addEventListener("click", (e) =
 });
 window.addEventListener("picot-super-agent-autostart-changed", (event) => {
   if (event.detail?.enabled) ensureSuperAgentStartupSession().catch(showError);
-  else sidebar?.render();
+  else {
+    setAgentInboxNavSession(null);
+    sidebar?.render();
+  }
 });
 setupFileBrowser();
 const imageAttachments = setupComposerImageAttachments({
@@ -529,6 +646,11 @@ try {
     elapsedMs: Math.round(performance.now() - bootstrapStartedAt),
   });
   await adoptTarget(bootstrappedTarget, { updateRoute: false });
+  // The eager sidebar request above can race bootstrap and observe a
+  // temporarily empty host session index. Re-check once registration is
+  // complete so startup and cross-project navigation converge without a
+  // manual refresh.
+  sidebar?.load({ quiet: true }).catch(showError);
   if (route.sessionId.startsWith("temporary-") && target.sessionId !== route.sessionId) {
     replaceTemporarySessionRoute(history, route.workspaceId, route.sessionId, target.sessionId);
   }
@@ -552,6 +674,13 @@ try {
         return null;
       });
     const diskMessages = diskResult?.messages ?? [];
+    diskHistoryFallback =
+      diskMessages.length > 0 ? { sessionId: target.sessionId, messages: diskMessages } : null;
+    console.info("[SESSION-LOAD] initial disk fallback updated", {
+      sessionId: target.sessionId,
+      messageCount: diskMessages.length,
+      roles: summarizeMessageRoles(diskMessages),
+    });
     if (diskMessages.length > 0) {
       const renderStartedAt = performance.now();
       const hadInFlightPrompt = renderHistory(diskMessages);
@@ -566,6 +695,10 @@ try {
       if (hadInFlightPrompt) await extensionUi.flushForegroundQueue();
     }
   } else {
+    diskHistoryFallback = null;
+    console.info("[SESSION-LOAD] initial disk fallback skipped for temporary session", {
+      sessionId: target.sessionId,
+    });
     input.focus();
   }
 
@@ -715,6 +848,7 @@ function setupSessionSidebar() {
     openSessionInProject,
     onError: showError,
   });
+  agentInboxNavSelectSession = selectSession;
   sidebar = new SessionSidebar(container, {
     data,
     runtime,
@@ -727,6 +861,7 @@ function setupSessionSidebar() {
     },
     onCreateSession: createSessionViaHost,
     onSessionsLoaded: subscribeToLiveSessions,
+    onAgentInboxSessionChange: setAgentInboxNavSession,
   });
 
   setupSessionSearchDialog({
@@ -783,6 +918,13 @@ async function switchSession(sessionId) {
       .then((result) => {
         if (generation !== navigationGeneration) return { result, hadInFlightPrompt: false };
         const diskMessages = result?.messages ?? [];
+        diskHistoryFallback =
+          diskMessages.length > 0 ? { sessionId, messages: diskMessages } : null;
+        console.info("[SESSION-LOAD] switch disk fallback updated", {
+          sessionId,
+          messageCount: diskMessages.length,
+          roles: summarizeMessageRoles(diskMessages),
+        });
         const renderStartedAt = performance.now();
         const hadInFlightPrompt = renderHistory(diskMessages);
         convNav.rebuild();
@@ -877,14 +1019,49 @@ function subscribeToLiveSessions(sessions) {
   handleSuperAgentStartupSessions(sessions).catch(showError);
 }
 
-function updateSuperAgentActiveState(session = null) {
+function updateSuperAgentActiveState(session = null, { openRuntimePanel = false } = {}) {
   const active = isSuperAgentSessionSummary(session);
   document.body.classList.toggle("super-agent-active", active);
   document.getElementById("super-agent-chat-header")?.classList.toggle("hidden", !active);
-  if (active && localStorage.getItem("sa-runtime-collapsed") === "0") {
-    document.querySelector("super-agent-runtime")?.classList.remove("collapsed");
+  updateAgentInboxNavActive();
+
+  // Selecting/restoring the Agent Inbox session should not automatically open
+  // the task runtime panel: on narrow windows it can squeeze the chat column to
+  // an unreadable sliver. Explicit runtime opens (`sa-open-runtime`) opt in.
+  if (active && !openRuntimePanel) {
+    document.querySelector("super-agent-runtime")?.classList.add("collapsed");
+    console.info("[SESSION-LOAD] Agent Inbox active; runtime panel kept collapsed", {
+      sessionId: target.sessionId,
+    });
   }
 }
+
+function setAgentInboxNavSession(session) {
+  agentInboxNavSession = session;
+  const button = document.getElementById("sidebar-agent-inbox-btn");
+  button?.classList.toggle("hidden", !session);
+  updateAgentInboxNavActive();
+}
+
+function updateAgentInboxNavActive() {
+  const button = document.getElementById("sidebar-agent-inbox-btn");
+  button?.classList.toggle("active", document.body.classList.contains("super-agent-active"));
+}
+
+function openAgentInboxNav({ openRuntimePanel = false } = {}) {
+  if (!agentInboxNavSession) return;
+  updateSuperAgentActiveState(agentInboxNavSession, { openRuntimePanel });
+  const selected = agentInboxNavSelectSession?.(agentInboxNavSession);
+  if (selected && typeof selected.catch === "function") selected.catch(showError);
+}
+
+document.getElementById("sidebar-agent-inbox-btn")?.addEventListener("click", () => {
+  openAgentInboxNav();
+});
+
+document.addEventListener("sa-open-agent-inbox", (event) => {
+  openAgentInboxNav({ openRuntimePanel: event.detail?.openRuntimePanel === true });
+});
 
 function isSuperAgentSessionSummary(session) {
   return session?.kind === "super-agent" || isSuperAgentProjectPath(session?.projectPath);
@@ -1442,6 +1619,12 @@ function renderToolCallBlocks(blocks, toolResults, targetContainer) {
 }
 
 function renderHistory(messages) {
+  console.info("[SESSION-LOAD] renderHistory start", {
+    sessionId: target.sessionId,
+    messageCount: messages.length,
+    roles: summarizeMessageRoles(messages),
+    existingChildCount: messagesElement?.children?.length ?? null,
+  });
   const hadInFlightPrompt = extensionUi.requeueForegroundPrompt();
   const expandedProcessGroups = captureExpandedProcessGroups(messagesElement);
   messageRenderer.clear();
@@ -1450,6 +1633,9 @@ function renderHistory(messages) {
   if (messages.length === 0) {
     messageRenderer.renderWelcome();
     applyActiveSearchHighlight({ scrollToFirst: false });
+    logMessagesDom("renderHistory empty", {
+      sessionId: target.sessionId,
+    });
     return hadInFlightPrompt;
   }
 
@@ -1539,7 +1725,11 @@ function renderHistory(messages) {
             if (el) stepCount += 1;
           }
           if (remainingProcessBlocks.some((b) => b.type === "toolCall")) {
-            toolCallCount += renderToolCallBlocks(remainingProcessBlocks, toolResults, ensureGroup().body);
+            toolCallCount += renderToolCallBlocks(
+              remainingProcessBlocks,
+              toolResults,
+              ensureGroup().body,
+            );
           }
         } else {
           if (processBlocks.some((b) => b.type === "text" || b.type === "thinking")) {
@@ -1580,6 +1770,12 @@ function renderHistory(messages) {
 
   const highlighted = applyActiveSearchHighlight();
   if (highlighted === 0) messageRenderer.forceScrollToBottom();
+  logMessagesDom("renderHistory complete", {
+    sessionId: target.sessionId,
+    inputCount: messages.length,
+    turnCount: turns.length,
+    highlighted,
+  });
   return hadInFlightPrompt;
 }
 

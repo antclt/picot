@@ -136,6 +136,68 @@ describe("models provider editor", () => {
     );
   });
 
+  test("uses provider-card health layout for custom providers", async () => {
+    const customCall = vi.fn(async (operation) => {
+      if (operation === "read_models_config") {
+        return {
+          ok: true,
+          data: {
+            path: "/home/.pi/agent/models.json",
+            content: JSON.stringify({
+              providers: {
+                gateway: {
+                  baseUrl: "https://gateway.example/v1",
+                  api: "openai-completions",
+                  models: [{ id: "gpt-5.5" }],
+                },
+              },
+            }),
+          },
+        };
+      }
+      if (operation === "list_model_catalog") {
+        return {
+          ok: true,
+          data: {
+            providers: [
+              {
+                provider: "gateway",
+                displayName: "gateway",
+                configured: true,
+                models: [
+                  {
+                    provider: "gateway",
+                    id: "gpt-5.5",
+                    available: true,
+                    visible: true,
+                    health: { status: "healthy", latencyMs: 42 },
+                  },
+                ],
+              },
+            ],
+          },
+        };
+      }
+      throw new Error(`Unexpected operation: ${operation}`);
+    });
+    const editor = setupSettingsConfig({ configGateway: { call: customCall } });
+    await editor.loadInlineModelsEditor();
+    await editor.loadApiKeysPanel();
+
+    expect(document.querySelector(".provider-manager-health .api-key-row-header")).not.toBeNull();
+    expect(document.querySelector(".provider-manager-health .api-key-row-name").textContent).toBe(
+      "gateway",
+    );
+    expect(
+      document.querySelector(".provider-manager-health .api-key-row-summary").textContent,
+    ).toBe("settings.apiKeys.summary");
+    expect(
+      document.querySelector(
+        ".provider-manager-health .api-key-row-actions .api-model-check-visible",
+      ),
+    ).not.toBeNull();
+  });
+
   test("renders authenticated providers while models.json is still loading", async () => {
     let resolveModelsConfig;
     const pendingModelsConfig = new Promise((resolve) => {
@@ -173,6 +235,7 @@ describe("models provider editor", () => {
     const modelId = document.querySelector('.models-config-field input[placeholder="model-name"]');
     modelId.value = "claude-sonnet";
     modelId.dispatchEvent(new window.Event("input", { bubbles: true }));
+    document.querySelector(".models-config-form .ui-button--primary").click();
     document.getElementById("inline-models-save").click();
     await vi.waitFor(() => expect(onModelConfigurationChanged).toHaveBeenCalledOnce());
 

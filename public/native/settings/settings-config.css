@@ -166,7 +166,7 @@
   font-size: var(--font-size-sm);
 }
 
-.models-model-add {
+.models-provider-list .models-model-add {
   margin-bottom: var(--space-1);
 }
 
@@ -232,11 +232,13 @@
   margin-top: var(--space-5);
   padding-top: var(--space-4);
   border-top: 1px solid var(--border);
-  display: grid;
-  gap: var(--space-3);
 }
 
-.provider-manager-health .api-model-list {
+.provider-manager-health-header {
+  padding: 0 0 var(--space-3);
+}
+
+.provider-manager-health .provider-manager-model-list {
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
 }
@@ -296,13 +298,17 @@
 .models-config-models-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: var(--space-3);
   margin-bottom: var(--space-3);
 }
 
 .models-config-models-header h3 {
   margin: 0;
   font-size: var(--font-size-md);
+}
+
+.models-config-models-header .models-model-add {
+  width: auto;
 }
 
 .models-config-models-empty {

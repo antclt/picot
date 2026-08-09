@@ -134,7 +134,12 @@ pub struct SessionSummary {
     /// Absolute path to the persisted JSONL session file.
     pub file_path: String,
     pub file_name: String,
+    /// Filesystem mtime for cache invalidation/debugging only. UI recency uses
+    /// `activity_at_ms` so a read-only resume/touch does not reorder projects.
     pub modified_at_ms: u128,
+    /// Last user-message timestamp when available; falls back to the session
+    /// header timestamp, then filesystem mtime for legacy/incomplete files.
+    pub activity_at_ms: u128,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -993,7 +998,7 @@ impl HostDataPlane {
             session.workspace_id = workspace_id.to_owned();
             session.is_current_workspace = true;
         }
-        sessions.sort_by_key(|session| std::cmp::Reverse(session.modified_at_ms));
+        sessions.sort_by_key(|session| std::cmp::Reverse(session.activity_at_ms));
         Ok(sessions)
     }
 
@@ -1018,7 +1023,7 @@ impl HostDataPlane {
                 session.is_current_workspace = true;
             }
         }
-        sessions.sort_by_key(|session| std::cmp::Reverse(session.modified_at_ms));
+        sessions.sort_by_key(|session| std::cmp::Reverse(session.activity_at_ms));
         Ok(sessions)
     }
 
@@ -1610,6 +1615,79 @@ fn metadata_modified_at_ms(metadata: &std::fs::Metadata) -> u128 {
         .map_or(0, |duration| duration.as_millis())
 }
 
+fn timestamp_value_ms(value: Option<&serde_json::Value>) -> Option<u128> {
+    match value? {
+        serde_json::Value::Number(number) => number.as_u64().map(u128::from),
+        serde_json::Value::String(text) => iso_timestamp_ms(text),
+        _ => None,
+    }
+}
+
+fn iso_timestamp_ms(text: &str) -> Option<u128> {
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    let (date, time) = trimmed.split_once('T')?;
+    let mut date_parts = date.split('-');
+    let year = date_parts.next()?.parse::<i32>().ok()?;
+    let month = date_parts.next()?.parse::<u32>().ok()?;
+    let day = date_parts.next()?.parse::<u32>().ok()?;
+    if date_parts.next().is_some() || !(1..=12).contains(&month) || !(1..=31).contains(&day) {
+        return None;
+    }
+
+    let time = time.strip_suffix('Z').unwrap_or(time);
+    if time.contains('+') || time.rmatch_indices('-').any(|(index, _)| index > 0) {
+        return None;
+    }
+    let mut time_parts = time.split(':');
+    let hour = time_parts.next()?.parse::<u32>().ok()?;
+    let minute = time_parts.next()?.parse::<u32>().ok()?;
+    let second_text = time_parts.next()?;
+    if time_parts.next().is_some() || hour > 23 || minute > 59 {
+        return None;
+    }
+    let (second_whole, fraction) = second_text
+        .split_once('.')
+        .map_or((second_text, ""), |(whole, fraction)| (whole, fraction));
+    let second = second_whole.parse::<u32>().ok()?;
+    if second > 59 {
+        return None;
+    }
+    let millis = fraction
+        .chars()
+        .take(3)
+        .try_fold((0_u32, 0_u32), |(value, digits), ch| {
+            ch.to_digit(10)
+                .map(|digit| (value * 10 + digit, digits + 1))
+        })
+        .map(|(value, digits)| value * 10_u32.pow(3 - digits))
+        .unwrap_or(0);
+
+    let days = days_from_civil(year, month, day)?;
+    Some(
+        days as u128 * 86_400_000
+            + hour as u128 * 3_600_000
+            + minute as u128 * 60_000
+            + second as u128 * 1_000
+            + millis as u128,
+    )
+}
+
+// Howard Hinnant's days-from-civil algorithm. Returns days since 1970-01-01.
+fn days_from_civil(year: i32, month: u32, day: u32) -> Option<i64> {
+    let year = year - i32::from(month <= 2);
+    let era = if year >= 0 { year } else { year - 399 } / 400;
+    let yoe = year - era * 400;
+    let month = month as i32;
+    let day = day as i32;
+    let doy = (153 * (month + if month > 2 { -3 } else { 9 }) + 2) / 5 + day - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    let days = era as i64 * 146_097 + doe as i64 - 719_468;
+    (days >= 0).then_some(days)
+}
+
 fn parse_session_summary_with_metadata(
     path: &Path,
     modified_at_ms: u128,
@@ -1620,6 +1698,7 @@ fn parse_session_summary_with_metadata(
     let mut cwd = None;
     let mut name = None;
     let mut first_message = None;
+    let mut last_user_message_at_ms = None;
     let mut user_message_count = 0;
     let mut line_count = 0;
     for line in BufReader::new(file).lines() {
@@ -1660,6 +1739,12 @@ fn parse_session_summary_with_metadata(
                     == Some("user") =>
             {
                 user_message_count += 1;
+                last_user_message_at_ms = timestamp_value_ms(
+                    entry
+                        .pointer("/message/timestamp")
+                        .or_else(|| entry.get("timestamp")),
+                )
+                .or(last_user_message_at_ms);
                 if first_message.is_none() {
                     first_message = message_text(entry.pointer("/message/content"))
                         .map(|text| text.chars().take(120).collect());
@@ -1687,6 +1772,9 @@ fn parse_session_summary_with_metadata(
         .file_name()
         .map(|value| value.to_string_lossy().into_owned())
         .unwrap_or_else(|| project_path.to_string_lossy().into_owned());
+    let activity_at_ms = last_user_message_at_ms
+        .or_else(|| iso_timestamp_ms(&timestamp))
+        .unwrap_or(modified_at_ms);
     Ok(Some(SessionSummary {
         id,
         timestamp,
@@ -1703,6 +1791,7 @@ fn parse_session_summary_with_metadata(
             .to_string_lossy()
             .into_owned(),
         modified_at_ms,
+        activity_at_ms,
     }))
 }
 
@@ -2014,6 +2103,7 @@ mod tests {
     use serde_json::json;
     use std::collections::HashMap;
     use std::fs;
+    use std::io::Write;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     #[test]
@@ -2161,6 +2251,66 @@ mod tests {
         assert!(foreign.workspace_id.is_empty());
         assert!(foreign.project_path.ends_with("other"));
         assert_eq!(foreign.project_name, "other");
+        fs::remove_dir_all(temp).unwrap();
+    }
+
+    #[test]
+    fn list_all_sessions_orders_by_user_activity_not_file_mtime() {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let temp = std::env::temp_dir().join(format!("picot-host-session-activity-{nonce}"));
+        let older_workspace = temp.join("older-workspace");
+        let newer_workspace = temp.join("newer-workspace");
+        let sessions = temp.join("sessions/project");
+        fs::create_dir_all(&older_workspace).unwrap();
+        fs::create_dir_all(&newer_workspace).unwrap();
+        fs::create_dir_all(&sessions).unwrap();
+
+        let older_file = sessions.join("older.jsonl");
+        fs::write(
+            &older_file,
+            format!(
+                "{{\"type\":\"session\",\"id\":\"older\",\"timestamp\":\"2026-01-01T00:00:00.000Z\",\"cwd\":{}}}\n\
+                 {{\"type\":\"message\",\"timestamp\":\"2026-01-01T00:00:01.000Z\",\"message\":{{\"role\":\"user\",\"timestamp\":1767225601000,\"content\":\"older activity\"}}}}\n",
+                serde_json::to_string(&older_workspace.to_string_lossy()).unwrap()
+            ),
+        )
+        .unwrap();
+        fs::write(
+            sessions.join("newer.jsonl"),
+            format!(
+                "{{\"type\":\"session\",\"id\":\"newer\",\"timestamp\":\"2026-01-02T00:00:00.000Z\",\"cwd\":{}}}\n\
+                 {{\"type\":\"message\",\"timestamp\":\"2026-01-02T00:00:01.000Z\",\"message\":{{\"role\":\"user\",\"timestamp\":1767312001000,\"content\":\"newer activity\"}}}}\n",
+                serde_json::to_string(&newer_workspace.to_string_lossy()).unwrap()
+            ),
+        )
+        .unwrap();
+        // Simulate a read-only resume/touch writing metadata to the older
+        // session after the newer conversation activity already happened. This
+        // must not pull the older project to the top of the sidebar.
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        fs::OpenOptions::new()
+            .append(true)
+            .open(&older_file)
+            .unwrap()
+            .write_all(b"{\"type\":\"session_info\",\"name\":\"Touched title\"}\n")
+            .unwrap();
+
+        let data = HostDataPlane::new(HashMap::from([("workspace-a".into(), older_workspace)]))
+            .unwrap()
+            .with_session_root(temp.join("sessions"));
+
+        let all = data.list_all_sessions("workspace-a").unwrap();
+        assert_eq!(
+            all.iter()
+                .map(|session| session.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["newer", "older"]
+        );
+        assert!(all[1].modified_at_ms > all[0].modified_at_ms);
+        assert!(all[0].activity_at_ms > all[1].activity_at_ms);
         fs::remove_dir_all(temp).unwrap();
     }
 

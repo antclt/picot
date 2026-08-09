@@ -113,6 +113,23 @@ export function setupSettingsPanel({
     void config.loadInlineModelsEditor();
   }
 
+  function setExtensionsView(mode) {
+    const managerSection = document.getElementById("pkg-manager-section");
+    const browseSection = document.getElementById("pkg-browse-section");
+    const browseCloseBtn = document.getElementById("pkg-browse-close-btn");
+    const marketplaceMode = mode === "marketplace";
+
+    if (managerSection) managerSection.hidden = marketplaceMode;
+    if (browseSection) browseSection.hidden = !marketplaceMode;
+    if (browseCloseBtn) browseCloseBtn.hidden = marketplaceMode;
+
+    if (marketplaceMode) {
+      void packageBrowse.load();
+    } else {
+      void packageManager.load();
+    }
+  }
+
   function selectTab(tabKey = "general") {
     const target = tabKey === "auth" ? "configuration" : tabKey;
     for (const item of navItems) {
@@ -124,8 +141,7 @@ export function setupSettingsPanel({
 
     if (target === "usage") loadUsage();
     if (target === "extensions") {
-      void packageBrowse.load();
-      void packageManager.load();
+      setExtensionsView(panel.classList.contains("resource-dialog") ? "installed" : "marketplace");
     }
     if (target === "skills") void skillsPage.activate();
     if (target === "configuration") loadConfiguration();

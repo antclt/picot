@@ -41,7 +41,7 @@ export class HostControlGateway {
   async listPiPackages() {
     const frame = await this.#request("list_pi_packages");
     // List returns an array of package objects (source, scope, installedPath,
-    // disabled, packageName, version).
+    // disabled, packageName, version, description).
     return Array.isArray(frame?.packages) ? frame.packages : [];
   }
 

@@ -229,6 +229,40 @@ describe("SessionSidebar.render", () => {
     expect(container.textContent).not.toContain("Cached");
   });
 
+  it("keeps cached sessions and Agent Inbox when an early host response is empty", async () => {
+    setSuperAgentEnabled(true);
+    const sessions = [
+      {
+        id: "s-active",
+        timestamp: "2026-08-09T01:00:00.000Z",
+        name: "Current session",
+        projectPath: "/ws-1",
+        projectName: "ws-1",
+        isCurrentWorkspace: true,
+      },
+      {
+        id: "agent-inbox",
+        timestamp: "2026-08-09T02:00:00.000Z",
+        projectPath: "/Users/me/.pi/agent/super-agent",
+        projectName: "super-agent",
+        isCurrentWorkspace: false,
+      },
+    ];
+    localStorage.setItem("picot-session-list-cache:ws-1", JSON.stringify(sessions));
+    const onAgentInboxSessionChange = vi.fn();
+    const { sidebar, container, data } = makeSidebar([], { onAgentInboxSessionChange });
+    data.listAllSessions.mockResolvedValueOnce({ sessions: [] });
+
+    await sidebar.load();
+
+    expect(container.querySelector('[data-session-id="s-active"]')).not.toBeNull();
+    expect(sidebar.sessions).toHaveLength(2);
+    expect(onAgentInboxSessionChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ id: "agent-inbox", kind: "super-agent" }),
+    );
+    expect(JSON.parse(localStorage.getItem("picot-session-list-cache:ws-1"))).toHaveLength(2);
+  });
+
   it("clears a cached in-progress status when the live session list has no runtime status", async () => {
     const pending = deferred();
     localStorage.setItem(
@@ -516,43 +550,35 @@ describe("SessionSidebar.render", () => {
     expect(container.querySelector(".archived-group .project-group")).toBeNull();
   });
 
-  it("pins the latest Agent Inbox session before normal projects and hides its history", async () => {
+  it("reports the latest Agent Inbox session for top-level navigation and hides its history", async () => {
     setSuperAgentEnabled(true);
-    const { sidebar, container, onSelect } = makeSidebar([
-      { id: "project", timestamp: "2026-06-02T00:00:00.000Z", name: "Project chat" },
-      {
-        id: "sa-old",
-        timestamp: "2026-06-01T00:00:00.000Z",
-        name: "Old Inbox",
-        projectPath: "/Users/me/.pi/agent/super-agent",
-        projectName: "super-agent",
-        isCurrentWorkspace: false,
-      },
-      {
-        id: "sa-new",
-        timestamp: "2026-06-03T00:00:00.000Z",
-        name: "New Inbox",
-        projectPath: "/Users/me/.pi/agent/super-agent",
-        projectName: "super-agent",
-        isCurrentWorkspace: false,
-      },
-    ]);
+    const onAgentInboxSessionChange = vi.fn();
+    const { sidebar, container } = makeSidebar(
+      [
+        { id: "project", timestamp: "2026-06-02T00:00:00.000Z", name: "Project chat" },
+        {
+          id: "sa-old",
+          timestamp: "2026-06-01T00:00:00.000Z",
+          name: "Old Inbox",
+          projectPath: "/Users/me/.pi/agent/super-agent",
+          projectName: "super-agent",
+          isCurrentWorkspace: false,
+        },
+        {
+          id: "sa-new",
+          timestamp: "2026-06-03T00:00:00.000Z",
+          name: "New Inbox",
+          projectPath: "/Users/me/.pi/agent/super-agent",
+          projectName: "super-agent",
+          isCurrentWorkspace: false,
+        },
+      ],
+      { onAgentInboxSessionChange },
+    );
 
     await sidebar.load();
 
-    const pinnedGroup = container.firstElementChild;
-    expect(pinnedGroup?.classList.contains("super-agent-pinned-group")).toBe(true);
-    expect(pinnedGroup?.querySelector(".project-header")?.textContent).toContain("Agent Inbox");
-    expect(pinnedGroup?.querySelector(".project-header")?.textContent).toContain("Pinned");
-    const pinnedSession = pinnedGroup?.querySelector(".session-item");
-    expect(pinnedSession?.dataset.sessionId).toBe("sa-new");
-    expect(pinnedSession?.textContent).toContain("Agent Inbox");
-    expect(container.querySelectorAll('.session-item[data-session-id="sa-new"]')).toHaveLength(1);
-    expect(container.querySelector('.session-item[data-session-id="sa-old"]')).toBeNull();
-
-    pinnedSession?.click();
-
-    expect(onSelect).toHaveBeenCalledWith(
+    expect(onAgentInboxSessionChange).toHaveBeenLastCalledWith(
       expect.objectContaining({
         id: "sa-new",
         kind: "super-agent",
@@ -560,24 +586,33 @@ describe("SessionSidebar.render", () => {
         projectPath: "/Users/me/.pi/agent/super-agent",
       }),
     );
+    expect(container.querySelector(".super-agent-pinned-group")).toBeNull();
+    expect(container.querySelector('.session-item[data-session-id="sa-new"]')).toBeNull();
+    expect(container.querySelector('.session-item[data-session-id="sa-old"]')).toBeNull();
+    expect(container.querySelector('.session-item[data-session-id="project"]')).not.toBeNull();
   });
 
   it("hides Agent Inbox sessions when the setting is disabled", async () => {
     setSuperAgentEnabled(false);
-    const { sidebar, container } = makeSidebar([
-      { id: "project", timestamp: "2026-06-02T00:00:00.000Z", name: "Project chat" },
-      {
-        id: "sa",
-        timestamp: "2026-06-03T00:00:00.000Z",
-        name: "Inbox",
-        projectPath: "/Users/me/.pi/agent/super-agent",
-        projectName: "super-agent",
-        isCurrentWorkspace: false,
-      },
-    ]);
+    const onAgentInboxSessionChange = vi.fn();
+    const { sidebar, container } = makeSidebar(
+      [
+        { id: "project", timestamp: "2026-06-02T00:00:00.000Z", name: "Project chat" },
+        {
+          id: "sa",
+          timestamp: "2026-06-03T00:00:00.000Z",
+          name: "Inbox",
+          projectPath: "/Users/me/.pi/agent/super-agent",
+          projectName: "super-agent",
+          isCurrentWorkspace: false,
+        },
+      ],
+      { onAgentInboxSessionChange },
+    );
 
     await sidebar.load();
 
+    expect(onAgentInboxSessionChange).toHaveBeenLastCalledWith(null);
     expect(container.querySelector(".super-agent-pinned-group")).toBeNull();
     expect(container.querySelector('.session-item[data-session-id="sa"]')).toBeNull();
     expect(container.textContent).not.toContain("Agent Inbox");

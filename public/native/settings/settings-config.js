@@ -691,7 +691,7 @@ export function setupSettingsConfig({ configGateway, onModelConfigurationChanged
   // that. Split into three visual tiers so slow-but-working models stand out
   // from both fast ones and actual failures.
   function healthDotClass(health) {
-    if (!health || !health.status || health.status === "unknown" || health.status === "checking") {
+    if (!health?.status || health.status === "unknown" || health.status === "checking") {
       return health?.status || "unknown";
     }
     if (health.status !== "healthy") return "unhealthy";
@@ -1036,7 +1036,9 @@ export function setupSettingsConfig({ configGateway, onModelConfigurationChanged
           ))) ||
       (selectedModelsConfigItem.type !== "auth" && !providers[selectedModelsConfigItem.provider]) ||
       (selectedModelsConfigItem.type === "model" &&
-        !providers[selectedModelsConfigItem.provider].models?.[selectedModelsConfigItem.index])
+        !providers[selectedModelsConfigItem.provider].models?.[selectedModelsConfigItem.index]) ||
+      (selectedModelsConfigItem.type === "model-new" &&
+        selectedModelsConfigItem.provider !== newModelDraft?.provider)
     ) {
       newModelDraft = null;
       const defaultAuthProvider = configuredProviders.find(
@@ -1216,20 +1218,7 @@ export function setupSettingsConfig({ configGateway, onModelConfigurationChanged
       );
       const catalogModels = catalogProvider ? getProviderModels(catalogProvider) : [];
       if (catalogProvider?.configured && catalogModels.length > 0) {
-        const healthSection = document.createElement("div");
-        healthSection.className = "provider-manager-health";
-        const checkHealthBtn = document.createElement("button");
-        checkHealthBtn.type = "button";
-        checkHealthBtn.className = "api-model-check-visible";
-        checkHealthBtn.textContent = t("settings.apiKeys.checkHealth");
-        checkHealthBtn.disabled = !catalogModels.some(
-          (model) => model.visible !== false && model.available,
-        );
-        checkHealthBtn.addEventListener("click", () => checkModelHealth(catalogProvider.provider));
-        healthSection.appendChild(checkHealthBtn);
-        const modelList = buildModelList(catalogProvider);
-        if (modelList) healthSection.appendChild(modelList);
-        main.appendChild(healthSection);
+        renderProviderHealthSection(main, catalogProvider);
       }
     } else if (selectedModelsConfigItem.type === "model-new") {
       renderNewModelForm(main, parsed, selectedModelsConfigItem.provider, update);
@@ -1354,6 +1343,77 @@ export function setupSettingsConfig({ configGateway, onModelConfigurationChanged
     main.append(header, form);
   }
 
+  function renderProviderHealthSection(main, provider) {
+    const healthSection = document.createElement("div");
+    healthSection.className = "provider-manager-health";
+
+    const header = document.createElement("div");
+    header.className = "api-key-row-header provider-manager-health-header";
+
+    const toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.className = "api-provider-toggle";
+    toggle.setAttribute(
+      "aria-label",
+      t("settings.apiKeys.toggleModels", { provider: provider.displayName || provider.provider }),
+    );
+    toggle.setAttribute("aria-expanded", "true");
+    toggle.textContent = "▼";
+
+    const info = document.createElement("div");
+    info.className = "api-key-row-info api-provider-title-toggle";
+    info.tabIndex = 0;
+    info.setAttribute("role", "button");
+    info.setAttribute(
+      "aria-label",
+      t("settings.apiKeys.toggleModels", { provider: provider.displayName || provider.provider }),
+    );
+
+    const title = document.createElement("div");
+    title.className = "api-key-row-name";
+    title.textContent = provider.displayName || provider.provider;
+    info.appendChild(title);
+
+    const summary = document.createElement("div");
+    summary.className = "api-key-row-summary";
+    summary.textContent = describeProviderSummary(getProviderModels(provider));
+
+    const actions = document.createElement("div");
+    actions.className = "api-key-row-actions";
+    const checkHealthBtn = document.createElement("button");
+    checkHealthBtn.type = "button";
+    checkHealthBtn.className = "api-model-check-visible";
+    checkHealthBtn.textContent = t("settings.apiKeys.checkHealth");
+    checkHealthBtn.disabled = !getProviderModels(provider).some(
+      (model) => model.visible !== false && model.available,
+    );
+    checkHealthBtn.addEventListener("click", () => checkModelHealth(provider.provider));
+    actions.appendChild(checkHealthBtn);
+
+    header.append(toggle, info, summary, actions);
+    const modelList = buildModelList(provider);
+    modelList?.classList.add("provider-manager-model-list");
+    const toggleModelList = () => {
+      if (!modelList) return;
+      modelList.classList.toggle("collapsed");
+      toggle.setAttribute("aria-expanded", String(!modelList.classList.contains("collapsed")));
+    };
+    header.addEventListener("click", (event) => {
+      if (event.target.closest?.(".api-key-row-actions")) return;
+      toggleModelList();
+    });
+    info.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        toggleModelList();
+      }
+    });
+
+    healthSection.append(header);
+    if (modelList) healthSection.appendChild(modelList);
+    main.appendChild(healthSection);
+  }
+
   function renderModelsListSection(main, config, providerName, update) {
     const provider = config.providers[providerName];
     const models = provider.models || [];
@@ -1365,10 +1425,10 @@ export function setupSettingsConfig({ configGateway, onModelConfigurationChanged
     title.textContent = "Models";
     const addBtn = document.createElement("button");
     addBtn.type = "button";
-    addBtn.className = "models-model-add";
+    addBtn.className = "models-model-add ui-button ui-button--ghost ui-button--sm";
     addBtn.textContent = "+ Add model";
     addBtn.addEventListener("click", () => {
-      newModelDraft = { id: "" };
+      newModelDraft = { id: "", provider: providerName };
       selectedModelsConfigItem = { type: "model-new", provider: providerName };
       renderModelsConfigLayout();
     });
@@ -1417,7 +1477,7 @@ export function setupSettingsConfig({ configGateway, onModelConfigurationChanged
   }
 
   function renderNewModelForm(main, config, providerName, update) {
-    if (!newModelDraft) newModelDraft = { id: "" };
+    if (!newModelDraft) newModelDraft = { id: "", provider: providerName };
     const draft = newModelDraft;
     const header = document.createElement("div");
     header.className = "models-config-detail-header";
@@ -1482,7 +1542,9 @@ export function setupSettingsConfig({ configGateway, onModelConfigurationChanged
       update(() => {
         const provider = config.providers[providerName];
         provider.models ||= [];
-        provider.models.push({ ...draft, id });
+        const modelDraft = { ...draft };
+        delete modelDraft.provider;
+        provider.models.push({ ...modelDraft, id });
         newModelDraft = null;
         selectedModelsConfigItem = {
           type: "model",
