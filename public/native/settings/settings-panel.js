@@ -30,6 +30,7 @@ export function setupSettingsPanel({
   onError,
   notify,
   onRestarted,
+  onThinkingLevelChanged,
 } = {}) {
   const panel = document.getElementById("settings-panel");
   const openBtn = document.getElementById("settings-btn");
@@ -75,6 +76,7 @@ export function setupSettingsPanel({
     getTarget,
     configGateway,
     onError,
+    onRuntimeLevelChanged: onThinkingLevelChanged,
   });
   const skillsPage = setupSkillsPage({
     container: document.getElementById("settings-skills"),

@@ -624,6 +624,9 @@ const settingsPanel = setupSettingsPanel({
   onError: showError,
   notify: notifications.notify,
   onRestarted: () => window.location.reload(),
+  onThinkingLevelChanged: (level, changedTarget) => {
+    if (changedTarget?.sessionId === target.sessionId) updateComposerThinking(level);
+  },
 });
 setupAppUpdater({ settingsPanel });
 setupNewSessionButton({ data, workspaceId: target.workspaceId, onError: showError });
@@ -1937,8 +1940,6 @@ function updateComposerThinking(level) {
     thinkingBtn.title = t("settings.thinkingTitle");
     thinkingBtn.setAttribute("aria-label", t("settings.thinkingAriaLabel", { level: levelLabel }));
   }
-  // Sync settings panel radio group
-  settingsPanel?.thinkingControl?.updateUI(level);
 }
 
 async function loadAvailableModels() {

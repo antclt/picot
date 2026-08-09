@@ -329,6 +329,7 @@ body.hide-thinking .thinking-block {
    ═══════════════════════════════════════════════════════ */
 
 .process-details-group {
+  flex-shrink: 0;
   margin: 2px 0;
 }
 

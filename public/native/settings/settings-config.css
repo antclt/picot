@@ -427,7 +427,7 @@
   font-size: var(--font-size-sm);
 }
 .settings-api-keys-empty-card {
-  padding: 28px;
+  padding: var(--space-6);
   text-align: center;
   border: 1px dashed var(--border);
   border-radius: var(--radius-md);
@@ -459,8 +459,8 @@
   margin-bottom: 18px;
 }
 .provider-picker-head h2 {
-  margin: 0 0 4px;
-  font-size: 22px;
+  margin: 0 0 var(--space-1);
+  font-size: var(--font-size-2xl);
   color: var(--text-primary);
 }
 .provider-picker-head p {
@@ -469,19 +469,19 @@
 .provider-picker-close {
   border: 0;
   background: transparent;
-  font-size: 28px;
+  font-size: var(--font-size-2xl);
   cursor: pointer;
 }
 .provider-picker-search {
   width: 100%;
   box-sizing: border-box;
-  margin-bottom: 18px;
-  padding: 12px 14px;
+  margin-bottom: var(--space-5);
+  padding: var(--space-3) var(--space-4);
   border: 1px solid var(--border);
-  border-radius: 9px;
+  border-radius: var(--radius-md);
   background: var(--bg-glass);
   color: var(--text-primary);
-  font-size: 15px;
+  font-size: var(--font-size-md);
 }
 .provider-picker-grid {
   display: grid;
@@ -490,8 +490,8 @@
 }
 .provider-picker-section-title {
   grid-column: 1 / -1;
-  margin: 10px 0 0;
-  font-size: 11px;
+  margin: var(--space-2) 0 0;
+  font-size: var(--font-size-sm);
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -507,32 +507,32 @@
   box-shadow: 0 24px 80px rgb(0 0 0 / 30%);
 }
 .provider-setup-note {
-  padding: 14px;
-  border-radius: 9px;
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
   background: var(--bg-glass);
   line-height: 1.5;
 }
 .provider-login-command {
   display: block;
-  margin-top: 14px;
-  padding: 14px;
-  border-radius: 8px;
+  margin-top: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-sm);
   background: var(--bg-glass-strong, #eee);
   color: var(--text-primary);
 }
 .provider-setup-form {
   display: grid;
-  gap: 14px;
+  gap: var(--space-3);
 }
 .provider-setup-form label {
   display: grid;
   gap: var(--space-1-5);
-  font-size: 13px;
+  font-size: var(--font-size-sm);
 }
 .provider-setup-form input {
-  padding: 10px 12px;
+  padding: var(--space-2) var(--space-3);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   background: var(--bg-glass);
   color: var(--text-primary);
   font: inherit;
@@ -540,18 +540,18 @@
 .provider-setup-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 10px;
-  margin-top: 20px;
+  gap: var(--space-2);
+  margin-top: var(--space-5);
 }
 .provider-picker-card {
   display: flex;
   align-items: center;
   gap: var(--space-3);
   min-height: 74px;
-  padding: 14px;
+  padding: var(--space-3);
   text-align: left;
   border: 1px solid var(--border);
-  border-radius: 11px;
+  border-radius: var(--radius-md);
   background: var(--bg-glass);
   color: var(--text-primary);
   cursor: pointer;
@@ -582,7 +582,7 @@
   font-size: var(--font-size-sm);
   font-weight: 700;
   object-fit: contain;
-  padding: 7px;
+  padding: var(--space-2);
   box-sizing: border-box;
 }
 @media (max-width: 680px) {
