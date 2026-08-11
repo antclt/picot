@@ -2,6 +2,7 @@
 // ABOUTME: Renders back/new-task controls, a workspace info card, and a session list.
 import { onLocaleChange, t } from "../../i18n.js";
 import { createIcon } from "../../icons.js";
+import { formatSessionTime } from "./session-sidebar.js";
 
 const INITIAL_LIMIT = 5;
 const STEP = 10;
@@ -173,6 +174,18 @@ export class WorkspaceFocusSidebar {
     name.textContent = title;
     name.title = title;
     row.appendChild(name);
+
+    // Relative timestamp ("Just now", "2h ago", …) — shared with the normal
+    // sidebar so focus rows show the same time label. Omitted when the session
+    // has no usable timestamp so an empty slot does not waste layout space.
+    const timeLabel = formatSessionTime(session.timestamp);
+    if (timeLabel) {
+      const time = document.createElement("span");
+      time.className = "session-time";
+      time.textContent = timeLabel;
+      row.appendChild(time);
+    }
+
     row.addEventListener("click", () => this.onSessionSelect?.(session));
     return row;
   }
