@@ -636,12 +636,6 @@
       "discovered": "已发现",
       "install": "安装",
       "packages": "软件包",
-      "addRoot": "启用到 Pi",
-      "addRootConfirmation": "要在 Pi 中启用此 Claude 技能目录吗？显示的设置项会在新建会话或重启 Pi 后生效。",
-      "addRootConfirm": "启用",
-      "addRootCancel": "取消",
-      "addRootFailed": "启用技能目录失败。",
-      "rootAddedRestartRequired": "已启用。新建会话或重启 Pi 后生效。",
       "sectionsAriaLabel": "技能页面分区"
     },
     "installSkills": {

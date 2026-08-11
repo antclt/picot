@@ -127,7 +127,6 @@ mod tests {
         let skills = [
             "list_skill_inventory",
             "set_skill_enabled",
-            "skill_add_root",
             "list_package_skill_inventory",
         ];
         for name in skills {
