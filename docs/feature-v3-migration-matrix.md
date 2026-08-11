@@ -92,7 +92,7 @@
 | P1-28 | Skills Install tab 扫描和安装 | skill source registry + broker controls | `skill_scan_install_source` / `skill_install_links` | **✅ 已迁移**（2026-08-05 核实，见 §3 记录） | 矩阵原标“部分覆盖”已过时；真实链路完整，见 §3 核实记录 | 选择目录→scan→候选→install→新 session 生效；sourceId/TTL/owner 校验完整 |
 | P1-29 | Skills Packages tab | package inventory | native package skills tab | 已覆盖 / 需验证 | 核对 read-only semantics 和 empty state | 只显示 bundled candidates；无错误 enablement 假象 |
 | P1-30 | Provider/API key/settings persistence | old embedded settings routes | native settings config + ConfigGateway | 需验证 | 检查 picot-config notify correlation 和 trusted owner | 保存/读取正确；unknown keys 保留；remote 不可执行 desktop-only config |
-| P1-31 | Thinking level 随 model 动态变化 | `f4e9457`/`35654e1` embedded + old app UI | native thinking control + runtime/config gateway | **部分覆盖** | target manual plan 已记录前端动态逻辑未完整移植 | 切 model 后可用 level 集合正确；默认值和 session profile 不混淆 |
+| P1-31 | Thinking level 随 model 动态变化 | `f4e9457`/`35654e1` embedded + old app UI | native thinking control + runtime/config gateway | **✅ 已迁移**（2026-08-11 核实，见 §3 记录） | 矩阵原标“部分覆盖”已过时：pi 0.83 原生提供 `cycle_thinking_level`/`get_available_thinking_levels`（rpc.md 已文档化，非 mutation）；composer 按钮已改用服务端循环，见 §3 核实记录 | 切 model 后可用 level 集合正确；默认值和 session profile 不混淆 |
 | P1-32 | session 草稿/model/thinking 持久化 | `session-ui-state.js` + old app wiring | `SessionUiStateStore` + native app | 已接线 / 需验证 | target 曾记录未显式调用，当前分支需复测接线 | session 切换恢复草稿/profile；刷新行为符合设计；不写入 Pi JSONL |
 | P1-33 | Compact | `compact-coordinator.js` + old app | native `createCompactCoordinator` + runtime command | 已接线 / 需验证 | target 曾记录未完整接入，复测确认 | 确认、进度、成功/失败、context usage 更新正确 |
 | P1-34 | Header usage/status bar | `ui/header-status-bar.js` | native app `createHeaderStatusBar` | 已接线 / 需验证 | target 已有 import，但需真实 runtime event/usage 验证 | usage/cost/status 只显示当前 target，不串 session |
@@ -160,6 +160,14 @@
 | **P1-40** Side/Quick Chat | ✅ 已迁移（E，矩阵过时） | `side-chat-manager.js`(396行/19方法) + `quick-chat-dialog.js`(578行/30方法) + `ephemeral-chat-view.js` + `ephemeral-chat-runtime`。app.js L329-418 已接线并绑定按钮。具备 owner registry、single-instance(`ephemeral_replace`)、transition settlement(`prepareWorkspaceTransition`)、窗口关闭清理。 |
 | **P2-07** troubleshoot-picot skill | ✅ 已更新（C） | skill 已识别 native Host（HostServer/NativePiManager/PiRpcBridge）。本次修正 stderr 描述：pi 子进程 stderr 进 diagnostics channel（`take_diagnostic`）但**未被消费、不进日志文件**；补充 `/health/runtime` L2 诊断端点。 |
 | **基线 `bun run check`** | ✅ 已清理（D） | 3 biome warnings（workspace-actions 死代码删除 + sidebar noDescendingSpecificity 加针对性 ignore）+ 29 CSS literal errors（3 处精确 tokenize 为 `--space-0-5`，其余加 `design-token-ignore` 说明为对话框/diff/context-menu 的 bespoke 尺寸）。`bun run check` 现全绿。 |
+
+### 2026-08-11 核实与修复记录
+
+本次基于当前分支 `private/feature-v3.3-new-arch` HEAD `0b03eff` 核实 fv3 `f4e9457`+`35654e1` 的 thinking 等级能力：
+
+| 矩阵项 | 本次动作 | 证据 / 结论 |
+| --- | --- | --- |
+| **P1-31** Thinking level 随 model 动态变化 | ✅ 已迁移（F，矩阵过时） | pi 0.83 原生提供 `cycle_thinking_level`/`get_available_thinking_levels`（`rpc.md` §Thinking 已文档化，`is_mutation` 不含前者、protocol 已注册 allowed）——无需像 fv3 那样在扩展层用 `getSupportedThinkingLevels(model)` 自行计算。native 缺口仅为 composer 按钮前端硬编码 `THINKING_LEVELS` 数组循环；本次改为 `runtime.request({type:"cycle_thinking_level"})` 服务端循环（`native/app.js` thinkingBtn handler，响应 `data.level` 回填 `updateComposerThinking`），并新增 `app-thinking-cycle.test.js` 覆盖“点击发 cycle 命令 + 响应 level 回填按钮”。settings 面板 `thinking-effort-control.js` 已走 configGateway 持久化默认级（`set_default_thinking_level`），无需改动。`bun run check` + public 全套 736 测试通过。 |
 
 ## 4. feature-v3 最新改动的回填清单
 

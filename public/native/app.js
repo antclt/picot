@@ -142,7 +142,6 @@ const modelDropdownLabel = document.getElementById("model-dropdown-label");
 const modelDropdownMenu = document.getElementById("model-dropdown-menu");
 const modelDropdownToolbar = modelDropdown?.closest(".composer-toolbar");
 const thinkingBtn = document.getElementById("thinking-btn");
-const THINKING_LEVELS = ["off", "minimal", "low", "medium", "high"];
 
 function formatThinkingLevelLabel(level) {
   const normalizedLevel = level || "off";
@@ -2118,6 +2117,12 @@ function buildModelDropdownItem(model) {
         { idempotencyKey: randomId() },
       );
       updateComposerModel(model);
+      // Reconcile the thinking level after a model switch. pi 0.83's set_model
+      // response is the Model object (no thinkingLevel field, see rpc.md); the
+      // server's effective thinking level for the new model lives in get_state.
+      const stateResult = await runtime.request({ type: "get_state" }, target);
+      const level = stateResult?.response?.data?.thinkingLevel;
+      if (level) updateComposerThinking(level);
     } catch (error) {
       showError(error);
     }
@@ -2219,13 +2224,13 @@ onLocaleChange(() => {
 
 if (thinkingBtn) {
   thinkingBtn.addEventListener("click", async () => {
-    const idx = THINKING_LEVELS.indexOf(currentThinkingLevel);
-    const nextLevel = THINKING_LEVELS[(idx + 1) % THINKING_LEVELS.length];
     try {
-      await runtime.request({ type: "set_thinking_level", level: nextLevel }, target, {
-        idempotencyKey: randomId(),
-      });
-      updateComposerThinking(nextLevel);
+      // Ask the server to cycle through the current model's supported levels
+      // (cycle_thinking_level) instead of stepping a fixed client-side array —
+      // the server skips levels the active model does not support.
+      const result = await runtime.request({ type: "cycle_thinking_level" }, target);
+      const level = result?.response?.data?.level;
+      if (level) updateComposerThinking(level);
     } catch (error) {
       showError(error);
     }
