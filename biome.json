@@ -12,6 +12,7 @@
       "!.cache",
       "!.claude",
       "!.pi",
+      "!.pi-subagents",
       "!.worktrees",
       "!node_modules",
       "!public/vendor",
