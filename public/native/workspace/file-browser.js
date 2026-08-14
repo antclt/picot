@@ -4,6 +4,8 @@
  * data request scoped to the current workspace root; there is no absolute
  * filesystem path to escape to.
  */
+import { t } from "../../i18n.js";
+
 export class NativeFileBrowser {
   #container;
   #pathEl;
@@ -83,7 +85,7 @@ export class NativeFileBrowser {
       this.#render();
     } catch (error) {
       if (requestId !== this.#requestId) return;
-      this.#container.replaceChildren(messageRow(error?.message || "Failed to load"));
+      this.#container.replaceChildren(messageRow(error?.message || t("files.failedLoad")));
     }
   }
 
@@ -102,7 +104,7 @@ export class NativeFileBrowser {
       return;
     }
     if (this.#entries.length === 0) {
-      this.#container.append(messageRow("Empty directory"));
+      this.#container.append(messageRow(t("files.empty")));
       return;
     }
     for (const entry of this.#entries) {
@@ -159,14 +161,15 @@ export class NativeFileBrowser {
   #renderViewSwitch() {
     const switcher = document.createElement("div");
     switcher.className = "file-browser-view-switch ui-toolbar";
-    for (const [view, label] of [
-      ["files", "Files"],
-      ["diff", "Diff"],
+    for (const [view, labelKey] of [
+      ["files", "nav.files"],
+      ["diff", "files.preview.diff"],
     ]) {
       const button = document.createElement("button");
       button.type = "button";
+      button.dataset.view = view;
       button.className = `ui-button ui-button--sm ui-button--ghost${this.#view === view ? " active" : ""}`;
-      button.textContent = label;
+      button.textContent = t(labelKey);
       button.setAttribute("aria-pressed", String(this.#view === view));
       button.addEventListener("click", () => {
         this.#view = view;
@@ -202,7 +205,7 @@ export class NativeFileBrowser {
 
   #renderChanges() {
     if (this.#gitFiles.length === 0) {
-      this.#container.append(messageRow("No changes"));
+      this.#container.append(messageRow(t("files.noChanges")));
       return;
     }
     const section = document.createElement("section");
@@ -210,7 +213,7 @@ export class NativeFileBrowser {
     const heading = document.createElement("div");
     heading.className = "file-changes-heading";
     const label = document.createElement("span");
-    label.textContent = "Changes";
+    label.textContent = t("git.changesHeading");
     const count = document.createElement("span");
     count.className = "ui-badge file-changes-count";
     count.textContent = String(this.#gitFiles.length);

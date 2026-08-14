@@ -243,6 +243,8 @@ describe("JS t() literal key references", () => {
           !segment.includes("escapeHtml(t(") &&
           !segment.includes("this.escapeHtml(t(") &&
           !segment.includes("this._escape(t(") &&
+          !segment.includes("esc(t(") &&
+          !segment.includes("escAttr(t(") &&
           !segment.includes("textContent")
         ) {
           violations.push(`${file}: .innerHTML assignment with raw t() without escapeHtml`);

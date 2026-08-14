@@ -1,6 +1,11 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { initI18n } from "../../i18n.js";
 import { setSuperAgentEnabled } from "../../super-agent/settings.js";
 import { formatSessionTime, SessionSidebar } from "./session-sidebar.js";
+
+const enMessages = JSON.parse(readFileSync(join(process.cwd(), "public/locales/en.json"), "utf8"));
 
 function makeSidebar(sessions, overrides = {}) {
   const container = document.createElement("div");
@@ -44,6 +49,16 @@ function deferred() {
   return { promise, resolve, reject };
 }
 
+beforeEach(async () => {
+  globalThis.fetch = vi.fn(async (input) => {
+    if (String(input).includes("/locales/")) {
+      return { ok: true, status: 200, json: async () => enMessages };
+    }
+    return { ok: false, status: 404, json: async () => ({}) };
+  });
+  await initI18n();
+});
+
 describe("formatSessionTime", () => {
   it("renders relative labels instead of raw ISO strings", () => {
     const now = Date.now();
@@ -60,11 +75,18 @@ describe("formatSessionTime", () => {
 });
 
 describe("SessionSidebar.render", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     localStorage.clear();
     document.querySelectorAll(".session-context-menu").forEach((menu) => {
       menu.remove();
     });
+    globalThis.fetch = vi.fn(async (input) => {
+      if (String(input).includes("/locales/")) {
+        return { ok: true, status: 200, json: async () => enMessages };
+      }
+      return { ok: false, status: 404, json: async () => ({}) };
+    });
+    await initI18n();
   });
 
   afterEach(() => {
@@ -102,7 +124,7 @@ describe("SessionSidebar.render", () => {
       new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 10, clientY: 10 }),
     );
     const generate = Array.from(document.querySelectorAll(".context-menu-item")).find((row) =>
-      row.textContent.toLowerCase().includes("generatetitle"),
+      row.textContent.toLowerCase().includes("generate title"),
     );
     generate.click();
 

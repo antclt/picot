@@ -453,7 +453,7 @@ export class SessionSidebar {
       if (retryDelay != null) {
         console.warn("[Sidebar] Session load failed; retrying:", error);
         if (!quiet && this.sessions.length === 0) {
-          this.container.innerHTML = '<div class="session-loading">Loading sessions...</div>';
+          this.container.innerHTML = `<div class="session-loading">${escapeHtml(t("sidebar.loadingSessions"))}</div>`;
         }
         setTimeout(() => {
           if (seq === this._loadSeq) {
@@ -464,8 +464,7 @@ export class SessionSidebar {
       }
       console.error("[Sidebar] Failed to load sessions:", error);
       if (this.sessions.length > 0) return;
-      this.container.innerHTML =
-        '<div class="session-loading">Failed to load sessions. <button class="retry-link" id="retry-load-sessions">Retry</button></div>';
+      this.container.innerHTML = `<div class="session-loading">${escapeHtml(t("sidebar.failedToLoadSessions"))} <button class="retry-link" id="retry-load-sessions">${escapeHtml(t("sidebar.retry"))}</button></div>`;
       this.container
         .querySelector("#retry-load-sessions")
         ?.addEventListener("click", () => this.load());
@@ -535,7 +534,7 @@ export class SessionSidebar {
     group.className = "search-results-group";
     const header = document.createElement("div");
     header.className = "project-header search-results-header";
-    header.innerHTML = `<span>🔍</span> <span>Message matches</span> <span class="project-count">${this._searchResults.length}</span>`;
+    header.innerHTML = `<span>🔍</span> <span>${escapeHtml(t("sidebar.messageMatches"))}</span> <span class="project-count">${this._searchResults.length}</span>`;
     group.appendChild(header);
 
     const sessionsDiv = document.createElement("div");
@@ -545,7 +544,7 @@ export class SessionSidebar {
       item.className = "session-item search-result-item";
       item.dataset.sessionId = result.sessionId;
       if (result.sessionId === this.activeSessionId) item.classList.add("active");
-      const title = result.sessionName || result.firstMessage || "Untitled";
+      const title = result.sessionName || result.firstMessage || t("sidebar.untitled");
       const snippet = result.matches?.[0]?.snippet || "";
       const matchCount = result.matches?.length ?? 0;
       const time = formatSessionTime(result.sessionTimestamp);
@@ -554,7 +553,7 @@ export class SessionSidebar {
           <div class="session-title" title="${escapeHtml(title)}">${escapeHtml(title)}</div>
         </div>
         <div class="search-snippet">${this.#highlight(snippet, this.searchQuery)}</div>
-        <div class="session-meta">${time}${matchCount > 1 ? ` · ${matchCount} matches` : ""}</div>`;
+        <div class="session-meta">${time}${matchCount > 1 ? ` · ${escapeHtml(t("sidebar.matchCount", { count: matchCount }))}` : ""}</div>`;
       item.addEventListener("click", () =>
         this.onSelect({ id: result.sessionId, isCurrentWorkspace: true }),
       );
@@ -659,7 +658,7 @@ export class SessionSidebar {
   render() {
     this.container.innerHTML = "";
     if (this.sessions.length === 0) {
-      this.container.innerHTML = '<div class="session-loading">No saved sessions</div>';
+      this.container.innerHTML = `<div class="session-loading">${escapeHtml(t("sidebar.noSavedSessions"))}</div>`;
       return;
     }
 
@@ -683,7 +682,7 @@ export class SessionSidebar {
     }
 
     if (favourites.length === 0 && archived.length === 0 && regular.length === 0) {
-      this.container.innerHTML = '<div class="session-loading">No saved sessions</div>';
+      this.container.innerHTML = `<div class="session-loading">${escapeHtml(t("sidebar.noSavedSessions"))}</div>`;
       return;
     }
 

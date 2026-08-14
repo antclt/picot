@@ -1,3 +1,5 @@
+import { t } from "../../i18n.js";
+
 /**
  * project-header — populates the chat header with workspace path and git
  * branch info fetched from the host data plane.
@@ -41,7 +43,7 @@ export async function setupProjectHeader({ data, workspaceId }) {
   if (diffToggleEl) {
     if (info.gitBranch) {
       if (branchLabelEl) branchLabelEl.textContent = info.gitBranch;
-      diffToggleEl.title = `Git changes — ${info.gitBranch}`;
+      diffToggleEl.title = t("git.changesWithBranch", { branch: info.gitBranch });
       diffToggleEl.classList.remove("hidden");
     } else {
       diffToggleEl.classList.add("hidden");

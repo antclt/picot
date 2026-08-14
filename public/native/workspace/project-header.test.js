@@ -1,6 +1,10 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { initI18n } from "../../i18n.js";
 import { setupProjectHeader } from "./project-header.js";
 
+const enMessages = JSON.parse(readFileSync(join(process.cwd(), "public/locales/en.json"), "utf8"));
 const BASE_HTML = `
   <div id="workspace-indicator" class="hidden"></div>
   <button id="diff-sidebar-toggle" class="git-branch-toggle hidden">
@@ -9,6 +13,16 @@ const BASE_HTML = `
 `;
 
 describe("project header", () => {
+  beforeEach(async () => {
+    globalThis.fetch = vi.fn(async (input) => {
+      if (String(input).includes("/locales/")) {
+        return { ok: true, json: async () => enMessages };
+      }
+      return { ok: false, status: 404, json: async () => ({}) };
+    });
+    await initI18n();
+  });
+
   afterEach(() => {
     document.body.innerHTML = "";
     vi.restoreAllMocks();

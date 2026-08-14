@@ -67,6 +67,7 @@ import { findLatestAssistantUsage, setupContextUsage } from "./workspace/context
 import { NativeFileBrowser, toggleExclusiveSidePanel } from "./workspace/file-browser.js";
 import { setupHeaderOpenApp } from "./workspace/header-open-app.js";
 import { setupProjectHeader } from "./workspace/project-header.js";
+import { createSessionStatus } from "./workspace/session-status.js";
 import {
   createSessionViaHost,
   openSessionInProjectViaHost,
@@ -83,6 +84,10 @@ import {
 // TDZ and cause "Cannot access 'snapshotInFlight' before initialization" when
 // the handler fires before module evaluation reaches the `let` line.
 let snapshotInFlight = false;
+// Status lives in its own module so hooks can fire while this file is paused
+// on a later `await` without hitting TDZ on `let statusKind`.
+const sessionStatus = createSessionStatus({ t });
+const { applyHostStatus, renderStatus, setStatus } = sessionStatus;
 const route = parseAppRoute(window.location.pathname);
 if (route.name !== "session") throw new Error("Native Picot requires a session route");
 
@@ -314,7 +319,7 @@ const extensionUi = new ExtensionUiHost({
       }
       messageRenderer.renderSystemMessage(request.message || "");
     },
-    status: (request) => setStatus(request.statusText || "Connected"),
+    status: (request) => applyHostStatus(request.statusText),
     title: (request) => {
       if (request.title) document.title = request.title;
     },
@@ -329,6 +334,15 @@ const extensionUi = new ExtensionUiHost({
       if (isRpivTodoWidgetRequest(request)) return;
     },
   },
+});
+sessionStatus.bind({
+  abortButton,
+  composerCard,
+  getSessionId: () => target.sessionId,
+  hasPending: (sessionId) => extensionUi.hasPending(sessionId),
+  sendButton,
+  statusIndicator,
+  statusText,
 });
 await extensionUi.setForegroundSession(target.sessionId, { flush: false });
 await extensionUi.flushForegroundQueue();
@@ -442,7 +456,7 @@ const hydrateFromSnapshot = async (snapshot) => {
   renderQueuedMessages(queuedMessages, store.queue);
   convNav.rebuild();
   const pi = snapshot.state.pi ?? {};
-  setStatus(pi.isStreaming ? "Working…" : "Connected");
+  setStatus(pi.isStreaming ? "working" : "connected");
   contextUsage.setWorking(Boolean(pi.isStreaming));
   if (pi.isStreaming) showLiveProcessIndicator();
   contextUsage.setCompacting(snapshot.state.compaction?.status === "running");
@@ -497,7 +511,7 @@ runtime.subscribe((frame) => {
 setupConfigGatewayConnectionListener({
   adapter,
   isReady: () => configGatewayTargetReady,
-  onDisconnected: () => setStatus("Disconnected"),
+  onDisconnected: () => setStatus("disconnected"),
 });
 adapter.connect();
 
@@ -694,7 +708,7 @@ try {
         elapsedMs: Math.round(performance.now() - renderStartedAt),
         totalElapsedMs: Math.round(performance.now() - initialLoadStartedAt),
       });
-      setStatus("Connected");
+      setStatus("connected");
       if (hadInFlightPrompt) await extensionUi.flushForegroundQueue();
     }
   } else {
@@ -899,7 +913,7 @@ async function switchSession(sessionId) {
 
   // Keep the current messages visible while the new session loads. The
   // history render below replaces them atomically once the new data is ready.
-  setStatus("Loading\u2026");
+  setStatus("loading");
 
   // Phase 1: fire bootstrap (spawns Pi if needed) and fast disk message read
   // in parallel. The disk read returns messages without waiting for Pi to start.
@@ -965,7 +979,7 @@ async function switchSession(sessionId) {
 
   // Phase 2: disk history was rendered by the parallel read as soon as it
   // arrived, without waiting for the Pi process to finish bootstrapping.
-  setStatus("Connected");
+  setStatus("connected");
   if (diskLoad.hadInFlightPrompt) {
     await extensionUi.flushForegroundQueue();
   }
@@ -989,7 +1003,7 @@ async function switchSession(sessionId) {
     // Pi snapshot failed but disk messages are already showing — degrade
     // gracefully rather than surfacing an error over a readable history.
     console.warn("[switchSession] Pi snapshot failed, showing disk history:", error);
-    setStatus("Connected");
+    setStatus("connected");
     // Still flush any queued extension prompts even when snapshot fails.
     await extensionUi.flushForegroundQueue();
   }
@@ -1443,12 +1457,12 @@ function runBuiltin(action) {
 async function handleRuntimeEvent(event) {
   switch (event.type) {
     case "agent_start":
-      setStatus("Working…");
+      setStatus("working");
       contextUsage.setWorking(true);
       sidebar?.setStreaming(target.sessionId, true);
       break;
     case "agent_settled":
-      setStatus("Connected");
+      setStatus("connected");
       contextUsage.setWorking(false);
       sidebar?.setStreaming(target.sessionId, false);
       hideLiveProcessIndicator();
@@ -1889,22 +1903,6 @@ function textFromMessageContent(content) {
   return trimmed ? trimmed.slice(0, 120) : null;
 }
 
-function setStatus(text) {
-  statusText.textContent = text;
-  const isWorking = text === "Working…";
-  // Keep Stop visible while an extension question is open/queued for this
-  // session even if a stale status frame briefly reports "Connected" (e.g.
-  // right after a session switch) — otherwise the only way to unblock a
-  // wedged tool call becomes unreachable.
-  const showAbort = isWorking || extensionUi.hasPending(target.sessionId);
-  statusIndicator?.classList.toggle("streaming", isWorking);
-  composerCard?.classList.toggle("streaming", isWorking);
-  abortButton?.classList.toggle("hidden", !showAbort);
-  sendButton?.classList.toggle("hidden", showAbort);
-  statusIndicator?.classList.toggle("disconnected", text === "Disconnected");
-  statusIndicator?.classList.toggle("connected", !isWorking && text !== "Disconnected");
-}
-
 function abortCurrentRun() {
   runtime.request({ type: "abort" }, target).catch(showError);
   // A tool call blocked on ctx.ui.select/confirm/input/editor won't be
@@ -1915,7 +1913,7 @@ function abortCurrentRun() {
 }
 
 function showError(error) {
-  setStatus("Disconnected");
+  setStatus("disconnected");
   messageRenderer.renderError(error?.message || String(error));
 }
 
@@ -2144,6 +2142,7 @@ document.addEventListener("click", (event) => {
 
 onLocaleChange(() => {
   updateComposerThinking(currentThinkingLevel);
+  renderStatus();
 });
 
 if (thinkingBtn) {

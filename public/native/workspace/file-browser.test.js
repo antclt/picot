@@ -165,13 +165,11 @@ describe("NativeFileBrowser", () => {
     );
 
     await browser.load();
-    const diffButton = [...container.querySelectorAll(".file-browser-view-switch button")].find(
-      (button) => button.textContent === "Diff",
-    );
+    const diffButton = container.querySelector('[data-view="diff"]');
     diffButton.click();
     container.querySelector(".file-change-item").click();
 
-    expect(container.textContent).toContain("Changes");
+    expect(container.querySelector(".file-changes-heading")).not.toBeNull();
     expect(container.textContent).toContain("src/app.js");
     expect(onFileSelect).toHaveBeenCalledWith(
       expect.objectContaining({ relativePath: "src/app.js", mode: "diff" }),
@@ -202,9 +200,7 @@ describe("NativeFileBrowser", () => {
     expect(container.textContent).toContain("regular.js");
     expect(container.textContent).not.toContain("changed.js");
 
-    [...container.querySelectorAll(".file-browser-view-switch button")]
-      .find((button) => button.textContent === "Diff")
-      .click();
+    container.querySelector('[data-view="diff"]').click();
     expect(container.textContent).toContain("changed.js");
     expect(container.textContent).not.toContain("regular.js");
   });
