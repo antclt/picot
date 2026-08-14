@@ -195,7 +195,7 @@
 
 /* Open project in external app (VS Code / Cursor / Terminal / …) */
 .archived-delete-all-btn {
-  display: none;
+  display: flex;
   align-items: center;
   justify-content: center;
   width: 20px;
@@ -212,10 +212,6 @@
   transition:
     color var(--duration) var(--ease),
     background var(--duration) var(--ease);
-}
-
-.archived-header:hover .archived-delete-all-btn {
-  display: flex;
 }
 
 .archived-delete-all-btn:hover {

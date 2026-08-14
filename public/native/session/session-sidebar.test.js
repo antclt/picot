@@ -650,8 +650,9 @@ describe("SessionSidebar.render", () => {
     sidebar.toggleArchived("s-arc-2");
     await sidebar.load();
 
-    const deleteAllBtn = container.querySelector(".archived-delete-all-btn");
+    const deleteAllBtn = container.querySelector(".archived-header .archived-delete-all-btn");
     expect(deleteAllBtn).toBeTruthy();
+    expect(container.querySelector(".sidebar-section-footer .archived-delete-all-btn")).toBeNull();
     control.deleteSessions.mockResolvedValueOnce({ deleted: ["s-arc-1", "s-arc-2"], errors: [] });
     deleteAllBtn.click();
 

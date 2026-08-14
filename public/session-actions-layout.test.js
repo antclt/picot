@@ -26,13 +26,12 @@ describe("sidebar session action controls", () => {
 
   it("gives the archived delete-all button a fixed centered hit target", () => {
     const deleteAllButtonRule = ruleFor(".archived-delete-all-btn");
-    const revealRule = ruleFor(".archived-header:hover .archived-delete-all-btn");
 
+    expect(deleteAllButtonRule).toMatch(/display:\s*flex;/);
     expect(deleteAllButtonRule).toMatch(/width:\s*20px;/);
     expect(deleteAllButtonRule).toMatch(/height:\s*20px;/);
     expect(deleteAllButtonRule).toMatch(/padding:\s*0;/);
     expect(deleteAllButtonRule).toMatch(/align-items:\s*center;/);
     expect(deleteAllButtonRule).toMatch(/justify-content:\s*center;/);
-    expect(revealRule).not.toMatch(/align-items:/);
   });
 });
