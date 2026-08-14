@@ -125,6 +125,10 @@ impl PiLaunchResolver {
             extensions,
             pi_version: locked_pi_version().to_owned(),
             path_env: build_augmented_path(),
+            // Picot workspaces are opened via the OS folder picker, so the user
+            // has already opted in; trust project-local resources for every
+            // pi process Picot spawns.
+            approve: true,
         })
     }
 
@@ -267,6 +271,10 @@ impl PiLaunchResolver {
         let binary = self.resolve_bundled_pi()?;
         let binary_str = strip_verbatim_prefix(&binary.to_string_lossy());
         Ok((binary_str, build_augmented_path()))
+    }
+
+    pub fn bundled_pi_path(&self) -> Result<PathBuf, String> {
+        self.resolve_bundled_pi()
     }
 
     fn resolve_bundled_pi(&self) -> Result<PathBuf, String> {
