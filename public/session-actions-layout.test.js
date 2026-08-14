@@ -14,13 +14,22 @@ function ruleFor(selector) {
 }
 
 describe("sidebar session action controls", () => {
-  it("overlays the archive button without reserving title-row space", () => {
-    const actionSlotRule = ruleFor(".session-action-slot");
-    const archiveButtonRule = ruleFor(".session-archive-btn");
+  it("overlays hover actions without reserving title-row space", () => {
+    const actionSlotRules = [...styleCss.matchAll(/\.session-action-slot\s*\{([^}]*)\}/gs)].map(
+      (match) => match[1],
+    );
 
-    expect(actionSlotRule).toMatch(/position:\s*absolute;/);
-    expect(actionSlotRule).toMatch(/right:\s*0;/);
-    expect(archiveButtonRule).toMatch(/justify-content:\s*center;/);
+    expect(actionSlotRules.some((rule) => /position:\s*absolute;/.test(rule))).toBe(true);
+    for (const rule of actionSlotRules) {
+      expect(rule).not.toMatch(/width:\s*76px;/);
+    }
+
+    const groupedButtons = styleCss.match(
+      /\.session-pin-btn,\s*\.session-archive-btn,\s*\.session-rename-btn\s*\{([^}]*)\}/s,
+    );
+    expect(groupedButtons, "Missing grouped session action button rule").toBeTruthy();
+    expect(groupedButtons[1]).toMatch(/justify-content:\s*center;/);
+    expect(groupedButtons[1]).not.toMatch(/position:\s*absolute;/);
   });
 
   it("gives the archived delete-all button a fixed centered hit target", () => {

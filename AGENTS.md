@@ -9,9 +9,6 @@ live in [`ARCHITECTURE.md`](ARCHITECTURE.md).
 - Read the applicable `ARCHITECTURE.md` section and its linked design documents
   before changing UI behavior, persistence, workspace I/O, or cross-process
   communication.
-- For Quick Chat or Side Chat work, read
-  [`docs/superpowers/specs/2026-07-15-quick-and-side-chat-design.md`](docs/superpowers/specs/2026-07-15-quick-and-side-chat-design.md)
-  and the temporary-chat architecture section.
 - **Before porting any feature-v3 feature**, read and follow
   [`docs/feature-v3-migration-playbook.md`](docs/feature-v3-migration-playbook.md).
   It documents the two-architecture identifier mapping, the verbatim-port

@@ -402,9 +402,7 @@
   white-space: nowrap;
 }
 
-/* Focus-row timestamp overrides the normal sidebar's absolute-positioned
-   .session-time (which layers over an action-slot). In the focus row the
-   time is a plain flex child stacked under the name. */
+/* Focus-row timestamp is a plain flex child under the name. */
 .focus-session-row .session-time {
   position: static;
   inset: auto;

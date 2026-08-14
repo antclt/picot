@@ -52,9 +52,7 @@ export class RuntimeGateway {
     }
   }
 
-  // Send a host_request (control plane) operation. Used by ephemeral chats
-  // (ephemeral_create / ephemeral_close / ephemeral_update_ui) and other
-  // host-side state mutations.
+  // Send a host_request (control plane) operation for host-side state mutations.
   sendHostRequest(payload, requestIdOverride = null) {
     return this.#send(
       {

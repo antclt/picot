@@ -1,19 +1,10 @@
-// ABOUTME: Owns the session-aggregate usage/cost row in the header (IN/OUT/CACHE/cost).
-// ABOUTME: Completely separate from the current-context (lastUsage) lifecycle so a
-// ABOUTME: successful Compact can invalidate stale context without fabricating usage.
-
-const DEFAULT_CONTEXT_THRESHOLDS = { warning: 0.6, critical: 0.8 };
+// ABOUTME: Owns the session-aggregate cost row in the header and publishes
+// ABOUTME: token totals for the combined context pill. Completely separate from
+// ABOUTME: the current-context (lastUsage) lifecycle so a successful Compact can
+// ABOUTME: invalidate stale context without fabricating usage.
 
 function formatCost(amount) {
   return Number.isFinite(amount) ? amount.toFixed(4) : "0.0000";
-}
-
-/** Compact a raw token count into a short suffixed string (M / K / raw). */
-function formatTokens(value) {
-  const n = finiteAmount(value);
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${Math.round(n / 1_000)}K`;
-  return String(n);
 }
 
 function finiteAmount(value) {
@@ -26,26 +17,19 @@ function sum(prev, next) {
 }
 
 /**
- * Build a header status bar that renders session-aggregate token/cost totals
+ * Build a header status bar that renders session-aggregate cost
  * (sourced only from `hydrateSessionStats` and post-hydration `applyLiveUsage`)
- * plus the current-context percentage (sourced independently by the caller).
+ * and notifies the caller of token totals for the combined usage pill.
  *
  * Aggregate totals are intentionally not derived from `lastUsage`/history
  * replay: repeated mirror syncs and history rendering must never increment
  * them. Only the authoritative `get_session_stats` hydration and new live
  * assistant completions for the same active session contribute.
  *
- * @param {{sessionCostEl:HTMLElement, sessionUsageEl:HTMLElement, getContextWindowSize:()=>number, t:(k,p?)=>string, thresholds?:{warning:number,critical:number}}} deps
- * @returns {{applyLiveUsage, hydrateSessionStats, reset, sync}}
+ * @param {{sessionCostEl:HTMLElement, t:(k,p?)=>string, onTotalsChange?:(totals:{input:number,output:number,cacheRead:number,cacheWrite:number,cost:number})=>void}} deps
+ * @returns {{applyLiveUsage, hydrateSessionStats, reset}}
  */
-export function createHeaderStatusBar({
-  sessionCostEl,
-  sessionUsageEl,
-  tokenUsageEl,
-  getContextWindowSize,
-  t,
-  thresholds = DEFAULT_CONTEXT_THRESHOLDS,
-}) {
+export function createHeaderStatusBar({ sessionCostEl, t, onTotalsChange } = {}) {
   const totals = {
     input: 0,
     output: 0,
@@ -55,22 +39,8 @@ export function createHeaderStatusBar({
   };
   let hydratedSessionFile = null;
   let hasHydrated = false;
-  let currentUsage = null;
 
   function renderAggregate() {
-    if (totals.input <= 0 && totals.output <= 0 && totals.cacheRead <= 0) {
-      sessionUsageEl.replaceChildren();
-      sessionUsageEl.removeAttribute("title");
-      sessionUsageEl.classList.remove("visible");
-    } else {
-      sessionUsageEl.textContent = t("usage.summary", {
-        in: formatTokens(totals.input),
-        out: formatTokens(totals.output),
-        cache: formatTokens(totals.cacheRead),
-      });
-      sessionUsageEl.classList.add("visible");
-    }
-
     if (totals.cost > 0) {
       sessionCostEl.textContent = t("usage.costSub", { amount: `$${formatCost(totals.cost)}` });
       sessionCostEl.classList.add("visible");
@@ -78,17 +48,7 @@ export function createHeaderStatusBar({
       sessionCostEl.replaceChildren();
       sessionCostEl.classList.remove("visible");
     }
-    renderContextThreshold();
-  }
-
-  function renderContextThreshold() {
-    const contextWindow = getContextWindowSize?.() ?? 0;
-    tokenUsageEl?.classList.remove("warning", "critical");
-    if (!currentUsage || contextWindow <= 0) return;
-    const used = sum(currentUsage.input, currentUsage.cacheRead);
-    const ratio = used / contextWindow;
-    if (ratio >= thresholds.critical) tokenUsageEl?.classList.add("critical");
-    else if (ratio >= thresholds.warning) tokenUsageEl?.classList.add("warning");
+    onTotalsChange?.({ ...totals });
   }
 
   function reset() {
@@ -99,10 +59,6 @@ export function createHeaderStatusBar({
     totals.cost = 0;
     hydratedSessionFile = null;
     hasHydrated = false;
-    currentUsage = null;
-    tokenUsageEl?.replaceChildren();
-    tokenUsageEl?.removeAttribute("title");
-    tokenUsageEl?.classList.remove("visible", "warning", "critical");
     renderAggregate();
   }
 
@@ -144,10 +100,5 @@ export function createHeaderStatusBar({
     return true;
   }
 
-  function sync({ currentUsage: nextUsage } = {}) {
-    currentUsage = nextUsage ?? null;
-    renderContextThreshold();
-  }
-
-  return { applyLiveUsage, hydrateSessionStats, reset, sync };
+  return { applyLiveUsage, hydrateSessionStats, reset };
 }

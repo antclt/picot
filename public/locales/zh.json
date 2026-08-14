@@ -11,9 +11,6 @@
   "nav": {
     "chat": "聊天",
     "toggleSidebar": "切换侧边栏",
-    "sideChat": "侧边聊天",
-    "quickChat": "快速聊天",
-    "newSideChat": "新建侧边聊天",
     "showMobileQR": "显示移动端二维码",
     "openWorkspace": "打开工作区",
     "openWorkspaceInApp": "在应用中打开工作区",
@@ -75,6 +72,8 @@
     "costSub": "{amount}（订阅）",
     "sessionUsageTitle": "会话令牌（输入 / 输出 / 缓存）",
     "summary": "入 {in} · 出 {out} · 缓存 {cache}",
+    "inputSummary": "入 {in}",
+    "outputSummary": "出 {out}",
     "cache": "CACHE",
     "costTitle": "Session cost",
     "input": "IN",
@@ -95,6 +94,7 @@
   "context": {
     "cached": "已缓存",
     "input": "输入",
+    "output": "输出",
     "available": "可用",
     "used": "已用 {pct}%",
     "tooltip": "{label}：{tokens}"
@@ -1084,29 +1084,5 @@
     "chooseProjectBeforeApproval": "批准前请先选择项目。",
     "loadingProjects": "正在加载项目…",
     "projectRunning": "{name} · 运行中"
-  },
-  "ephemeral": {
-    "placeholder": "随意提问…",
-    "send": "发送",
-    "abort": "中止",
-    "newChat": "新对话",
-    "startingSideChat": "正在启动侧边聊天…",
-    "startingQuickChat": "正在启动快速聊天…",
-    "tokens": "令牌",
-    "sideChat": "侧边聊天",
-    "sideChatLimit": "已达到侧边聊天上限",
-    "quickChat": "快速聊天",
-    "minimize": "最小化",
-    "close": "关闭",
-    "confirmDiscard": "此临时对话不会保存。确认丢弃？",
-    "confirmCloseSummary": "关闭并丢弃未保存的文件和临时对话？",
-    "generating": "生成中",
-    "unread": "未读",
-    "resize": "调整快速聊天大小",
-    "statusReady": "就绪",
-    "statusStreaming": "生成中",
-    "statusError": "错误",
-    "statusDisconnected": "已断开",
-    "confirmCloseSideChat": "关闭侧边聊天？"
   }
 }

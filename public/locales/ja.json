@@ -11,9 +11,6 @@
   "nav": {
     "chat": "チャット",
     "toggleSidebar": "サイドバーを切り替え",
-    "sideChat": "サイドチャット",
-    "quickChat": "クイックチャット",
-    "newSideChat": "新しいサイドチャット",
     "showMobileQR": "モバイルQRコードを表示",
     "openWorkspace": "ワークスペースを開く",
     "openWorkspaceInApp": "アプリでワークスペースを開く",
@@ -78,6 +75,8 @@
     "cache": "cache",
     "costTitle": "costTitle",
     "summary": "In {in} · Out {out} · Cache {cache}",
+    "inputSummary": "In {in}",
+    "outputSummary": "Out {out}",
     "sessionUsageTitle": "Session tokens (input / output / cache)"
   },
   "sessionInfo": {
@@ -95,6 +94,7 @@
   "context": {
     "cached": "キャッシュ済み",
     "input": "入力",
+    "output": "出力",
     "available": "利用可能",
     "used": "{pct}% 使用中",
     "tooltip": "{label}：{tokens}"
@@ -1084,29 +1084,5 @@
     "chooseProjectBeforeApproval": "承認する前にプロジェクトを選んでください。",
     "loadingProjects": "プロジェクトを読み込み中…",
     "projectRunning": "{name} · 実行中"
-  },
-  "ephemeral": {
-    "placeholder": "何でも聞いてください…",
-    "send": "送信",
-    "abort": "中止",
-    "newChat": "新しいチャット",
-    "startingSideChat": "サイドチャットを開始中…",
-    "startingQuickChat": "クイックチャットを開始中…",
-    "tokens": "トークン",
-    "sideChat": "サイドチャット",
-    "sideChatLimit": "サイドチャットの上限に達しました",
-    "quickChat": "クイックチャット",
-    "minimize": "最小化",
-    "close": "閉じる",
-    "confirmDiscard": "この一時チャットは保存されません。破棄しますか？",
-    "confirmCloseSummary": "未保存のファイルと一時チャットを閉じて破棄しますか？",
-    "generating": "生成中",
-    "unread": "未読",
-    "resize": "クイックチャットのサイズを変更",
-    "statusReady": "準備完了",
-    "statusStreaming": "生成中",
-    "statusError": "エラー",
-    "statusDisconnected": "切断済み",
-    "confirmCloseSideChat": "サイドチャットを破棄しますか？"
   }
 }

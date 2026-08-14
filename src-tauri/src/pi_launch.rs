@@ -125,7 +125,6 @@ impl PiLaunchResolver {
             extensions,
             pi_version: locked_pi_version().to_owned(),
             path_env: build_augmented_path(),
-            no_tools: false,
             // Picot workspaces are opened via the OS folder picker, so the user
             // has already opted in; trust project-local resources for every
             // pi process Picot spawns.

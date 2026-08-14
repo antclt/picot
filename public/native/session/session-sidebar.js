@@ -777,21 +777,6 @@ export class SessionSidebar {
       actionSlot.appendChild(pinBtn);
     }
 
-    if (showArchiveButton) {
-      const archiveBtn = document.createElement("button");
-      archiveBtn.type = "button";
-      archiveBtn.className = "session-archive-btn";
-      archiveBtn.title = archiveBtnLabel;
-      archiveBtn.setAttribute("aria-label", archiveBtnLabel);
-      const archiveGlyph = createIcon("archive");
-      if (archiveGlyph) archiveBtn.appendChild(archiveGlyph);
-      archiveBtn.addEventListener("click", (event) => {
-        event.stopPropagation();
-        this.toggleArchived(session.id);
-      });
-      actionSlot.appendChild(archiveBtn);
-    }
-
     if (session.filePath) {
       const renameBtn = document.createElement("button");
       renameBtn.type = "button";
@@ -806,6 +791,21 @@ export class SessionSidebar {
         this.#startRename(session);
       });
       actionSlot.appendChild(renameBtn);
+    }
+
+    if (showArchiveButton) {
+      const archiveBtn = document.createElement("button");
+      archiveBtn.type = "button";
+      archiveBtn.className = "session-archive-btn";
+      archiveBtn.title = archiveBtnLabel;
+      archiveBtn.setAttribute("aria-label", archiveBtnLabel);
+      const archiveGlyph = createIcon("archive");
+      if (archiveGlyph) archiveBtn.appendChild(archiveGlyph);
+      archiveBtn.addEventListener("click", (event) => {
+        event.stopPropagation();
+        this.toggleArchived(session.id);
+      });
+      actionSlot.appendChild(archiveBtn);
     }
 
     return item;

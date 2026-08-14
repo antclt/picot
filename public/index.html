@@ -187,14 +187,6 @@
               </svg>
             </button>
             <button
-              class="ui-icon-button ui-icon-button--sm ui-icon-button--ghost icon-btn hidden"
-              id="quick-chat-btn"
-              title="Quick Chat"
-              aria-label="Quick Chat"
-              data-i18n-title="nav.quickChat"
-              data-i18n-aria-label="nav.quickChat"
-            ></button>
-            <button
               class="ui-icon-button ui-icon-button--sm ui-icon-button--ghost icon-btn"
               id="refresh-sessions-btn"
               title="Refresh sessions"
@@ -521,7 +513,6 @@
             </div>
           </div>
           <div class="header-right">
-            <span class="pill session-usage" id="session-usage"></span>
             <span
               class="pill session-cost"
               id="session-cost"
@@ -562,13 +553,6 @@
                 </div>
               </div>
             </span>
-            <span
-              class="pill workspace-indicator hidden"
-              id="workspace-indicator"
-              title="Workspace path"
-              data-i18n-title="migrated.index.title.workspacePath"
-            ></span>
-
             <span class="header-open-app hidden" id="header-open-app">
               <button
                 class="ui-button ui-button--sm ui-button--secondary header-open-app-btn"
@@ -615,16 +599,8 @@
               ></div>
             </span>
             <button
-              class="ui-icon-button ui-icon-button--sm ui-icon-button--ghost icon-btn hidden"
-              id="side-chat-btn"
-              title="Side Chat"
-              aria-label="Side Chat"
-              aria-pressed="false"
-              data-i18n-title="nav.sideChat"
-              data-i18n-aria-label="nav.sideChat"
-            ></button>
-            <button
-              class="ui-icon-button ui-icon-button--sm ui-icon-button--ghost icon-btn"
+              type="button"
+              class="ui-icon-button ui-icon-button--sm ui-icon-button--ghost icon-btn file-sidebar-toggle"
               id="file-sidebar-toggle"
               title="Files"
               data-i18n-title="migrated.index.title.files"
@@ -640,11 +616,17 @@
                 stroke-width="2"
                 stroke-linecap="round"
                 stroke-linejoin="round"
+                aria-hidden="true"
               >
                 <path
                   d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"
                 />
               </svg>
+              <span
+                class="file-sidebar-toggle__label hidden"
+                id="workspace-indicator"
+                aria-hidden="true"
+              ></span>
             </button>
             <button
               class="ui-icon-button ui-icon-button--sm ui-icon-button--ghost icon-btn git-branch-toggle hidden"
@@ -681,12 +663,6 @@
         <div class="workspace-content">
           <!-- Main Chat Area -->
           <div class="main">
-            <!-- Quick Chat floating dialog + minimized chip roots -->
-            <div
-              class="quick-chat-dialog-root"
-              id="quick-chat-dialog-root"
-            ></div>
-            <div class="quick-chat-chip-root" id="quick-chat-chip-root"></div>
             <!-- Super Agent Chat Header web component (shown when SA is active) -->
             <sa-chat-header
               class="super-agent-chat-header hidden"

@@ -106,7 +106,7 @@
 | P1-37 | Agent Inbox task clarification | old `sa-ask`/REST | native extension UI/runtime event | 架构重做 / 需验证 | 核对 extension UI owner 与 pending request | clarification 可达正确 parent/task；切 workspace 后不误投递 |
 | P1-38 | in-app notification center | old notify/broker event | `native/notifications/notification-center.js` | 已覆盖 / 需验证 | 核对 extension UI notify 消息过滤和 aria | success/error/info 可显示、关闭、自动消失 |
 | P1-39 | OS task completion notification | 无完整旧等价；旧 app 有 super-agent notify | `task-completion-notifications.js` + Tauri plugin | 已覆盖 / 需验证 | 验收 permission/settings/agent_end fallback | agent start→end 只通知一次；禁用设置有效；权限失败不崩溃 |
-| P1-40 | Side Chat / Quick Chat | `ephemeral-chat-view.js` + old manager | native ephemeral runtime/side-chat manager | **✅ 已迁移**（2026-08-05 核实，见 §3 记录） | 矩阵原标“架构重做/需验证”已过时；模块完整且 app.js 已接线，见 §3 核实记录 | Side Chat 不创建重复实例；workspace 切换和关闭安全 |
+| P1-40 | Side Chat / Quick Chat | `ephemeral-chat-view.js` + old manager | native ephemeral runtime/side-chat manager | **已删除**（2026-08-14） | 功能与 native 实现已从产品中移除 | 入口、host 操作与临时进程均不存在 |
 
 ### P2：辅助功能、安全和诊断
 
@@ -157,7 +157,7 @@
 | --- | --- | --- |
 | **P1-17 / P1-18** toolbar pill 点击 | ✅ 已回填（A） | `project-header.js` 新增 `onOpenFiles` 回调，app.js 用 `openFilesPanel()` 展开 file sidebar + `gitPanel.setTab("files")`；git pill（`#diff-sidebar-toggle`）点击此前已在 app.js 接线（展开 sidebar + `setTab("git")`）。新增 2 个 project-header 测试覆盖点击/键盘。 |
 | **P1-28** Skills install | ✅ 已迁移改进（B，矩阵过时） | 矩阵所称 `scan_source_static`/`install_links_static` placeholder **不存在**。真实链路：Rust `skill_install.rs` 的 `scan_install_source`(L636)+`install_links`(L1060) → `host_server.rs` 路由 `skill_scan_install_source`/`skill_install_links` → 前端 `control-gateway.js` 三方法 + `settings/skills-install-tab.js` 完整 UI（scan/select/confirm/install + scope + generation guard）。 |
-| **P1-40** Side/Quick Chat | ✅ 已迁移（E，矩阵过时） | `side-chat-manager.js`(396行/19方法) + `quick-chat-dialog.js`(578行/30方法) + `ephemeral-chat-view.js` + `ephemeral-chat-runtime`。app.js L329-418 已接线并绑定按钮。具备 owner registry、single-instance(`ephemeral_replace`)、transition settlement(`prepareWorkspaceTransition`)、窗口关闭清理。 |
+| **P1-40** Side/Quick Chat | 已删除（2026-08-14） | 产品已移除 Side Chat / Quick Chat；对应 frontend、host `ephemeral_*` 操作与独立 Pi 进程不再存在。 |
 | **P2-07** troubleshoot-picot skill | ✅ 已更新（C） | skill 已识别 native Host（HostServer/NativePiManager/PiRpcBridge）。本次修正 stderr 描述：pi 子进程 stderr 进 diagnostics channel（`take_diagnostic`）但**未被消费、不进日志文件**；补充 `/health/runtime` L2 诊断端点。 |
 | **基线 `bun run check`** | ✅ 已清理（D） | 3 biome warnings（workspace-actions 死代码删除 + sidebar noDescendingSpecificity 加针对性 ignore）+ 29 CSS literal errors（3 处精确 tokenize 为 `--space-0-5`，其余加 `design-token-ignore` 说明为对话框/diff/context-menu 的 bespoke 尺寸）。`bun run check` 现全绿。 |
 

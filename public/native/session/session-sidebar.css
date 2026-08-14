@@ -368,8 +368,7 @@
   display: flex;
   align-items: center;
   gap: var(--space-1-5);
-  margin: 0 8px;
-  padding-right: var(--space-4);
+  margin: 0 var(--space-2);
   position: relative;
 }
 
@@ -377,14 +376,15 @@
   position: absolute;
   top: 50%;
   right: 0;
-  height: var(--control-height-xs);
   transform: translateY(-50%);
   z-index: 1;
   display: flex;
   justify-content: flex-end;
   align-items: center;
-  border-radius: var(--radius-pill);
-  background: none;
+  height: var(--control-height-xs);
+  padding-left: var(--space-2);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--text-primary) 6%, var(--sidebar-bg-mobile));
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
@@ -393,7 +393,13 @@
     visibility var(--duration) var(--ease);
 }
 
-.session-archive-btn {
+.session-item.active .session-action-slot {
+  background: color-mix(in srgb, var(--text-primary) 11%, var(--sidebar-bg-mobile));
+}
+
+.session-pin-btn,
+.session-archive-btn,
+.session-rename-btn {
   position: relative;
   display: inline-flex;
   width: 22px;
@@ -408,12 +414,8 @@
   justify-content: center;
   flex-shrink: 0;
   transition:
-    all var(--duration) var(--ease),
-    opacity var(--duration) var(--ease),
-    visibility var(--duration) var(--ease);
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
+    background var(--duration) var(--ease),
+    color var(--duration) var(--ease);
 }
 
 .session-archive-btn svg {
@@ -432,13 +434,9 @@
   pointer-events: auto;
 }
 
-.session-item:hover .session-archive-btn {
-  opacity: 1;
-  visibility: visible;
-  pointer-events: auto;
-}
-
-.session-archive-btn:hover {
+.session-pin-btn:hover,
+.session-archive-btn:hover,
+.session-rename-btn:hover {
   background: var(--bg-glass-hover);
 }
 
@@ -649,69 +647,11 @@
   transform: rotate(0deg);
 }
 
-.session-delete-btn {
-  background: none;
-
-  /* ── Session action buttons (pin / archive / rename) ── */
-  margin: 0 8px;
-  position: relative;
-}
-
-.session-action-slot {
-  position: relative;
-  width: 76px;
-  height: 22px;
-  flex-shrink: 0;
-  margin-left: auto;
-}
-
 .session-time {
-  position: absolute;
-  inset: 0;
   display: inline-flex;
   align-items: center;
-  justify-content: flex-end;
   font-size: var(--font-size-sm);
   color: var(--text-dim);
-  transition: opacity var(--duration) var(--ease);
-}
-
-.session-pin-btn,
-.session-archive-btn,
-.session-rename-btn {
-  position: absolute;
-  top: 0;
-  display: inline-flex;
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  border: none;
-  border-radius: var(--radius-sm);
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  color: var(--text-dim);
-  cursor: pointer;
-  flex-shrink: 0;
-  transition:
-    all var(--duration) var(--ease),
-    opacity var(--duration) var(--ease),
-    visibility var(--duration) var(--ease);
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
-}
-
-.session-pin-btn {
-  right: 48px;
-}
-
-.session-rename-btn {
-  right: 24px;
-}
-
-.session-archive-btn {
-  right: 0;
 }
 
 .session-pin-icon {
@@ -740,34 +680,6 @@
 
 .session-pin-btn[aria-pressed="true"] .session-pin-icon {
   color: var(--accent);
-}
-
-.session-archive-btn svg {
-  width: 14px;
-  height: 14px;
-  stroke: currentColor;
-  fill: none;
-  stroke-width: 1.8;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.session-item:hover .session-time {
-  opacity: 0;
-}
-
-.session-item:hover .session-pin-btn,
-.session-item:hover .session-archive-btn,
-.session-item:hover .session-rename-btn {
-  opacity: 1;
-  visibility: visible;
-  pointer-events: auto;
-}
-
-.session-pin-btn:hover,
-.session-archive-btn:hover,
-.session-rename-btn:hover {
-  background: var(--bg-glass-hover);
 }
 
 /* ── Workspace quick-info card ── */

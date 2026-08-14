@@ -11,9 +11,6 @@
   "nav": {
     "chat": "Chat",
     "toggleSidebar": "Alternar barra lateral",
-    "sideChat": "Chat lateral",
-    "quickChat": "Chat rápido",
-    "newSideChat": "Nuevo chat lateral",
     "showMobileQR": "Mostrar código QR móvil",
     "openWorkspace": "Abrir espacio de trabajo",
     "openWorkspaceInApp": "Abrir espacio de trabajo en la app",
@@ -78,6 +75,8 @@
     "cache": "cache",
     "costTitle": "costTitle",
     "summary": "In {in} · Out {out} · Cache {cache}",
+    "inputSummary": "In {in}",
+    "outputSummary": "Out {out}",
     "sessionUsageTitle": "Session tokens (input / output / cache)"
   },
   "sessionInfo": {
@@ -95,6 +94,7 @@
   "context": {
     "cached": "En caché",
     "input": "Entrada",
+    "output": "Salida",
     "available": "Disponible",
     "used": "{pct}% usado",
     "tooltip": "{label}: {tokens}"
@@ -1084,29 +1084,5 @@
     "chooseProjectBeforeApproval": "Elige un proyecto antes de aprobar.",
     "loadingProjects": "Cargando proyectos…",
     "projectRunning": "{name} · en ejecución"
-  },
-  "ephemeral": {
-    "placeholder": "Pregunta lo que quieras…",
-    "send": "Enviar",
-    "abort": "Cancelar",
-    "newChat": "Nuevo chat",
-    "startingSideChat": "Iniciando chat lateral…",
-    "startingQuickChat": "Iniciando chat rápido…",
-    "tokens": "tokens",
-    "sideChat": "Chat lateral",
-    "sideChatLimit": "Límite de chat lateral alcanzado",
-    "quickChat": "Chat rápido",
-    "minimize": "Minimizar",
-    "close": "Cerrar",
-    "confirmDiscard": "Este chat temporal no se guardará. ¿Descartar?",
-    "confirmCloseSummary": "¿Cerrar y descartar archivos sin guardar y chats temporales?",
-    "generating": "Generando",
-    "unread": "No leído",
-    "resize": "Redimensionar chat rápido",
-    "statusReady": "Listo",
-    "statusStreaming": "Generando",
-    "statusError": "Error",
-    "statusDisconnected": "Desconectado",
-    "confirmCloseSideChat": "¿Descartar chat lateral?"
   }
 }

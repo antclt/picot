@@ -1,7 +1,6 @@
 import { createCompactCoordinator } from "../compact-coordinator.js";
 import { FilePreviewPanel } from "../file-preview-panel.js";
 import { initI18n, onLocaleChange, t } from "../i18n.js";
-import { createIcon } from "../icons.js";
 import { reconcileSnapshotTarget } from "../session/bootstrap-target.js";
 import { SessionUiStateStore } from "../session-ui-state.js";
 import { dispatchSuperAgentTaskNative } from "../super-agent/native-dispatch.js";
@@ -47,15 +46,12 @@ import {
   createNativeTaskNotificationSender,
   createTaskCompletionNotifications,
 } from "./notifications/task-completion-notifications.js";
-import { EphemeralChatView } from "./session/ephemeral-chat-view.js";
 import { WorkspaceFocusSidebar } from "./session/focus-sidebar.js";
-import { QuickChatDialog } from "./session/quick-chat-dialog.js";
 import { setupSessionInfo } from "./session/session-info.js";
 import { createSessionSelectionHandler } from "./session/session-navigation.js";
 import { setupSessionSearchDialog } from "./session/session-search-dialog.js";
 import { SessionSidebar } from "./session/session-sidebar.js";
 import { createSessionStore, reduceSessionState } from "./session/session-store.js";
-import { SideChatManager } from "./session/side-chat-manager.js";
 import { setupSettingsPanel } from "./settings/settings-panel.js";
 import { resolveBootstrapTarget } from "./transport/bootstrap-target.js";
 import { ConfigGateway, consumeConfigResponseFrame } from "./transport/config-gateway.js";
@@ -332,14 +328,12 @@ const gitPanel = setupGitPanel({
 });
 
 // Owned by setupFileBrowser() once the sidebar DOM is ready. Kept at module
-// scope so openFilesPanel() (the workspace-path pill handler) can refresh it
-// after expanding the sidebar — mirroring the toolbar button's behavior.
+// scope so openFilesPanel() can refresh it after expanding the sidebar.
 let fileBrowser = null;
 
 /**
  * Expand the file sidebar, switch to the Files tab, and (when newly opened)
- * load the workspace root. Wired to both the #file-sidebar-toggle button, the
- * Cmd/Ctrl+B shortcut, and the #workspace-indicator path pill.
+ * load the workspace root. Wired to #file-sidebar-toggle and Cmd/Ctrl+B.
  */
 function openFilesPanel() {
   const sidebar = document.getElementById("file-sidebar");
@@ -349,132 +343,26 @@ function openFilesPanel() {
   if (opened && fileBrowser?.currentPath === null) fileBrowser.load().catch(showError);
 }
 
-// ── Side Chat ────────────────────────────────────────────────────────
-// Side Chat spawns a dedicated pi --mode rpc process bound to the same
-// workspace cwd. It uses the same runtime protocol as the main session —
-// ephemeral_create returns a descriptor (workspaceId/instanceId), the
-// frontend subscribes to that target, and runtime_request/routes through
-// the same WebSocket.
-const sideChatButton = document.getElementById("side-chat-btn");
-const sideChatManager = new SideChatManager({
-  runtime,
-  hostRequest: (payload) =>
-    runtime.sendHostRequest
-      ? runtime.sendHostRequest(payload)
-      : fetch("/v2/host", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(payload),
-        }).then(async (response) => {
-          if (!response.ok) throw new Error(`host request failed: ${response.status}`);
-          return response.json();
-        }),
-  getWorkspaceId: () => target.workspaceId,
-  filePreviewPanel,
-  confirmDiscard: async () => {
-    // Minimal confirmation; full localized summary dialog lives in the
-    // window close coordinator. Per-chat close uses this lightweight gate.
-    const answer = window.confirm(t("ephemeral.confirmCloseSideChat"));
-    return answer ? "discard" : "cancel";
-  },
-  createView: (runtime) => {
-    // Render the ephemeral chat view inside the transient tab. The view
-    // owns its own message list / composer and is bound to the runtime.
-    const view = new EphemeralChatView({
-      runtime,
-      kind: runtime.kind,
-      toolsEnabled: runtime.kind === "side-chat",
-    });
-    return { element: view.element, destroy: () => view.destroy() };
-  },
-});
-if (sideChatButton) {
-  const sideChatIcon = createIcon("message-square", { size: 16 });
-  if (sideChatIcon) sideChatButton.replaceChildren(sideChatIcon);
-  // TEMP: show the button unconditionally so we can verify the integration end-to-end.
-  // Proper native-capability gating will be restored once nativeAvailable()/capabilities
-  // event handling lands in the new-arch app.js.
-  sideChatButton.classList.remove("hidden");
-  sideChatButton.addEventListener("click", async () => {
-    if (sideChatManager.chats.size > 0) {
-      sideChatManager.openMostRecent?.();
-      return;
-    }
-    await sideChatManager.create();
-  });
-}
-
-// ── Quick Chat ───────────────────────────────────────────────────────────
-// Non-modal floating dialog bound to a dedicated `pi --mode rpc --no-tools`
-// process in an OS-temp cwd. One per workspace window; New Chat replaces the
-// single instance via ephemeral_replace.
-const quickChatDialog = new QuickChatDialog({
-  runtime,
-  hostRequest: (payload) =>
-    runtime.sendHostRequest
-      ? runtime.sendHostRequest(payload)
-      : fetch("/v2/host", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(payload),
-        }).then(async (response) => {
-          if (!response.ok) throw new Error(`host request failed: ${response.status}`);
-          return response.json();
-        }),
-  getWorkspaceId: () => target.workspaceId,
-  dialogRoot: document.getElementById("quick-chat-dialog-root"),
-  chipRoot: document.getElementById("quick-chat-chip-root"),
-  boundsElement: document.querySelector(".main"),
-  confirmDiscard: async () => {
-    const answer = window.confirm(t("ephemeral.confirmDiscard"));
-    return answer ? "discard" : "cancel";
-  },
-  createView: (runtime) => {
-    // Quick Chat runs with --no-tools, so the view renders without the
-    // tool card renderer (toolsEnabled false by kind).
-    const view = new EphemeralChatView({
-      runtime,
-      kind: runtime.kind,
-      toolsEnabled: runtime.kind === "side-chat",
-    });
-    return { element: view.element, destroy: () => view.destroy() };
-  },
-});
-const quickChatButton = document.getElementById("quick-chat-btn");
-if (quickChatButton) {
-  const quickChatIcon = createIcon("message-circle", { size: 16 });
-  if (quickChatIcon) quickChatButton.replaceChildren(quickChatIcon);
-  quickChatButton.classList.remove("hidden");
-  quickChatButton.addEventListener("click", () => {
-    void quickChatDialog.open().catch((error) => {
-      console.error("[Quick Chat] open failed:", error);
-    });
-  });
-}
-
 const sessionCostEl = document.getElementById("session-cost");
-const sessionUsageEl = document.getElementById("session-usage");
-const tokenUsageEl = document.getElementById("token-usage");
 
-// Header status bar: aggregates session IN/OUT/CACHE tokens and cost
-// from session stats + live completions. Separate from current-context.
+// Header status bar: aggregates session token/cost totals from session
+// stats + live completions. Token in/out render on the combined
+// token-usage pill; this bar only owns cost and publishes totals.
 import { createHeaderStatusBar } from "../ui/header-status-bar.js";
 
 let headerStatusBar = null;
-if (sessionUsageEl && sessionCostEl) {
+if (sessionCostEl) {
   headerStatusBar = createHeaderStatusBar({
     sessionCostEl,
-    sessionUsageEl,
-    tokenUsageEl,
-    getContextWindowSize: () => currentModelContextWindow,
     t,
+    onTotalsChange: (totals) => contextUsage.setSessionTotals(totals),
   });
 }
 
 let sessionTotalCost = 0;
 
 // Hydrate the header status bar from authoritative get_session_stats.
-// The aggregate (IN/OUT/CACHE/cost) comes only from the server's tally, not
+// The aggregate (output/cost) comes only from the server's tally, not
 // from client-side message walking — repeated mirror syncs and history
 // replay would otherwise inflate the totals.
 let statsHydrationGeneration = 0;
@@ -1044,7 +932,6 @@ try {
     setupProjectHeader({
       data,
       workspaceId: target.workspaceId,
-      onOpenFiles: openFilesPanel,
     }).catch((error) => {
       console.warn("[Native] Failed to load project header info:", error);
     }),
@@ -1873,7 +1760,6 @@ async function handleRuntimeEvent(event) {
       } else {
         // Pi has replaced its context; the old aggregate is stale. Re-hydrate
         // from the authoritative get_session_stats.
-        headerStatusBar?.sync?.({ currentUsage: null });
         await hydrateSnapshotOnce();
         hydrateHeaderSessionStats();
       }

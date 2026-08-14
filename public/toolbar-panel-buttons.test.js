@@ -18,11 +18,13 @@ test("file sidebar uses the shared icon-button control", () => {
   expect(button?.getAttribute("aria-label")).toBe("Toggle file browser");
 });
 
-test("Side Chat keeps its existing icon button styling", () => {
-  const button = document.querySelector("#side-chat-btn");
+test("file sidebar toggle hosts the workspace path label", () => {
+  const button = document.querySelector("#file-sidebar-toggle");
+  const label = button?.querySelector("#workspace-indicator");
 
-  expect(button?.classList.contains("icon-btn")).toBe(true);
-  expect(button?.classList.contains("panel-toggle-btn")).toBe(false);
+  expect(button?.classList.contains("file-sidebar-toggle")).toBe(true);
+  expect(label?.classList.contains("file-sidebar-toggle__label")).toBe(true);
+  expect(document.querySelectorAll("#workspace-indicator")).toHaveLength(1);
 });
 
 test("icon-button design system defines the shared control contract", () => {

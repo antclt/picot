@@ -11,9 +11,6 @@
   "nav": {
     "chat": "Chat",
     "toggleSidebar": "Toggle sidebar",
-    "sideChat": "Side Chat",
-    "quickChat": "Quick Chat",
-    "newSideChat": "New Side Chat",
     "showMobileQR": "Show mobile QR code",
     "openWorkspace": "Open workspace",
     "openWorkspaceInApp": "Open workspace in app",
@@ -75,6 +72,8 @@
     "costSub": "{amount} (sub)",
     "sessionUsageTitle": "Session tokens (input / output / cache)",
     "summary": "In {in} · Out {out} · Cache {cache}",
+    "inputSummary": "In {in}",
+    "outputSummary": "Out {out}",
     "input": "IN",
     "output": "OUT",
     "cache": "CACHE",
@@ -95,6 +94,7 @@
   "context": {
     "cached": "Cached",
     "input": "Input",
+    "output": "Output",
     "available": "Available",
     "used": "{pct}% used",
     "tooltip": "{label}: {tokens}"
@@ -1084,29 +1084,5 @@
     "chooseProjectBeforeApproval": "Choose a project before approval.",
     "loadingProjects": "Loading projects…",
     "projectRunning": "{name} · running"
-  },
-  "ephemeral": {
-    "placeholder": "Ask anything…",
-    "send": "Send",
-    "abort": "Abort",
-    "newChat": "New chat",
-    "startingSideChat": "Starting Side Chat…",
-    "startingQuickChat": "Starting Quick Chat…",
-    "tokens": "tokens",
-    "sideChat": "Side Chat",
-    "sideChatLimit": "Side Chat limit reached",
-    "quickChat": "Quick Chat",
-    "minimize": "Minimize",
-    "close": "Close",
-    "confirmDiscard": "This temporary chat is not saved. Discard it?",
-    "confirmCloseSummary": "Close and discard unsaved files and temporary chats?",
-    "generating": "Generating",
-    "unread": "Unread",
-    "resize": "Resize Quick Chat",
-    "statusReady": "Ready",
-    "statusStreaming": "Generating",
-    "statusError": "Error",
-    "statusDisconnected": "Disconnected",
-    "confirmCloseSideChat": "Discard side chat?"
   }
 }
