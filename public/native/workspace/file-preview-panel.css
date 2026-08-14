@@ -494,7 +494,8 @@ body.file-preview-resizing {
   padding: var(--space-0-5) var(--space-4);
   color: var(--text-dim);
   background: var(--bg-panel);
-  font-size: var(--font-size-sm);
+  /* design-token-ignore: diff collapse uses a fallback monospace micro size */
+  font-size: var(--font-size-xs, 11px);
   border-top: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
   font-family: "SF Mono", Menlo, Monaco, "Courier New", monospace;
@@ -526,7 +527,8 @@ body.file-preview-resizing {
   color: var(--text-dim);
   background: var(--bg-panel);
   border-right: 1px solid var(--border);
-  font-size: var(--font-size-sm);
+  /* design-token-ignore: diff gutter line numbers use a fixed monospace micro size */
+  font-size: 11px;
   font-variant-numeric: tabular-nums;
   flex-shrink: 0;
   user-select: none;
@@ -562,8 +564,10 @@ body.file-preview-resizing {
 .file-git-badge {
   margin-left: auto;
   padding: 0 var(--space-1);
-  border-radius: var(--radius-xs);
-  font-size: var(--font-size-sm);
+  /* design-token-ignore: badge micro radius, bespoke to the compact tree badge */
+  border-radius: 3px;
+  /* design-token-ignore: badge micro glyph size, bespoke to the compact tree badge */
+  font-size: 10px;
   font-weight: 700;
   font-family: "SF Mono", Menlo, Monaco, "Courier New", monospace;
   line-height: 16px;

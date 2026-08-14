@@ -5,25 +5,23 @@ import { onLocaleChange, t } from "../../i18n.js";
  * branch info fetched from the host data plane.
  *
  * Responsibilities:
- *  - Show the full workspace path in the #workspace-indicator pill.
- *  - Show the current git branch in the #git-branch-indicator pill.
- *  - Both pills are hidden when data is unavailable.
- *  - The workspace-path pill is clickable: it delegates to the `onOpenFiles`
- *    callback (provided by app.js) which expands the file sidebar and
- *    switches to the Files tab. This keeps the module decoupled from the
- *    sidebar/tab DOM wiring owned by app.js.
+ *  - Show the full workspace path in the #workspace-indicator label inside
+ *    #file-sidebar-toggle.
+ *  - Show the current git branch in the #git-branch-indicator label inside
+ *    #diff-sidebar-toggle.
+ *  - Both labels are hidden when data is unavailable.
+ *  - Click handling stays on the toggle buttons in app.js: the path label is
+ *    display-only, matching the git-branch label.
  */
 
 /**
  * @param {object} options
  * @param {import('./data-gateway.js').HostDataGateway} options.data
  * @param {string} options.workspaceId
- * @param {() => void} [options.onOpenFiles] Invoked when the workspace-path
- *   pill is clicked; app.js expands the file sidebar and activates the
- *   Files tab.
  */
-export async function setupProjectHeader({ data, workspaceId, onOpenFiles } = {}) {
+export async function setupProjectHeader({ data, workspaceId } = {}) {
   const workspaceEl = document.getElementById("workspace-indicator");
+  const filesToggleEl = workspaceEl?.closest("#file-sidebar-toggle");
   // #git-branch-indicator is the label span inside #diff-sidebar-toggle.
   // The toggle button itself carries the hidden class and is shown only when
   // git info is available.
@@ -43,28 +41,18 @@ export async function setupProjectHeader({ data, workspaceId, onOpenFiles } = {}
 
   if (workspaceEl && info.path) {
     workspaceEl.textContent = info.path;
-    workspaceEl.title = info.path;
     workspaceEl.classList.remove("hidden");
-    // Make the path pill behave like a button that opens the Files tab.
-    if (typeof onOpenFiles === "function") {
-      workspaceEl.classList.add("clickable-pill");
-      workspaceEl.setAttribute("role", "button");
-      workspaceEl.setAttribute("tabindex", "0");
-      const applyAriaLabel = () =>
-        workspaceEl.setAttribute(
+    if (filesToggleEl) {
+      const applyLabels = () => {
+        filesToggleEl.title = info.path;
+        filesToggleEl.setAttribute(
           "aria-label",
           t("migrated.index.ariaLabel.openFilesPanel", { path: info.path }),
         );
-      applyAriaLabel();
+      };
+      applyLabels();
       // Keep the label current when the user switches language mid-session.
-      onLocaleChange(applyAriaLabel);
-      workspaceEl.addEventListener("click", onOpenFiles);
-      workspaceEl.addEventListener("keydown", (event) => {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          onOpenFiles();
-        }
-      });
+      onLocaleChange(applyLabels);
     }
   }
 

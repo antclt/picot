@@ -6,7 +6,9 @@ import { setupProjectHeader } from "./project-header.js";
 
 const enMessages = JSON.parse(readFileSync(join(process.cwd(), "public/locales/en.json"), "utf8"));
 const BASE_HTML = `
-  <div id="workspace-indicator" class="hidden"></div>
+  <button id="file-sidebar-toggle" class="file-sidebar-toggle" title="Files" aria-label="Toggle file browser">
+    <span id="workspace-indicator" class="file-sidebar-toggle__label hidden"></span>
+  </button>
   <button id="diff-sidebar-toggle" class="git-branch-toggle hidden">
     <span id="git-branch-indicator" class="git-branch-toggle__label"></span>
   </button>
@@ -28,7 +30,7 @@ describe("project header", () => {
     vi.restoreAllMocks();
   });
 
-  it("shows the full workspace path in the header pill", async () => {
+  it("shows the full workspace path in the files toggle", async () => {
     document.body.innerHTML = BASE_HTML;
     const fullPath = "/Users/ShixinGuo/code/pi/pi-web-ui";
     const data = {
@@ -38,10 +40,12 @@ describe("project header", () => {
     await setupProjectHeader({ data, workspaceId: "workspace-a" });
 
     const indicator = document.getElementById("workspace-indicator");
+    const toggle = document.getElementById("file-sidebar-toggle");
     expect(data.workspaceInfo).toHaveBeenCalledWith("workspace-a");
     expect(indicator.textContent).toBe(fullPath);
-    expect(indicator.title).toBe(fullPath);
     expect(indicator.classList.contains("hidden")).toBe(false);
+    expect(toggle.title).toBe(fullPath);
+    expect(toggle.getAttribute("aria-label")).toBe(`Open Files panel — ${fullPath}`);
   });
 
   it("shows git branch toggle with branch name when git info is available", async () => {
@@ -75,45 +79,19 @@ describe("project header", () => {
     expect(toggle.classList.contains("hidden")).toBe(true);
   });
 
-  it("opens the Files panel when the workspace-path pill is clicked", async () => {
+  it("leaves the path label hidden when workspace path is unavailable", async () => {
     document.body.innerHTML = BASE_HTML;
     const data = {
-      workspaceInfo: vi.fn().mockResolvedValue({
-        info: { path: "/Users/me/code/project" },
-      }),
-    };
-    const onOpenFiles = vi.fn();
-
-    await setupProjectHeader({ data, workspaceId: "workspace-d", onOpenFiles });
-
-    const indicator = document.getElementById("workspace-indicator");
-    expect(indicator.classList.contains("clickable-pill")).toBe(true);
-    expect(indicator.getAttribute("role")).toBe("button");
-    expect(indicator.getAttribute("tabindex")).toBe("0");
-    expect(indicator.getAttribute("aria-label")).toBe("Open Files panel — /Users/me/code/project");
-
-    indicator.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    expect(onOpenFiles).toHaveBeenCalledTimes(1);
-
-    // Enter and Space should also activate the pill.
-    indicator.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }));
-    expect(onOpenFiles).toHaveBeenCalledTimes(2);
-    indicator.dispatchEvent(new KeyboardEvent("keydown", { key: " " }));
-    expect(onOpenFiles).toHaveBeenCalledTimes(3);
-  });
-
-  it("does not attach a click handler when onOpenFiles is omitted", async () => {
-    document.body.innerHTML = BASE_HTML;
-    const data = {
-      workspaceInfo: vi.fn().mockResolvedValue({ info: { path: "/path" } }),
+      workspaceInfo: vi.fn().mockResolvedValue({ info: { gitBranch: "main" } }),
     };
 
-    await setupProjectHeader({ data, workspaceId: "workspace-e" });
+    await setupProjectHeader({ data, workspaceId: "workspace-d" });
 
     const indicator = document.getElementById("workspace-indicator");
-    expect(indicator.classList.contains("clickable-pill")).toBe(false);
-    expect(indicator.getAttribute("role")).toBeNull();
-    // Clicking must be a no-op (no throw, no side effect).
-    expect(() => indicator.dispatchEvent(new MouseEvent("click", { bubbles: true }))).not.toThrow();
+    const toggle = document.getElementById("file-sidebar-toggle");
+    expect(indicator.classList.contains("hidden")).toBe(true);
+    expect(indicator.textContent).toBe("");
+    expect(toggle.title).toBe("Files");
+    expect(toggle.getAttribute("aria-label")).toBe("Toggle file browser");
   });
 });

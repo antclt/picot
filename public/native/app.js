@@ -1,6 +1,8 @@
+import { createCompactCoordinator } from "../compact-coordinator.js";
 import { FilePreviewPanel } from "../file-preview-panel.js";
 import { initI18n, onLocaleChange, t } from "../i18n.js";
 import { reconcileSnapshotTarget } from "../session/bootstrap-target.js";
+import { SessionUiStateStore } from "../session-ui-state.js";
 import { dispatchSuperAgentTaskNative } from "../super-agent/native-dispatch.js";
 import { isSuperAgentProjectPath } from "../super-agent/session.js";
 import { isSuperAgentEnabled } from "../super-agent/settings.js";
@@ -30,6 +32,7 @@ import { showNativeDialog } from "./extensions/dialog.js";
 import { ExtensionUiHost } from "./extensions/extension-ui-host.js";
 import { showInlineExtensionPrompt } from "./extensions/inline-extension-prompt.js";
 import { setupAppUpdater } from "./features/app-updater.js";
+import { setupGitPanel } from "./features/git-panel-integration.js";
 import { refreshLanQrButton, setupLanQr } from "./features/lan-qr.js";
 import { resolveRemoteAuth } from "./features/remote-auth.js";
 import {
@@ -43,6 +46,7 @@ import {
   createNativeTaskNotificationSender,
   createTaskCompletionNotifications,
 } from "./notifications/task-completion-notifications.js";
+import { WorkspaceFocusSidebar } from "./session/focus-sidebar.js";
 import { setupSessionInfo } from "./session/session-info.js";
 import { createSessionSelectionHandler } from "./session/session-navigation.js";
 import { setupSessionSearchDialog } from "./session/session-search-dialog.js";
@@ -158,7 +162,6 @@ const modelDropdownLabel = document.getElementById("model-dropdown-label");
 const modelDropdownMenu = document.getElementById("model-dropdown-menu");
 const modelDropdownToolbar = modelDropdown?.closest(".composer-toolbar");
 const thinkingBtn = document.getElementById("thinking-btn");
-const THINKING_LEVELS = ["off", "minimal", "low", "medium", "high"];
 
 function formatThinkingLevelLabel(level) {
   const normalizedLevel = level || "off";
@@ -168,6 +171,62 @@ function formatThinkingLevelLabel(level) {
 }
 let currentThinkingLevel = "off";
 let currentModelId = null;
+
+// Session UI state: persists per-session model + thinking level and input draft
+// so switching between sessions restores the composer state. Profiles live in
+// the native host (SessionUiProfileStore) keyed by the runtime session id;
+// drafts stay window-memory because they are not worth serialising.
+const sessionUiState = new SessionUiStateStore({
+  profileClient: {
+    load: () => {
+      const sessionId = target.sessionId;
+      if (!sessionId || sessionId === "pending-bootstrap") return Promise.resolve(null);
+      return runtime.sendHostRequest
+        ? runtime
+            .sendHostRequest({
+              operation: "session_ui_profile_load",
+              expectedSessionId: sessionId,
+            })
+            .then((response) => response?.profile ?? null)
+        : fetch("/v2/host", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              operation: "session_ui_profile_load",
+              expectedSessionId: sessionId,
+            }),
+          })
+            .then(async (response) => {
+              if (!response.ok) return null;
+              const data = await response.json();
+              return data?.profile ?? null;
+            })
+            .catch(() => null);
+    },
+    save: (profile) => {
+      const sessionId = target.sessionId;
+      if (!sessionId || sessionId === "pending-bootstrap") return Promise.resolve(null);
+      const payload = {
+        operation: "session_ui_profile_save",
+        expectedSessionId: sessionId,
+        ...profile,
+      };
+      return runtime.sendHostRequest
+        ? runtime.sendHostRequest(payload).then((response) => response?.profile ?? profile)
+        : fetch("/v2/host", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(payload),
+          })
+            .then(async (response) => {
+              if (!response.ok) return profile;
+              const data = await response.json();
+              return data?.profile ?? profile;
+            })
+            .catch(() => profile);
+    },
+  },
+});
 let currentModelContextWindow = 0;
 let availableModels = [];
 let target = provisionalTargetFromRoute(route);
@@ -258,24 +317,85 @@ window.__picotConfigCall = (op, params, options) => config.call(op, params, opti
 const contextUsage = setupContextUsage();
 const compactContextButton = document.getElementById("compact-context-btn");
 const filePreviewPanel = setupFilePreviewPanel();
+const gitPanel = setupGitPanel({
+  runtime,
+  getTarget: () => target,
+  container: document.getElementById("git-panel"),
+  fileSidebar: document.getElementById("file-sidebar"),
+  fileList: document.getElementById("file-list"),
+  filePreviewPanel,
+  onError: showError,
+});
+
 // Owned by setupFileBrowser() once the sidebar DOM is ready. Kept at module
-// scope so openFilesPanel() (the workspace-path pill handler) can refresh it
-// after expanding the sidebar — mirroring the toolbar button's behavior.
+// scope so openFilesPanel() can refresh it after expanding the sidebar.
 let fileBrowser = null;
 
 /**
- * Expand the file sidebar and (when newly opened) load the workspace root.
- * Wired to both the #file-sidebar-toggle button, the Cmd/Ctrl+B shortcut,
- * and the #workspace-indicator path pill.
+ * Expand the file sidebar, switch to the Files tab, and (when newly opened)
+ * load the workspace root. Wired to #file-sidebar-toggle and Cmd/Ctrl+B.
  */
 function openFilesPanel() {
   const sidebar = document.getElementById("file-sidebar");
   if (!sidebar) return;
   const opened = toggleExclusiveSidePanel(sidebar, [document.getElementById("diff-sidebar")]);
+  gitPanel?.setTab("files");
   if (opened && fileBrowser?.currentPath === null) fileBrowser.load().catch(showError);
 }
+
 const sessionCostEl = document.getElementById("session-cost");
+
+// Header status bar: aggregates session token/cost totals from session
+// stats + live completions. Token in/out render on the combined
+// token-usage pill; this bar only owns cost and publishes totals.
+import { createHeaderStatusBar } from "../ui/header-status-bar.js";
+
+let headerStatusBar = null;
+if (sessionCostEl) {
+  headerStatusBar = createHeaderStatusBar({
+    sessionCostEl,
+    t,
+    onTotalsChange: (totals) => contextUsage.setSessionTotals(totals),
+  });
+}
+
 let sessionTotalCost = 0;
+
+// Hydrate the header status bar from authoritative get_session_stats.
+// The aggregate (output/cost) comes only from the server's tally, not
+// from client-side message walking — repeated mirror syncs and history
+// replay would otherwise inflate the totals.
+let statsHydrationGeneration = 0;
+function activeSessionFileForStatusBar() {
+  const sessions = sidebar?.sessions ?? [];
+  return (
+    sessions.find((s) => s.id === target.sessionId)?.filePath ??
+    sessions.find((s) => s.projectPath === store.cwd)?.filePath ??
+    null
+  );
+}
+async function hydrateHeaderSessionStats() {
+  if (!headerStatusBar) return;
+  const generation = ++statsHydrationGeneration;
+  try {
+    const frame = await runtime.request({ type: "get_session_stats" }, target);
+    // runtime.request resolves with the full runtime_response frame; the pi
+    // result lives in frame.response.
+    const result = frame?.response ?? frame;
+    if (!result?.success || !result?.data) return;
+    if (generation !== statsHydrationGeneration) return;
+    if (!result.data.sessionFile) return;
+    const activeSessionFile = activeSessionFileForStatusBar();
+    if (activeSessionFile && result.data.sessionFile !== activeSessionFile) return;
+    headerStatusBar.hydrateSessionStats({
+      sessionFile: result.data.sessionFile,
+      tokens: result.data.tokens,
+      cost: result.data.cost,
+    });
+  } catch {
+    // Aggregate hydration is best-effort; the current-context path still works.
+  }
+}
 
 function computeTotalCostFromMessages(messages) {
   if (!Array.isArray(messages)) return 0;
@@ -299,20 +419,34 @@ function setSessionCost(cost) {
   sessionCostEl.title = `Session cost: $${cost.toFixed(6)}`;
 }
 
+// Compact coordinator: a single state machine that distinguishes the RPC
+// acknowledgement from Pi's actual compaction_start/compaction_end lifecycle
+// events. This prevents duplicate requests and ensures the UI only returns to
+// idle when compaction truly completes (or fails).
+const compactCoordinator = createCompactCoordinator({
+  send: async () => {
+    const frame = await runtime.request({ type: "compact" }, target, {
+      idempotencyKey: randomId(),
+    });
+    // runtime.request resolves with the full runtime_response frame; the pi
+    // compact result lives in frame.response. Extract it so the coordinator
+    // sees { success, data } rather than the transport envelope.
+    return frame?.response ?? { success: false };
+  },
+  onState: (state) => {
+    contextUsage.setCompacting(state === "requested" || state === "running");
+  },
+});
+
 async function requestManualCompaction() {
   if (
     !contextUsage.canCompact ||
     store.lifecycle === "working" ||
-    store.compaction?.status === "running"
+    store.compaction?.status === "running" ||
+    compactCoordinator.busy
   )
     return;
-  contextUsage.setCompacting(true);
-  try {
-    await runtime.request({ type: "compact" }, target, { idempotencyKey: randomId() });
-  } catch (error) {
-    contextUsage.setCompacting(false);
-    throw error;
-  }
+  await compactCoordinator.request();
 }
 
 compactContextButton?.addEventListener("click", () => requestManualCompaction().catch(showError));
@@ -480,6 +614,8 @@ const hydrateFromSnapshot = async (snapshot) => {
   updateComposerThinking(pi.thinkingLevel ?? "off");
   contextUsage.setUsage(findLatestAssistantUsage(messages), currentModelContextWindow);
   setSessionCost(computeTotalCostFromMessages(messages));
+  // Hydrate header status bar from authoritative get_session_stats
+  hydrateHeaderSessionStats();
   // Flush queued extension prompts after rendering is settled so inline cards
   // are not immediately destroyed by a subsequent renderHistory() clear.
   await extensionUi.flushForegroundQueue();
@@ -659,7 +795,7 @@ const settingsPanel = setupSettingsPanel({
   },
 });
 setupAppUpdater({ settingsPanel });
-setupNewSessionButton({ data, workspaceId: target.workspaceId, onError: showError });
+setupNewSessionButton({ workspaceId: target.workspaceId, onError: showError });
 
 // SPA session creation: when workspace-actions creates a new session via the
 // HTTP API, it emits picot:session-created with the new target. Adopt it
@@ -796,7 +932,6 @@ try {
     setupProjectHeader({
       data,
       workspaceId: target.workspaceId,
-      onOpenFiles: openFilesPanel,
     }).catch((error) => {
       console.warn("[Native] Failed to load project header info:", error);
     }),
@@ -943,6 +1078,7 @@ function setupSessionSidebar() {
     },
     onCreateSession: createSessionViaHost,
     onSessionsLoaded: subscribeToLiveSessions,
+    onFocusProject: (project) => enterFocus(project),
     onAgentInboxSessionChange: setAgentInboxNavSession,
   });
 
@@ -1281,6 +1417,82 @@ async function bindDispatchedChildSession(instanceId, boundSessionId) {
   ).catch((error) => console.warn("[SuperAgent] failed to bind child session:", error));
 }
 
+// ── Workspace Focus mode ────────────────────────────────────────────────
+// Focus replaces the full session sidebar with a single-project view.
+// A right-arrow button on each current-project header triggers enterFocus.
+// The sidebar-toggle button exits focus back to the full session list.
+
+let focusSidebar = null;
+let focusActive = false;
+
+function enterFocus(project) {
+  if (!project || !sidebar) return;
+  const sidebarEl = document.getElementById("sidebar");
+  const sessionListEl = document.getElementById("session-list");
+  if (!sidebarEl || !sessionListEl) return;
+
+  // If already in focus for the same project, do nothing
+  if (focusActive && focusSidebar?.project?.path === project.path) return;
+
+  // Exit previous focus if switching projects
+  if (focusSidebar) {
+    focusSidebar.destroy();
+    focusSidebar = null;
+  }
+
+  focusActive = true;
+  sidebarEl.classList.add("focus-mode");
+
+  // Hide the normal session list container and create a focus container
+  sessionListEl.classList.add("hidden");
+  const focusContainer = document.createElement("div");
+  focusContainer.className = "focus-sidebar-container";
+  focusContainer.id = "focus-sidebar-container";
+  sidebarEl.querySelector(".sidebar-header")?.after(focusContainer);
+
+  // The focused project's sessions come from the sidebar's projects list.
+  const projectSessions =
+    Array.isArray(project.sessions) && project.sessions.length > 0
+      ? project.sessions
+      : (sidebar.sessions || []).filter((s) => s.projectPath === project.path);
+
+  const focusCardInfo = {
+    folder: project.folderName || project.name,
+    path: project.path,
+    count: projectSessions.length,
+  };
+
+  focusSidebar = new WorkspaceFocusSidebar(focusContainer, {
+    project: { ...project, sessions: projectSessions },
+    cardInfo: focusCardInfo,
+    activeSessionFile: projectSessions.find((s) => s.id === target.sessionId)?.filePath,
+    onBack: () => exitFocus(),
+    onNewTask: () => spawnSessionViaHost(target.workspaceId),
+    onSessionSelect: (session) => {
+      const handler = createSessionSelectionHandler({
+        switchSession,
+        openSessionInProject,
+        onError: showError,
+      });
+      handler(session);
+    },
+    onDelete: (filePath) => sidebar.deleteSession?.(filePath),
+    onRename: (filePath, sessionItem, el) => sidebar.renameSession?.(filePath, sessionItem, el),
+    isArchived: (filePath) => sidebar.isArchived?.(filePath) ?? false,
+  });
+  focusSidebar.render();
+}
+
+function exitFocus() {
+  if (!focusActive) return;
+  focusActive = false;
+  focusSidebar?.destroy();
+  focusSidebar = null;
+  document.getElementById("sidebar")?.classList.remove("focus-mode");
+  document.getElementById("focus-sidebar-container")?.remove();
+  document.getElementById("session-list")?.classList.remove("hidden");
+}
+
 function setupSidebarToggle() {
   const sidebarEl = document.getElementById("sidebar");
   const toggleBtn = document.getElementById("sidebar-toggle");
@@ -1300,6 +1512,10 @@ function setupSidebarToggle() {
   }
 
   toggleBtn.addEventListener("click", () => {
+    if (focusActive) {
+      exitFocus();
+      return;
+    }
     setCollapsed(!sidebarEl.classList.contains("collapsed"));
   });
   overlay?.addEventListener("click", () => setCollapsed(true));
@@ -1314,6 +1530,18 @@ function setupSidebarToggle() {
     minWidth: 200,
     maxWidth: 480,
     side: "left",
+  });
+
+  // File/Git sidebar — right-edge panel, drag handle on the left side.
+  // Uses the native --panel-width CSS variable (same as super-agent runtime
+  // panel). Width persists to localStorage under a separate key.
+  const fileSidebarEl = document.getElementById("file-sidebar");
+  setupResizablePanel(fileSidebarEl, {
+    storageKey: "pi-studio-file-sidebar-width",
+    defaultWidth: 260,
+    minWidth: 200,
+    maxWidth: 500,
+    side: "right",
   });
 }
 
@@ -1448,33 +1676,17 @@ function setupFileBrowser() {
   });
 
   const diffSidebar = document.getElementById("diff-sidebar");
-  const diffList = document.getElementById("diff-list");
   const diffToggle = document.getElementById("diff-sidebar-toggle");
-  if (diffSidebar && diffList) {
-    const diffBrowser = new NativeFileBrowser(
-      diffList,
-      document.createElement("div"),
-      data,
-      target.workspaceId,
-      {
-        initialView: "diff",
-        showViewSwitch: false,
-        onFileSelect(entry) {
-          filePreviewPanel?.openFile(entry.relativePath, {
-            fileName: entry.name,
-            mode: "diff",
-          });
-        },
-      },
-    );
-    diffToggle?.addEventListener("click", () => {
-      const opened = toggleExclusiveSidePanel(diffSidebar, [sidebar]);
-      if (opened) diffBrowser.load().catch(showError);
-    });
-    document.getElementById("diff-sidebar-close")?.addEventListener("click", () => {
-      diffSidebar.classList.add("collapsed");
-    });
-  }
+  diffToggle?.addEventListener("click", () => {
+    // Header Git button: open the File/Git sidebar and switch to the Git tab,
+    // instead of the legacy diff-sidebar panel.
+    const fileSidebarEl = document.getElementById("file-sidebar");
+    const opened = toggleExclusiveSidePanel(fileSidebarEl, [diffSidebar]);
+    if (opened) gitPanel?.setTab("git");
+  });
+  document.getElementById("diff-sidebar-close")?.addEventListener("click", () => {
+    diffSidebar.classList.add("collapsed");
+  });
 }
 
 async function sendComposerInput({ altKey }) {
@@ -1533,16 +1745,26 @@ async function handleRuntimeEvent(event) {
       sidebar?.setSessionName(target.sessionId, event.name);
       break;
     case "compaction_start":
-      contextUsage.setCompacting(true);
+      compactCoordinator.started();
       break;
-    case "compaction_end":
-      contextUsage.setCompacting(false);
-      if (event.errorMessage) {
-        showError(new Error(event.errorMessage));
-      } else if (!event.aborted) {
+    case "compaction_end": {
+      const succeeded =
+        !event.errorMessage && !event.error && !event.aborted && event.result !== null;
+      compactCoordinator.ended({
+        success: succeeded,
+        error: event.errorMessage || event.error,
+      });
+      if (!succeeded) {
+        const error = event.errorMessage || event.error;
+        if (error) showError(new Error(error));
+      } else {
+        // Pi has replaced its context; the old aggregate is stale. Re-hydrate
+        // from the authoritative get_session_stats.
         await hydrateSnapshotOnce();
+        hydrateHeaderSessionStats();
       }
       break;
+    }
     case "message_start":
       if (event.message?.role === "user") {
         messageRenderer.renderUserMessage(event.message);
@@ -1566,6 +1788,7 @@ async function handleRuntimeEvent(event) {
         messageRenderer.finalizeStreamingMessage(streamingElement, event.message.usage ?? null);
         contextUsage.setUsage(event.message.usage ?? null, currentModelContextWindow);
         setSessionCost(sessionTotalCost + (event.message.usage?.cost?.total ?? 0));
+        headerStatusBar?.applyLiveUsage?.(event.message.usage ?? null);
         streamingElement = null;
         convNav.notifyNewMessage();
       }
@@ -1647,7 +1870,33 @@ async function adoptTarget(nextTarget, { updateRoute = true } = {}) {
   liveProcessGroup = null;
   adapter.subscribeTarget(target);
   sidebar?.setActive(target.sessionId);
+  // When the workspace changes, the cached session list is stale — reload it
+  // so the sidebar reflects the new project's sessions. Same-workspace
+  // session switches skip this (the list is already current). Without this
+  // the sidebar never populated after bootstrap, because the initial
+  // sidebar.load() at startup runs before the workspace is resolved.
+  if (nextTarget.workspaceId !== previousTarget.workspaceId) {
+    sidebar?.load().catch(showError);
+  }
   sessionInfo.refresh();
+  headerStatusBar?.reset?.();
+  // Re-hydrate the aggregate stats for the new session.
+  hydrateHeaderSessionStats();
+  setSessionCost(0);
+  // Save the outgoing session's draft and restore the incoming session's
+  if (previousTarget.sessionId && previousTarget.sessionId !== "pending-bootstrap") {
+    sessionUiState.saveDraft(previousTarget.sessionId, input.value);
+  }
+  // Restore model/thinking for the new session
+  const restoredProfile = await sessionUiState.loadProfile();
+  if (restoredProfile) {
+    updateComposerModel({ id: restoredProfile.modelId });
+    updateComposerThinking(restoredProfile.thinkingLevel);
+  }
+  // Restore input draft for the new session
+  const draft = sessionUiState.loadDraft(nextTarget.sessionId);
+  input.value = draft || "";
+  composerAutoResize.sync();
   await extensionUi.setForegroundSession(target.sessionId, { flush: false });
 }
 
@@ -1982,6 +2231,14 @@ function showError(error) {
 
 function updateComposerModel(model) {
   currentModelId = model?.id ?? null;
+  // Persist the model change to session UI state
+  sessionUiState
+    .saveProfile({
+      provider: "anthropic",
+      modelId: currentModelId || "",
+      thinkingLevel: currentThinkingLevel,
+    })
+    .catch(() => {});
   currentModelContextWindow =
     Number(model?.contextWindow) || findModelContextWindow(currentModelId);
   contextUsage.setContextWindowSize(currentModelContextWindow);
@@ -1992,6 +2249,13 @@ function updateComposerModel(model) {
 
 function updateComposerThinking(level) {
   currentThinkingLevel = level ?? "off";
+  sessionUiState
+    .saveProfile({
+      provider: "anthropic",
+      modelId: currentModelId || "",
+      thinkingLevel: currentThinkingLevel,
+    })
+    .catch(() => {});
   if (thinkingBtn) {
     const levelLabel = formatThinkingLevelLabel(currentThinkingLevel);
     thinkingBtn.textContent = t("settings.thinkingCompact", { level: levelLabel });
@@ -2106,6 +2370,12 @@ function buildModelDropdownItem(model) {
         { idempotencyKey: randomId() },
       );
       updateComposerModel(model);
+      // Reconcile the thinking level after a model switch. pi 0.83's set_model
+      // response is the Model object (no thinkingLevel field, see rpc.md); the
+      // server's effective thinking level for the new model lives in get_state.
+      const stateResult = await runtime.request({ type: "get_state" }, target);
+      const level = stateResult?.response?.data?.thinkingLevel;
+      if (level) updateComposerThinking(level);
     } catch (error) {
       showError(error);
     }
@@ -2115,7 +2385,7 @@ function buildModelDropdownItem(model) {
 }
 
 function renderModelDropdownItems(container, filter = "") {
-  container.innerHTML = "";
+  container.replaceChildren();
   if (availableModels.length === 0) {
     renderEmptyModelDropdown(container);
     return;
@@ -2141,7 +2411,7 @@ function renderModelDropdownItems(container, filter = "") {
 
 function renderModelDropdownMenu() {
   if (!modelDropdownMenu) return;
-  modelDropdownMenu.innerHTML = "";
+  modelDropdownMenu.replaceChildren();
 
   const search = document.createElement("input");
   search.className = "model-dropdown-search";
@@ -2208,13 +2478,13 @@ onLocaleChange(() => {
 
 if (thinkingBtn) {
   thinkingBtn.addEventListener("click", async () => {
-    const idx = THINKING_LEVELS.indexOf(currentThinkingLevel);
-    const nextLevel = THINKING_LEVELS[(idx + 1) % THINKING_LEVELS.length];
     try {
-      await runtime.request({ type: "set_thinking_level", level: nextLevel }, target, {
-        idempotencyKey: randomId(),
-      });
-      updateComposerThinking(nextLevel);
+      // Ask the server to cycle through the current model's supported levels
+      // (cycle_thinking_level) instead of stepping a fixed client-side array —
+      // the server skips levels the active model does not support.
+      const result = await runtime.request({ type: "cycle_thinking_level" }, target);
+      const level = result?.response?.data?.level;
+      if (level) updateComposerThinking(level);
     } catch (error) {
       showError(error);
     }
