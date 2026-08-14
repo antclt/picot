@@ -908,7 +908,7 @@ export class SessionSidebar {
 
     // ── ARCHIVED ────────────────────────────────────────────────
     if (archived.length > 0) {
-      const { section: archivedSection } = buildSidebarSection({
+      const { section: archivedSection, header: archivedHeader } = buildSidebarSection({
         region: "archived",
         titleKey: "sidebar.archived",
         count: archived.length,
@@ -922,7 +922,7 @@ export class SessionSidebar {
             body.appendChild(this.#buildItem(s, { showArchiveButton: false }));
           }
         },
-        renderFooter: (footer) => {
+        renderHeaderActions: (header) => {
           const deleteBtn = document.createElement("button");
           deleteBtn.type = "button";
           deleteBtn.className = "archived-delete-all-btn";
@@ -935,10 +935,11 @@ export class SessionSidebar {
             event.stopPropagation();
             this.deleteAllArchived();
           });
-          footer.appendChild(deleteBtn);
+          header.appendChild(deleteBtn);
         },
       });
       archivedSection.classList.add("archived-group");
+      archivedHeader.classList.add("archived-header");
       this.container.appendChild(archivedSection);
     }
 

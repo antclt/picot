@@ -89,6 +89,7 @@ function wireDisclosure(header, body, expanded, onToggle) {
  * @param {boolean} [opts.expanded=true] Initial expanded state.
  * @param {function} [opts.onToggle]     Called with the new expanded boolean.
  * @param {function} [opts.renderSessions] Receives the sessions container element.
+ * @param {function} [opts.renderHeaderActions] Receives the header; append action buttons here.
  * @param {function} [opts.renderFooter]  Receives a footer element (shown only when provided).
  * @returns {{ section: HTMLElement, header: HTMLElement, sessionsContainer: HTMLElement }}
  */
@@ -100,6 +101,7 @@ export function buildSidebarSection({
   expanded = true,
   onToggle = null,
   renderSessions = null,
+  renderHeaderActions = null,
   renderFooter = null,
 }) {
   const section = document.createElement("div");
@@ -120,6 +122,10 @@ export function buildSidebarSection({
     countEl.className = "project-count sidebar-section-count";
     countEl.textContent = String(count);
     header.appendChild(countEl);
+  }
+
+  if (renderHeaderActions) {
+    renderHeaderActions(header);
   }
 
   section.appendChild(header);
