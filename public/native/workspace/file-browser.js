@@ -272,15 +272,6 @@ export class NativeFileBrowser {
   }
 }
 
-export function toggleExclusiveSidePanel(panel, otherPanels = []) {
-  const willOpen = panel.classList.contains("collapsed");
-  if (willOpen) {
-    for (const other of otherPanels) other?.classList.add("collapsed");
-  }
-  panel.classList.toggle("collapsed", !willOpen);
-  return willOpen;
-}
-
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 /** Human-readable byte size (B / KB / MB / GB). */

@@ -12,6 +12,7 @@ import { updateSuperAgentTask } from "../super-agent/task-store.js";
 import { applyTheme, getCurrentTheme } from "../themes.js";
 import { buildAtMentionValue, setupAtFileMention } from "../ui/at-file-mention.js";
 import { ConvNav } from "../ui/conv-nav.js";
+import { createHeaderStatusBar } from "../ui/header-status-bar.js";
 import { setupMessagesInsets } from "../ui/layout-insets.js";
 import { MessageRenderer } from "../ui/message-renderer.js";
 import {
@@ -68,7 +69,8 @@ import { setupAppKeyboardShortcuts } from "./utils/keyboard-shortcuts.js";
 import { randomId } from "./utils/random-id.js";
 import { appRoutePath, parseAppRoute, replaceTemporarySessionRoute } from "./utils/router.js";
 import { findLatestAssistantUsage, setupContextUsage } from "./workspace/context-usage.js";
-import { NativeFileBrowser, toggleExclusiveSidePanel } from "./workspace/file-browser.js";
+import { toggleExclusiveSidePanel } from "./workspace/exclusive-side-panel.js";
+import { NativeFileBrowser } from "./workspace/file-browser.js";
 import { setupHeaderOpenApp } from "./workspace/header-open-app.js";
 import { setupProjectHeader } from "./workspace/project-header.js";
 import { createSessionStatus } from "./workspace/session-status.js";
@@ -348,8 +350,6 @@ const sessionCostEl = document.getElementById("session-cost");
 // Header status bar: aggregates session token/cost totals from session
 // stats + live completions. Token in/out render on the combined
 // token-usage pill; this bar only owns cost and publishes totals.
-import { createHeaderStatusBar } from "../ui/header-status-bar.js";
-
 let headerStatusBar = null;
 if (sessionCostEl) {
   headerStatusBar = createHeaderStatusBar({
