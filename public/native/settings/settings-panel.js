@@ -3,6 +3,7 @@ import { applyTheme, getCurrentTheme, themes } from "../../themes.js";
 import { loadCostDashboard } from "./cost-dashboard.js";
 import { setupLanguageSelector } from "./language-selector.js";
 import { setupPackageBrowse } from "./package-browse.js";
+import { setupPackageManager } from "./package-manager.js";
 import { setupPackageSkillsTab } from "./package-skills-tab.js";
 import { setupSettingsConfig } from "./settings-config.js";
 import { setupSettingsToggles } from "./settings-toggles.js";
@@ -31,12 +32,27 @@ export function setupSettingsPanel({
   getTarget,
   onError,
   notify,
+  onRestarted,
+  onThinkingLevelChanged,
 } = {}) {
   const panel = document.getElementById("settings-panel");
   const openBtn = document.getElementById("settings-btn");
   const closeBtn = document.getElementById("settings-close");
   const overlay = document.getElementById("settings-overlay");
+  const extensionsBtn = document.getElementById("sidebar-extensions-btn");
+  const skillsBtn = document.getElementById("sidebar-skills-btn");
   if (!panel || !openBtn) return;
+
+  const resourceDialogHeader = document.createElement("header");
+  resourceDialogHeader.className = "resource-dialog-header";
+  const resourceDialogTitle = document.createElement("strong");
+  const resourceDialogClose = document.createElement("button");
+  resourceDialogClose.type = "button";
+  resourceDialogClose.className = "ui-icon-button ui-icon-button--sm ui-icon-button--ghost";
+  resourceDialogClose.setAttribute("aria-label", "Close");
+  resourceDialogClose.textContent = "×";
+  resourceDialogHeader.append(resourceDialogTitle, resourceDialogClose);
+  panel.prepend(resourceDialogHeader);
 
   const navItems = Array.from(document.querySelectorAll(".settings-nav-item"));
   const tabs = Array.from(document.querySelectorAll(".settings-tab"));
@@ -46,6 +62,15 @@ export function setupSettingsPanel({
   const appVersionValue = document.getElementById("setting-app-version-value");
   const costDashboard = document.getElementById("settings-cost-dashboard");
   const packageBrowse = setupPackageBrowse(control, { notify });
+  const packageManager = setupPackageManager({
+    control,
+    data,
+    notify,
+    getWorkspaceId,
+    getSessionId: () => getTarget?.()?.sessionId,
+    onRestarted,
+    onBrowseRevealed: () => void packageBrowse.load(),
+  });
   const config = configGateway
     ? setupSettingsConfig({ configGateway, onModelConfigurationChanged })
     : null;
@@ -54,6 +79,7 @@ export function setupSettingsPanel({
     getTarget,
     configGateway,
     onError,
+    onRuntimeLevelChanged: onThinkingLevelChanged,
   });
   const skillsRpc = async (command) => {
     if (!configGateway) {
@@ -134,6 +160,23 @@ export function setupSettingsPanel({
     void config.loadInlineModelsEditor();
   }
 
+  function setExtensionsView(mode) {
+    const managerSection = document.getElementById("pkg-manager-section");
+    const browseSection = document.getElementById("pkg-browse-section");
+    const browseCloseBtn = document.getElementById("pkg-browse-close-btn");
+    const marketplaceMode = mode === "marketplace";
+
+    if (managerSection) managerSection.hidden = marketplaceMode;
+    if (browseSection) browseSection.hidden = !marketplaceMode;
+    if (browseCloseBtn) browseCloseBtn.hidden = marketplaceMode;
+
+    if (marketplaceMode) {
+      void packageBrowse.load();
+    } else {
+      void packageManager.load();
+    }
+  }
+
   function selectTab(tabKey = "general") {
     const target = tabKey === "auth" ? "configuration" : tabKey;
     for (const item of navItems) {
@@ -144,7 +187,9 @@ export function setupSettingsPanel({
     }
 
     if (target === "usage") loadUsage();
-    if (target === "extensions") void packageBrowse.load();
+    if (target === "extensions") {
+      setExtensionsView(panel.classList.contains("resource-dialog") ? "installed" : "marketplace");
+    }
     if (target === "skills") void skillsPage.activate();
     if (target === "configuration") loadConfiguration();
   }
@@ -228,8 +273,14 @@ export function setupSettingsPanel({
     history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
   }
 
+  function setResourceDialogMode(enabled) {
+    panel.classList.toggle("resource-dialog", enabled);
+    overlay?.classList.toggle("resource-dialog-overlay", enabled);
+  }
+
   function openSettings(tabKey = "general", { updateHash = true } = {}) {
     const normalizedTabKey = normalizeSettingsTabKey(tabKey);
+    setResourceDialogMode(false);
     if (updateHash) updateSettingsHash(normalizedTabKey);
     panel.classList.remove("hidden");
     selectTab(normalizedTabKey);
@@ -238,9 +289,19 @@ export function setupSettingsPanel({
     void loadAppVersion();
   }
 
+  function openResourceDialog(tabKey) {
+    clearSettingsHash();
+    setResourceDialogMode(true);
+    resourceDialogTitle.textContent =
+      tabKey === "skills" ? t("migrated.index.text.skills") : t("migrated.index.text.extensions");
+    panel.classList.remove("hidden");
+    selectTab(tabKey);
+  }
+
   function closeSettings({ clearHash = true } = {}) {
     if (clearHash) clearSettingsHash();
     panel.classList.add("hidden");
+    setResourceDialogMode(false);
   }
 
   function restoreFromHash() {
@@ -254,6 +315,9 @@ export function setupSettingsPanel({
   }
 
   openBtn.addEventListener("click", () => openSettings());
+  extensionsBtn?.addEventListener("click", () => openResourceDialog("extensions"));
+  skillsBtn?.addEventListener("click", () => openResourceDialog("skills"));
+  resourceDialogClose.addEventListener("click", () => closeSettings());
   closeBtn?.addEventListener("click", () => closeSettings());
   overlay?.addEventListener("click", () => closeSettings());
   for (const item of navItems) {

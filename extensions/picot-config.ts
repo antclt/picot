@@ -69,6 +69,8 @@ type CatalogRegistry = {
   refresh: () => void | Promise<void>;
 };
 
+const MODEL_REGISTRY_REFRESH_TIMEOUT_MS = 2_000;
+
 type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
 
 type ConfigContext = {
@@ -438,6 +440,24 @@ function writeConfigFile(filePath: string, content: unknown): void {
   }
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(filePath, content, "utf8");
+}
+
+async function refreshRegistryBestEffort(registry?: CatalogRegistry): Promise<boolean> {
+  if (!registry) return false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const timeout = new Promise<false>((resolve) => {
+      timer = setTimeout(() => resolve(false), MODEL_REGISTRY_REFRESH_TIMEOUT_MS);
+      timer.unref?.();
+    });
+    const refresh = (async () => {
+      await registry.refresh();
+      return true;
+    })().catch(() => false);
+    return await Promise.race([refresh, timeout]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 function readSettingsObject(filePath: string): Record<string, unknown> {
@@ -863,15 +883,7 @@ export async function handlePicotConfig(
           throw new Error("'providers' must be an object");
         }
         writeConfigFile(MODELS_CONFIG_PATH, content);
-        let refreshed = false;
-        try {
-          if (registry) {
-            await registry.refresh();
-            refreshed = true;
-          }
-        } catch {
-          // Non-fatal: file is saved; user can /reload or restart.
-        }
+        const refreshed = await refreshRegistryBestEffort(registry);
         return { ok: true, data: { path: MODELS_CONFIG_PATH, refreshed } };
       }
 

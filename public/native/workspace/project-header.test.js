@@ -1,17 +1,10 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { initI18n } from "../../i18n.js";
 import { setupProjectHeader } from "./project-header.js";
 
-vi.mock("../../i18n.js", () => ({
-  onLocaleChange: () => () => {},
-  t: (key, params) => {
-    let value = key;
-    if (params)
-      for (const [name, item] of Object.entries(params))
-        value = value.replace(`{${name}}`, String(item));
-    return value;
-  },
-}));
-
+const enMessages = JSON.parse(readFileSync(join(process.cwd(), "public/locales/en.json"), "utf8"));
 const BASE_HTML = `
   <div id="workspace-indicator" class="hidden"></div>
   <button id="diff-sidebar-toggle" class="git-branch-toggle hidden">
@@ -20,6 +13,16 @@ const BASE_HTML = `
 `;
 
 describe("project header", () => {
+  beforeEach(async () => {
+    globalThis.fetch = vi.fn(async (input) => {
+      if (String(input).includes("/locales/")) {
+        return { ok: true, json: async () => enMessages };
+      }
+      return { ok: false, status: 404, json: async () => ({}) };
+    });
+    await initI18n();
+  });
+
   afterEach(() => {
     document.body.innerHTML = "";
     vi.restoreAllMocks();
@@ -87,7 +90,7 @@ describe("project header", () => {
     expect(indicator.classList.contains("clickable-pill")).toBe(true);
     expect(indicator.getAttribute("role")).toBe("button");
     expect(indicator.getAttribute("tabindex")).toBe("0");
-    expect(indicator.getAttribute("aria-label")).toBe("migrated.index.ariaLabel.openFilesPanel");
+    expect(indicator.getAttribute("aria-label")).toBe("Open Files panel — /Users/me/code/project");
 
     indicator.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     expect(onOpenFiles).toHaveBeenCalledTimes(1);

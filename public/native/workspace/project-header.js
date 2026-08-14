@@ -1,3 +1,5 @@
+import { onLocaleChange, t } from "../../i18n.js";
+
 /**
  * project-header — populates the chat header with workspace path and git
  * branch info fetched from the host data plane.
@@ -11,8 +13,6 @@
  *    switches to the Files tab. This keeps the module decoupled from the
  *    sidebar/tab DOM wiring owned by app.js.
  */
-
-import { onLocaleChange, t } from "../../i18n.js";
 
 /**
  * @param {object} options
@@ -71,7 +71,7 @@ export async function setupProjectHeader({ data, workspaceId, onOpenFiles } = {}
   if (diffToggleEl) {
     if (info.gitBranch) {
       if (branchLabelEl) branchLabelEl.textContent = info.gitBranch;
-      diffToggleEl.title = `Git changes — ${info.gitBranch}`;
+      diffToggleEl.title = t("git.changesWithBranch", { branch: info.gitBranch });
       diffToggleEl.classList.remove("hidden");
     } else {
       diffToggleEl.classList.add("hidden");

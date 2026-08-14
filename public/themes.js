@@ -101,12 +101,42 @@ function migrateLegacyLocalStorageValue() {
 
 migrateLegacyLocalStorageValue();
 
-export function applyTheme(themeId, options) {
+const themeListeners = new Set();
+
+/**
+ * Subscribe to active-theme changes. Returns an unsubscribe function.
+ * Fired whenever `data-theme` changes (explicit applyTheme or OS-driven),
+ * not at subscription time — subscribers re-derive state from CSS variables.
+ */
+export function onThemeChange(listener) {
+  if (typeof listener !== "function") return () => {};
+  themeListeners.add(listener);
+  return () => themeListeners.delete(listener);
+}
+
+function notifyThemeChange(themeId) {
+  for (const listener of themeListeners) {
+    try {
+      listener(themeId);
+    } catch (e) {
+      console.warn("[themes] theme-change listener error:", e);
+    }
+  }
+  window.dispatchEvent(new CustomEvent("picot:theme-change", { detail: { themeId } }));
+}
+
+function setRootTheme(themeId) {
   const root = document.documentElement;
-  const id = themes[themeId] ? themeId : "night";
+  if (!themes[themeId]) themeId = "night";
+  root.setAttribute("data-theme", themeId);
+  notifyThemeChange(themeId);
+  return themeId;
+}
+
+export function applyTheme(themeId, options) {
   const apply = () => {
-    root.setAttribute("data-theme", id);
-    writeThemeCookie(id);
+    const resolved = setRootTheme(themeId);
+    writeThemeCookie(resolved);
   };
   const origin = options?.origin;
   if (origin && Number.isFinite(origin.x) && Number.isFinite(origin.y)) {
@@ -155,8 +185,8 @@ export function getCurrentTheme() {
 if (!readThemeCookie()) {
   window.matchMedia?.("(prefers-color-scheme: light)").addEventListener("change", (e) => {
     if (!readThemeCookie()) {
-      const root = document.documentElement;
-      root.setAttribute("data-theme", e.matches ? "terracotta" : "night");
+      setRootTheme(e.matches ? "terracotta" : "night");
+      writeThemeCookie(e.matches ? "terracotta" : "night");
     }
   });
 }

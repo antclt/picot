@@ -84,6 +84,8 @@ test("native entry initializes i18n before rendering welcome and settings langua
 
   expect(document.querySelector("#messages .welcome")?.textContent).not.toContain("app.welcome");
   expect(warn).not.toHaveBeenCalledWith(expect.stringContaining("[i18n] missing key:"));
+  expect(document.querySelector("#quick-chat-btn svg")).not.toBeNull();
+  expect(document.querySelector("#side-chat-btn svg")).not.toBeNull();
 
   document.getElementById("settings-btn").click();
   const languageOptions = Array.from(

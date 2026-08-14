@@ -12,8 +12,6 @@ live in [`ARCHITECTURE.md`](ARCHITECTURE.md).
 - For Quick Chat or Side Chat work, read
   [`docs/superpowers/specs/2026-07-15-quick-and-side-chat-design.md`](docs/superpowers/specs/2026-07-15-quick-and-side-chat-design.md)
   and the temporary-chat architecture section.
-- Before changing a browser/server adapter, popup/overlay, or shared-state
-  rerender behavior, read and apply [`docs/engineering-lessons.md`](docs/engineering-lessons.md).
 - **Before porting any feature-v3 feature**, read and follow
   [`docs/feature-v3-migration-playbook.md`](docs/feature-v3-migration-playbook.md).
   It documents the two-architecture identifier mapping, the verbatim-port

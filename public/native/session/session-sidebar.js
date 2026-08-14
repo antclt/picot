@@ -154,7 +154,7 @@ function sessionTimeMs(session) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function asPinnedSuperAgentSession(session) {
+function asSuperAgentSession(session) {
   if (!session) return null;
   return {
     ...session,
@@ -212,6 +212,7 @@ export class SessionSidebar {
       onCreateSession,
       onSessionsLoaded,
       onFocusProject,
+      onAgentInboxSessionChange,
     },
   ) {
     this.container = container;
@@ -224,6 +225,7 @@ export class SessionSidebar {
     this.onCreateSession = onCreateSession;
     this.onSessionsLoaded = onSessionsLoaded;
     this.onFocusProject = onFocusProject;
+    this.onAgentInboxSessionChange = onAgentInboxSessionChange;
 
     this.sessions = [];
     this.activeSessionId = getTarget()?.sessionId ?? null;
@@ -239,7 +241,6 @@ export class SessionSidebar {
     this.pinnedCollapsed = false;
     this.unread = new Set(readArray(STORAGE.unread));
     this.streaming = new Set();
-    this.autoTitleAttempted = new Set();
 
     this.searchQuery = "";
     this._searchResults = null;
@@ -495,7 +496,15 @@ export class SessionSidebar {
       const response = await this.data.listAllSessions(workspaceId);
       if (seq < this._loadCommitted) return;
       this._loadCommitted = seq;
-      const nextSessions = response.sessions ?? [];
+      const receivedSessions = response.sessions ?? [];
+      // The first request can race host/bootstrap registration and briefly
+      // return an empty list. Do not let that transient response erase a
+      // non-empty cache (including Agent Inbox); a post-bootstrap reload will
+      // replace it with the authoritative list moments later.
+      const nextSessions =
+        receivedSessions.length === 0 && this.sessions.length > 0
+          ? [...this.sessions]
+          : receivedSessions;
       // Preserve a just-created active session that the server hasn't persisted
       // yet. Without this, a quiet reload fired right after upsertSession (e.g.
       // on session_bound) overwrites the list with the on-disk snapshot and the
@@ -521,7 +530,7 @@ export class SessionSidebar {
             (() => {
               const el = document.createElement("div");
               el.className = "session-loading";
-              el.textContent = "Loading sessions...";
+              el.textContent = t("sidebar.loadingSessions");
               return el;
             })(),
           );
@@ -537,11 +546,11 @@ export class SessionSidebar {
       if (this.sessions.length > 0) return;
       const loadingEl = document.createElement("div");
       loadingEl.className = "session-loading";
-      loadingEl.textContent = "Failed to load sessions. ";
+      loadingEl.textContent = `${t("sidebar.failedToLoadSessions")} `;
       const retryLink = document.createElement("button");
       retryLink.className = "retry-link";
       retryLink.id = "retry-load-sessions";
-      retryLink.textContent = "Retry";
+      retryLink.textContent = t("sidebar.retry");
       loadingEl.appendChild(retryLink);
       this.container.replaceChildren(loadingEl);
       retryLink.addEventListener("click", () => this.load());
@@ -614,7 +623,7 @@ export class SessionSidebar {
     const searchIcon = document.createElement("span");
     searchIcon.textContent = "\u{1F50D}";
     const matchesLabel = document.createElement("span");
-    matchesLabel.textContent = "Message matches";
+    matchesLabel.textContent = t("sidebar.messageMatches");
     const countBadge = document.createElement("span");
     countBadge.className = "project-count";
     countBadge.textContent = String(this._searchResults.length);
@@ -628,11 +637,10 @@ export class SessionSidebar {
       item.className = "session-item search-result-item";
       item.dataset.sessionId = result.sessionId;
       if (result.sessionId === this.activeSessionId) item.classList.add("active");
-      const title = result.sessionName || result.firstMessage || "Untitled";
+      const title = result.sessionName || result.firstMessage || t("sidebar.untitled");
       const snippet = result.matches?.[0]?.snippet || "";
       const matchCount = result.matches?.length ?? 0;
       const time = formatSessionTime(result.sessionTimestamp);
-
       const titleRow = document.createElement("div");
       titleRow.className = "session-title-row";
       const titleElement = document.createElement("div");
@@ -649,7 +657,8 @@ export class SessionSidebar {
 
       const metaEl = document.createElement("div");
       metaEl.className = "session-meta";
-      metaEl.textContent = `${time}${matchCount > 1 ? ` · ${matchCount} matches` : ""}`;
+      metaEl.textContent =
+        matchCount > 1 ? `${time} · ${t("sidebar.matchCount", { count: matchCount })}` : time;
       item.appendChild(metaEl);
 
       item.addEventListener("click", () =>
@@ -823,7 +832,7 @@ export class SessionSidebar {
     if (this.sessions.length === 0 && !hasAnyPins) {
       const empty = document.createElement("div");
       empty.className = "session-loading";
-      empty.textContent = "No saved sessions";
+      empty.textContent = t("sidebar.noSavedSessions");
       this.container.appendChild(empty);
       return;
     }
@@ -832,13 +841,10 @@ export class SessionSidebar {
     const superAgentSessions = this.sessions.filter((session) =>
       isSuperAgentProjectPath(session.projectPath),
     );
-    const pinnedSuperAgent = superAgentEnabled
-      ? asPinnedSuperAgentSession(latestSession(superAgentSessions))
+    const agentInboxSession = superAgentEnabled
+      ? asSuperAgentSession(latestSession(superAgentSessions))
       : null;
-
-    if (pinnedSuperAgent) {
-      this.container.appendChild(this.#buildPinnedSuperAgentGroup(pinnedSuperAgent));
-    }
+    this.onAgentInboxSessionChange?.(agentInboxSession);
 
     // Partition sessions into archived / regular (excludes pinned).
     const pinnedWorkspacePaths = new Set(pinState.workspaces.map((w) => w.path || w.id));
@@ -1055,23 +1061,6 @@ export class SessionSidebar {
   // Group regular sessions by their originating project. The list arrives
   // sorted newest-first, so the first session from each project determines the
   // project's position without reordering projects around the active project.
-  #buildPinnedSuperAgentGroup(session) {
-    const group = document.createElement("div");
-    group.className = "super-agent-pinned-group";
-    group.appendChild(
-      this.#sectionHeader(
-        "super-agent-pinned-header",
-        '<span class="fav-star">★</span> <span>Agent Inbox</span> <span class="project-count">Pinned</span>',
-      ),
-    );
-
-    const list = document.createElement("div");
-    list.className = "project-sessions";
-    list.appendChild(this.#buildItem(session, { showArchiveButton: false }));
-    group.appendChild(list);
-    return group;
-  }
-
   #groupByProject(sessions) {
     const order = [];
     const byPath = new Map();
@@ -1349,18 +1338,21 @@ export class SessionSidebar {
     this.contextMenu = null;
   }
 
-  async autoGenerateTitle(sessionId) {
-    if (!sessionId || this.autoTitleAttempted.has(sessionId)) return;
+  setSessionName(sessionId, name) {
     const session = this.sessions.find((candidate) => candidate.id === sessionId);
     if (!session) return;
-    const currentName = String(session.name || "").trim();
-    if (currentName && currentName !== "Untitled" && currentName !== "New Session") return;
-    this.autoTitleAttempted.add(sessionId);
-    await this.#generateTitle(session);
+    session.name = name || "";
+    const title = session.name || session.firstMessage || "Empty session";
+    const titleEl = this.container.querySelector(
+      `.session-item[data-session-id="${cssEscape(sessionId)}"] .session-title`,
+    );
+    if (!titleEl) return;
+    titleEl.textContent = title;
+    titleEl.title = title;
   }
 
-  async #generateTitle(session) {
-    if (!this.config) return;
+  async #generateTitle(session, target = this.getTarget()) {
+    if (!this.config) return false;
     const item = this.container.querySelector(
       `.session-item[data-session-id="${cssEscape(session.id)}"]`,
     );
@@ -1369,10 +1361,14 @@ export class SessionSidebar {
     if (titleEl) titleEl.textContent = t("sidebar.generatingTitle");
 
     try {
-      const result = await this.config.call("generate_session_title", {}, { timeoutMs: 100_000 });
+      const result = await this.config.call(
+        "generate_session_title",
+        {},
+        { timeoutMs: 100_000, target },
+      );
       const title = result?.data?.title?.trim();
       if (!result?.ok || !title) throw new Error(result?.error || t("sidebar.generateTitleError"));
-      await this.runtime.request({ type: "set_session_name", name: title }, this.getTarget(), {
+      await this.runtime.request({ type: "set_session_name", name: title }, target, {
         idempotencyKey: randomId(),
       });
       session.name = title;
@@ -1380,9 +1376,11 @@ export class SessionSidebar {
         titleEl.textContent = title;
         titleEl.title = title;
       }
+      return true;
     } catch (error) {
       if (titleEl) titleEl.textContent = previousTitle;
       console.error("[Sidebar] Generate title failed:", error);
+      return false;
     }
   }
 

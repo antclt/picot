@@ -11,7 +11,11 @@ describe("setupThinkingEffortControl", () => {
   let container;
 
   beforeEach(() => {
-    runtime = { request: vi.fn().mockResolvedValue({}) };
+    runtime = {
+      request: vi.fn().mockResolvedValue({
+        response: { data: { levels: ["off", "minimal", "low", "medium", "high"] } },
+      }),
+    };
     getTarget = vi.fn().mockReturnValue({ sessionId: "test-session", instanceId: "test-instance" });
     onError = vi.fn();
 
@@ -75,6 +79,45 @@ describe("setupThinkingEffortControl", () => {
       });
       expect(document.getElementById("thinking-effort-name").textContent).toBe("medium");
     });
+
+    // This control represents the persisted default, not the current
+    // session's effective value. Session hydration must not feed its value
+    // back through updateUI (for example, a non-reasoning provider reports
+    // `off` while the saved default remains `medium`).
+    expect(document.getElementById("thinking-effort-name").dataset.thinkingLevel).toBe("medium");
+  });
+
+  it("keeps the saved default without changing a session whose provider does not support it", async () => {
+    runtime.request.mockResolvedValue({ response: { data: { levels: ["off"] } } });
+    const configGateway = { call: vi.fn().mockResolvedValue({ ok: true }) };
+    const onRuntimeLevelChanged = vi.fn();
+    setupThinkingEffortControl({
+      runtime,
+      getTarget,
+      configGateway,
+      onError,
+      onRuntimeLevelChanged,
+    });
+
+    document.querySelector('[data-level="medium"]').click();
+
+    await vi.waitFor(() => {
+      expect(configGateway.call).toHaveBeenCalledWith("set_default_thinking_level", {
+        level: "medium",
+        scope: "global",
+      });
+      expect(document.getElementById("thinking-effort-name").textContent).toBe("medium");
+    });
+    expect(runtime.request).toHaveBeenCalledWith(
+      { type: "get_available_thinking_levels" },
+      getTarget(),
+    );
+    expect(runtime.request).not.toHaveBeenCalledWith(
+      { type: "set_thinking_level", level: "medium" },
+      expect.anything(),
+      expect.anything(),
+    );
+    expect(onRuntimeLevelChanged).not.toHaveBeenCalled();
   });
 
   it("updates UI when updateUI is called", () => {
@@ -106,9 +149,10 @@ describe("setupThinkingEffortControl", () => {
     });
   });
 
-  it("calls onError when runtime request fails", async () => {
+  it("keeps the saved default without reporting a global error when runtime sync fails", async () => {
     const error = new Error("Request failed");
     runtime.request.mockRejectedValue(error);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 
     setupThinkingEffortControl({ runtime, getTarget, onError });
 
@@ -117,9 +161,42 @@ describe("setupThinkingEffortControl", () => {
 
     highButton.click();
 
+    try {
+      await vi.waitFor(() => {
+        expect(warn).toHaveBeenCalledWith(
+          "[Native] Saved default thinking level but could not apply it to session:",
+          error,
+        );
+      });
+      expect(onError).not.toHaveBeenCalled();
+      expect(document.getElementById("thinking-effort-name").textContent).toBe("high");
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("does not let a stale initial read overwrite a user change", async () => {
+    let resolveInitialRead;
+    const configGateway = {
+      call: vi.fn((operation) => {
+        if (operation === "get_default_thinking_level") {
+          return new Promise((resolve) => {
+            resolveInitialRead = resolve;
+          });
+        }
+        return Promise.resolve({ ok: true });
+      }),
+    };
+    setupThinkingEffortControl({ runtime, getTarget, configGateway, onError });
+
+    document.querySelector('[data-level="high"]').click();
     await vi.waitFor(() => {
-      expect(onError).toHaveBeenCalledWith(error);
+      expect(document.getElementById("thinking-effort-name").textContent).toBe("high");
     });
+
+    resolveInitialRead({ ok: true, data: { level: "off" } });
+    await Promise.resolve();
+    expect(document.getElementById("thinking-effort-name").textContent).toBe("high");
   });
 });
 

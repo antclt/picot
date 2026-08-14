@@ -123,7 +123,7 @@ mod tests {
         // than pinning a brittle exact count (new Skills commands are added
         // across phases). The count is recorded as a lower bound so accidentally
         // removing a command is caught.
-        assert!(manifest.commands.len() >= 34);
+        assert!(manifest.commands.len() >= 35);
         let skills = [
             "list_skill_inventory",
             "set_skill_enabled",

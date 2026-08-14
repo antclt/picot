@@ -8,7 +8,9 @@ use crate::markitdown_preview::{
 };
 use crate::model_health::{self, ModelTestOutcome, ModelTestRequest};
 use crate::native_pi_manager::NativePiManager;
-use crate::pi_launch::{list_installed_apps, open_external, open_in_app, PiLaunchResolver};
+use crate::pi_launch::{
+    list_installed_apps, open_external, open_in_app, set_package_disabled, PiLaunchResolver,
+};
 use crate::remote_auth::RemoteAuth;
 use crate::runtime_coordinator::{RuntimeStatus, RuntimeTarget};
 use crate::terminal_manager::TerminalManager;
@@ -139,9 +141,11 @@ impl HostServer {
         let profile_dir = dirs::config_dir()
             .unwrap_or_else(std::env::temp_dir)
             .join("picot");
-        let session_ui_profiles = Arc::new(crate::session_ui_profile_store::SessionUiProfileStore::open(
-            profile_dir.join("session-ui-profiles.json"),
-        )?);
+        let session_ui_profiles = Arc::new(
+            crate::session_ui_profile_store::SessionUiProfileStore::open(
+                profile_dir.join("session-ui-profiles.json"),
+            )?,
+        );
         let install_secret = {
             use base64::Engine;
             use rand::RngCore;
@@ -890,6 +894,7 @@ async fn handle_websocket(mut socket: WebSocket, state: Arc<HostState>) {
         let _ = send_error(&mut socket, None, "handshake_rejected", &message).await;
         return;
     }
+    let terminal_owner = OwnerId::from_client_id(&client_id);
     let desktop_owner = state
         .router
         .lock()
@@ -1014,7 +1019,7 @@ async fn handle_websocket(mut socket: WebSocket, state: Arc<HostState>) {
             }
             event = terminal_events.recv() => {
                 match event {
-                    Ok((owner, outgoing)) if desktop_owner.as_ref() == Some(&owner) => {
+                    Ok((owner, outgoing)) if owner == terminal_owner => {
                         if socket.send(Message::Text(outgoing.to_string().into())).await.is_err() {
                             break;
                         }
@@ -1343,16 +1348,7 @@ async fn dispatch(
             operation,
             frame,
             ..
-        } => {
-            dispatch_host_operation(
-                state,
-                &client_id,
-                &request_id,
-                &operation,
-                &frame,
-            )
-            .await
-        }
+        } => dispatch_host_operation(state, &client_id, &request_id, &operation, &frame).await,
         RoutedAction::Data {
             request_id, frame, ..
         } => match frame.get("operation").and_then(Value::as_str) {
@@ -1504,7 +1500,7 @@ async fn dispatch_host_operation(
     match operation {
         "list_pi_packages" => {
             let resolver = state.pi_launch.clone();
-            let sources = tokio::task::spawn_blocking(move || resolver.list_pi_packages())
+            let packages = tokio::task::spawn_blocking(move || resolver.list_pi_packages())
                 .await
                 .map_err(|error| ("host_operation_failed", error.to_string()))?
                 .map_err(|message| ("list_pi_packages_failed", message))?;
@@ -1512,10 +1508,10 @@ async fn dispatch_host_operation(
                 "type": "host_response",
                 "requestId": request_id,
                 "operation": "list_pi_packages",
-                "packages": sources,
+                "packages": packages,
             }))
         }
-        "install_pi_package" | "remove_pi_package" => {
+        "install_pi_package" | "remove_pi_package" | "update_pi_package" => {
             let source = frame
                 .get("source")
                 .and_then(Value::as_str)
@@ -1523,29 +1519,60 @@ async fn dispatch_host_operation(
                 .filter(|value| !value.is_empty())
                 .ok_or(("invalid_source", "Package source cannot be empty".into()))?
                 .to_owned();
+            let local = frame.get("local").and_then(Value::as_bool).unwrap_or(false);
             let resolver = state.pi_launch.clone();
-            let is_install = operation == "install_pi_package";
-            tokio::task::spawn_blocking(move || {
-                if is_install {
-                    resolver.install_pi_package(&source)
-                } else {
-                    resolver.remove_pi_package(&source)
-                }
+            let operation = operation.to_string();
+            let operation_ref = operation.clone();
+            tokio::task::spawn_blocking(move || match operation_ref.as_str() {
+                "install_pi_package" => resolver.install_pi_package(&source, local),
+                "remove_pi_package" => resolver.remove_pi_package(&source, local),
+                "update_pi_package" => resolver.update_pi_package(&source),
+                _ => unreachable!(),
             })
             .await
             .map_err(|error| ("host_operation_failed", error.to_string()))?
-            .map_err(|message| {
-                if is_install {
-                    ("install_pi_package_failed", message)
-                } else {
-                    ("remove_pi_package_failed", message)
-                }
-            })?;
+            .map_err(|message| ("package_operation_failed", message))?;
             Ok(json!({
                 "type": "host_response",
                 "requestId": request_id,
                 "operation": operation,
                 "ok": true,
+            }))
+        }
+        "set_pi_package_disabled" => {
+            let source = frame
+                .get("source")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .ok_or(("invalid_source", "Package source cannot be empty".into()))?
+                .to_owned();
+            let disabled = frame
+                .get("disabled")
+                .and_then(Value::as_bool)
+                .unwrap_or(true);
+            let scope = frame
+                .get("scope")
+                .and_then(Value::as_str)
+                .unwrap_or("global")
+                .to_owned();
+            let cwd = frame
+                .get("cwd")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_owned();
+            let changed = tokio::task::spawn_blocking(move || {
+                set_package_disabled(&scope, &cwd, &source, disabled)
+            })
+            .await
+            .map_err(|error| ("host_operation_failed", error.to_string()))?
+            .map_err(|message| ("set_pi_package_disabled_failed", message))?;
+            Ok(json!({
+                "type": "host_response",
+                "requestId": request_id,
+                "operation": "set_pi_package_disabled",
+                "ok": true,
+                "changed": changed,
             }))
         }
         "list_installed_apps" => Ok(json!({
@@ -1721,7 +1748,13 @@ async fn dispatch_host_operation(
             let generation = 0u64;
             let registry = state.skill_registry.clone();
             let binding = tokio::task::spawn_blocking(move || {
-                registry.resolve(&source_id, &owner_id, &window_label, &workspace_root, generation)
+                registry.resolve(
+                    &source_id,
+                    &owner_id,
+                    &window_label,
+                    &workspace_root,
+                    generation,
+                )
             })
             .await
             .map_err(|error| ("host_operation_failed", error.to_string()))?
@@ -1819,7 +1852,13 @@ async fn dispatch_host_operation(
             let generation = 0u64;
             let registry = state.skill_registry.clone();
             let binding = tokio::task::spawn_blocking(move || {
-                registry.resolve(&source_id, &owner_id, &window_label, &workspace_root, generation)
+                registry.resolve(
+                    &source_id,
+                    &owner_id,
+                    &window_label,
+                    &workspace_root,
+                    generation,
+                )
             })
             .await
             .map_err(|error| ("host_operation_failed", error.to_string()))?
@@ -1854,7 +1893,11 @@ async fn dispatch_host_operation(
             // Consume the handle after a successful install.
             let registry = state.skill_registry.clone();
             let _ = tokio::task::spawn_blocking(move || {
-                registry.consume(&binding.source_id, &binding.owner_id, binding.workspace_generation)
+                registry.consume(
+                    &binding.source_id,
+                    &binding.owner_id,
+                    binding.workspace_generation,
+                )
             })
             .await;
             serde_json::to_value(&result)
@@ -1867,6 +1910,72 @@ async fn dispatch_host_operation(
                     })
                 })
                 .map_err(|error| ("host_operation_failed", error.to_string()))
+        }
+        "session_ui_profile_load" => {
+            // Look up the persisted provider/modelId/thinkingLevel for a
+            // session. The frontend identifies the session by its runtime
+            // sessionId (stable for the lifetime of the underlying file);
+            // we accept any non-empty string as a key — the store trims and
+            // bounds-checks internally.
+            let expected = frame
+                .get("expectedSessionId")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .ok_or(("invalid_session", "expectedSessionId is required".into()))?
+                .to_owned();
+            let profiles = state.session_ui_profiles.clone();
+            let profile = tokio::task::spawn_blocking(move || profiles.load(&expected))
+                .await
+                .map_err(|error| ("host_operation_failed", error.to_string()))?
+                .map_err(|message| ("session_ui_profile_load_failed", message))?;
+            Ok(json!({
+                "type": "host_response",
+                "requestId": request_id,
+                "operation": "session_ui_profile_load",
+                "profile": profile,
+            }))
+        }
+        "session_ui_profile_save" => {
+            let expected = frame
+                .get("expectedSessionId")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .ok_or(("invalid_session", "expectedSessionId is required".into()))?
+                .to_owned();
+            let provider = frame
+                .get("provider")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .ok_or(("invalid_provider", "provider is required".into()))?
+                .to_owned();
+            let model_id = frame
+                .get("modelId")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .ok_or(("invalid_model", "modelId is required".into()))?
+                .to_owned();
+            let thinking_level = frame
+                .get("thinkingLevel")
+                .and_then(Value::as_str)
+                .map(str::to_owned)
+                .unwrap_or_else(|| "off".to_string());
+            let profiles = state.session_ui_profiles.clone();
+            let saved = tokio::task::spawn_blocking(move || {
+                profiles.save(&expected, &provider, &model_id, &thinking_level)
+            })
+            .await
+            .map_err(|error| ("host_operation_failed", error.to_string()))?
+            .map_err(|message| ("session_ui_profile_save_failed", message))?;
+            Ok(json!({
+                "type": "host_response",
+                "requestId": request_id,
+                "operation": "session_ui_profile_save",
+                "profile": saved,
+            }))
         }
         "ephemeral_create" => {
             let kind = frame
@@ -1946,76 +2055,49 @@ async fn dispatch_host_operation(
                 "descriptor": descriptor,
             }))
         }
-        "session_ui_profile_load" => {
-            // Look up the persisted provider/modelId/thinkingLevel for a
-            // session. The frontend identifies the session by its runtime
-            // sessionId (stable for the lifetime of the underlying file);
-            // we accept any non-empty string as a key — the store trims and
-            // bounds-checks internally.
-            let expected = frame
-                .get("expectedSessionId")
+        "restart_runtime" => {
+            let workspace_id = frame
+                .get("workspaceId")
                 .and_then(Value::as_str)
-                .map(str::trim)
-                .filter(|value| !value.is_empty())
-                .ok_or((
-                    "invalid_session",
-                    "expectedSessionId is required".into(),
-                ))?
+                .ok_or(("invalid_workspace", "workspaceId is required".into()))?
                 .to_owned();
-            let profiles = state.session_ui_profiles.clone();
-            let profile = tokio::task::spawn_blocking(move || profiles.load(&expected))
+            let session_id = frame
+                .get("sessionId")
+                .and_then(Value::as_str)
+                .ok_or(("invalid_session", "sessionId is required".into()))?
+                .to_owned();
+            let session_path = state
+                .data
+                .resolve_session_path(&workspace_id, &session_id)
+                .ok()
+                .flatten();
+            let cwd = state.data.workspace_root_path(&workspace_id).map_err(|_| {
+                (
+                    "workspace_not_found",
+                    "Could not resolve workspace root".into(),
+                )
+            })?;
+            let cwd = cwd.to_string_lossy().to_string();
+            let session_path_str = session_path
+                .as_ref()
+                .map(|p| p.to_string_lossy().to_string());
+            let spec = state
+                .pi_launch
+                .native_launch_spec(&cwd, session_path_str.as_deref())
+                .map_err(|message| ("launch_spec_failed", message))?;
+            let target =
+                RuntimeTarget::new(workspace_id, session_id, "restart-pending".to_string());
+            let runtimes = state.runtimes.clone();
+            let new_instance = tokio::task::spawn_blocking(move || runtimes.restart(&target, spec))
                 .await
                 .map_err(|error| ("host_operation_failed", error.to_string()))?
-                .map_err(|message| ("session_ui_profile_load_failed", message))?;
+                .map_err(|message| ("restart_runtime_failed", message))?;
             Ok(json!({
                 "type": "host_response",
                 "requestId": request_id,
-                "operation": "session_ui_profile_load",
-                "profile": profile,
-            }))
-        }
-        "session_ui_profile_save" => {
-            let expected = frame
-                .get("expectedSessionId")
-                .and_then(Value::as_str)
-                .map(str::trim)
-                .filter(|value| !value.is_empty())
-                .ok_or((
-                    "invalid_session",
-                    "expectedSessionId is required".into(),
-                ))?
-                .to_owned();
-            let provider = frame
-                .get("provider")
-                .and_then(Value::as_str)
-                .map(str::trim)
-                .filter(|value| !value.is_empty())
-                .ok_or(("invalid_provider", "provider is required".into()))?
-                .to_owned();
-            let model_id = frame
-                .get("modelId")
-                .and_then(Value::as_str)
-                .map(str::trim)
-                .filter(|value| !value.is_empty())
-                .ok_or(("invalid_model", "modelId is required".into()))?
-                .to_owned();
-            let thinking_level = frame
-                .get("thinkingLevel")
-                .and_then(Value::as_str)
-                .map(str::to_owned)
-                .unwrap_or_else(|| "off".to_string());
-            let profiles = state.session_ui_profiles.clone();
-            let saved = tokio::task::spawn_blocking(move || {
-                profiles.save(&expected, &provider, &model_id, &thinking_level)
-            })
-            .await
-            .map_err(|error| ("host_operation_failed", error.to_string()))?
-            .map_err(|message| ("session_ui_profile_save_failed", message))?;
-            Ok(json!({
-                "type": "host_response",
-                "requestId": request_id,
-                "operation": "session_ui_profile_save",
-                "profile": saved,
+                "operation": "restart_runtime",
+                "instanceId": new_instance,
+                "ok": true,
             }))
         }
         _ => Err((

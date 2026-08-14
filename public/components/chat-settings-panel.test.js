@@ -3,7 +3,10 @@ import { join } from "node:path";
 import { JSDOM } from "jsdom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { initI18n } from "../i18n.js";
 import "./chat-settings-panel.js";
+
+const enMessages = JSON.parse(readFileSync(join(process.cwd(), "public/locales/en.json"), "utf8"));
 
 // The toggle persists to a cookie, but isSuperAgentEnabled() has a one-time
 // migration that re-writes any legacy localStorage value back into the cookie.
@@ -20,10 +23,17 @@ async function flushPromises(count = 8) {
 }
 
 describe("chat-settings-panel", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     document.body.replaceChildren();
     clearSuperAgentPersistence();
     vi.restoreAllMocks();
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (url) => {
+      if (String(url).includes("/locales/")) {
+        return { ok: true, json: async () => enMessages };
+      }
+      return { ok: false, status: 404, json: async () => ({}) };
+    });
+    await initI18n();
   });
 
   it("renders Telegram doctor status and the Super Agent safety boundary", async () => {

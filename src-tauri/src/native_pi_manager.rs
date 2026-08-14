@@ -398,6 +398,44 @@ impl NativePiManager {
         }
     }
 
+    /// Stop the runtime for `target` and spawn a fresh one that resumes the same
+    /// session, returning the new instance id. Used to pick up extension/package
+    /// changes without leaving the app. Falls back to a no-op returning the
+    /// existing instance id when the target is not currently running.
+    pub fn restart(
+        &self,
+        target: &RuntimeTarget,
+        spec: NativeLaunchSpec,
+    ) -> Result<String, String> {
+        let existing = self
+            .inner
+            .runtimes
+            .lock()
+            .map_err(|_| "Native runtime registry lock poisoned".to_string())?
+            .values()
+            .find_map(|runtime| {
+                runtime.target.lock().ok().map(|t| t.clone()).filter(|t| {
+                    t.workspace_id == target.workspace_id && t.session_id == target.session_id
+                })
+            });
+
+        let Some(existing) = existing else {
+            // Not currently running — nothing to restart.
+            return Ok(target.instance_id.clone());
+        };
+
+        self.stop(&existing)?;
+
+        let new_instance = format!("instance-{}", uuid::Uuid::new_v4().simple());
+        let fresh = RuntimeTarget::new(
+            existing.workspace_id.clone(),
+            existing.session_id.clone(),
+            new_instance.clone(),
+        );
+        self.spawn(fresh, spec)?;
+        Ok(new_instance)
+    }
+
     pub fn target_for_session(
         &self,
         workspace_id: &str,
@@ -629,6 +667,24 @@ mod tests {
     }
 
     #[test]
+    fn approve_flag_appends_dash_dash_approve_arg() {
+        let spec = NativeLaunchSpec {
+            binary: PathBuf::from("/embedded/pi"),
+            cwd: PathBuf::from("/workspace"),
+            session_path: None,
+            extensions: vec![],
+            pi_version: env!("PI_STUDIO_PI_VERSION_BUNDLED").into(),
+            path_env: "/usr/bin".into(),
+            no_tools: false,
+            approve: true,
+        };
+        assert!(spec
+            .command_description()
+            .args
+            .contains(&"--approve".to_string()));
+    }
+
+    #[test]
     fn no_tools_flag_appends_dash_dash_no_tools_arg() {
         let spec = NativeLaunchSpec {
             binary: PathBuf::from("/embedded/pi"),
@@ -648,22 +704,10 @@ mod tests {
             approve: false,
             ..spec
         };
-        assert!(!side_spec.command_description().args.contains(&"--no-tools".to_string()));
-    }
-
-    #[test]
-    fn approve_flag_appends_dash_dash_approve_arg() {
-        let spec = NativeLaunchSpec {
-            binary: PathBuf::from("/embedded/pi"),
-            cwd: PathBuf::from("/workspace"),
-            session_path: None,
-            extensions: vec![],
-            pi_version: env!("PI_STUDIO_PI_VERSION_BUNDLED").into(),
-            path_env: "/usr/bin".into(),
-            no_tools: false,
-            approve: true,
-        };
-        assert!(spec.command_description().args.contains(&"--approve".to_string()));
+        assert!(!side_spec
+            .command_description()
+            .args
+            .contains(&"--no-tools".to_string()));
     }
 
     #[tokio::test]
