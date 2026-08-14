@@ -859,8 +859,8 @@ fn setup_native_runtime(app: &mut tauri::App, static_dir: PathBuf) -> Result<(),
 }
 
 fn main() {
-    if let Err(error) = fix_path_env::fix() {
-        eprintln!("[picot] failed to sync PATH from login shell: {error}");
+    if let Err(error) = fix_path_env::fix_all_vars() {
+        eprintln!("[picot] failed to sync login-shell environment: {error}");
     }
 
     tauri::Builder::default()

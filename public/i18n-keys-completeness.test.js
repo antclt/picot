@@ -1,5 +1,5 @@
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { relative, resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
@@ -162,41 +162,26 @@ describe("HTML data-i18n key references", () => {
   }
 });
 
+function collectSourceJsFiles(dir = publicDir) {
+  const files = [];
+  for (const entry of readdirSync(dir)) {
+    if (["vendor", "locales"].includes(entry)) continue;
+    const absolute = resolve(dir, entry);
+    const stat = statSync(absolute);
+    if (stat.isDirectory()) {
+      files.push(...collectSourceJsFiles(absolute));
+      continue;
+    }
+    if (!entry.endsWith(".js") || entry.endsWith(".test.js")) continue;
+    files.push(relative(publicDir, absolute));
+  }
+  return files.sort();
+}
+
 // ── JS literal t() key references ─────────────────────────────────────
 
 describe("JS t() literal key references", () => {
-  // Phase 1 JS files that should use t()
-  const jsFiles = [
-    "app.js",
-    "ui/context-viz.js",
-    "ui/at-file-mention.js",
-    "ui/message-renderer.js",
-    "ui/markdown.js",
-    "ui/tool-card.js",
-    "workspace/file-browser.js",
-    "ui/dialogs.js",
-    "app/updater.js",
-    "app/voice-input.js",
-    "sidebar/index.js",
-    "settings/editors.js",
-    "settings/skills-page.js",
-    "settings/toggles.js",
-    "settings/save-status.js",
-    "packages/install-status.js",
-    "workspace/actions.js",
-    "session/onboarding.js",
-    "cost.js",
-    "cost/dashboard.js",
-    "cost/infobar.js",
-    "pinned-items.js",
-    "sidebar-workspace-group.js",
-    "workspace-projects.js",
-    "workspace-quick-info.js",
-    "ephemeral-chat-view.js",
-    "side-chat-manager.js",
-    "quick-chat-dialog.js",
-    "file-preview-panel.js",
-  ];
+  const jsFiles = collectSourceJsFiles();
 
   it("every literal t(\"...\") / t('...') key exists in en.json", () => {
     const referenced = new Set();

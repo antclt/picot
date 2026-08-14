@@ -240,8 +240,7 @@ describe("skills-page tree renderer", () => {
     await page.load("global");
 
     const toggle = container.querySelector('[data-skill-toggle="diagram"] .skills-switch');
-    toggle.checked = false;
-    toggle.dispatchEvent(new Event("change"));
+    toggle.click();
     expect(container.querySelector('[data-skill-toggle="diagram"] .skills-switch').disabled).toBe(
       true,
     );
@@ -262,9 +261,11 @@ describe("skills-page tree renderer", () => {
       target: { kind: "skill", id: "/a/baoyu/diagram/SKILL.md" },
       enabled: false,
     });
-    expect(container.querySelector('[data-skill-toggle="diagram"] .skills-switch').checked).toBe(
-      false,
-    );
+    expect(
+      container
+        .querySelector('[data-skill-toggle="diagram"] .skills-switch')
+        .classList.contains("on"),
+    ).toBe(false);
     expect(success).toHaveBeenCalled();
   });
 
