@@ -74,4 +74,46 @@ describe("project header", () => {
     const toggle = document.getElementById("diff-sidebar-toggle");
     expect(toggle.classList.contains("hidden")).toBe(true);
   });
+
+  it("opens the Files panel when the workspace-path pill is clicked", async () => {
+    document.body.innerHTML = BASE_HTML;
+    const data = {
+      workspaceInfo: vi.fn().mockResolvedValue({
+        info: { path: "/Users/me/code/project" },
+      }),
+    };
+    const onOpenFiles = vi.fn();
+
+    await setupProjectHeader({ data, workspaceId: "workspace-d", onOpenFiles });
+
+    const indicator = document.getElementById("workspace-indicator");
+    expect(indicator.classList.contains("clickable-pill")).toBe(true);
+    expect(indicator.getAttribute("role")).toBe("button");
+    expect(indicator.getAttribute("tabindex")).toBe("0");
+    expect(indicator.getAttribute("aria-label")).toBe("Open Files panel — /Users/me/code/project");
+
+    indicator.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    expect(onOpenFiles).toHaveBeenCalledTimes(1);
+
+    // Enter and Space should also activate the pill.
+    indicator.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }));
+    expect(onOpenFiles).toHaveBeenCalledTimes(2);
+    indicator.dispatchEvent(new KeyboardEvent("keydown", { key: " " }));
+    expect(onOpenFiles).toHaveBeenCalledTimes(3);
+  });
+
+  it("does not attach a click handler when onOpenFiles is omitted", async () => {
+    document.body.innerHTML = BASE_HTML;
+    const data = {
+      workspaceInfo: vi.fn().mockResolvedValue({ info: { path: "/path" } }),
+    };
+
+    await setupProjectHeader({ data, workspaceId: "workspace-e" });
+
+    const indicator = document.getElementById("workspace-indicator");
+    expect(indicator.classList.contains("clickable-pill")).toBe(false);
+    expect(indicator.getAttribute("role")).toBeNull();
+    // Clicking must be a no-op (no throw, no side effect).
+    expect(() => indicator.dispatchEvent(new MouseEvent("click", { bubbles: true }))).not.toThrow();
+  });
 });

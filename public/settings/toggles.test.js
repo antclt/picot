@@ -63,13 +63,16 @@ describe("settings toggles", () => {
   });
 
   test("persists auto-compaction to config on click", async () => {
-    const dom = new JSDOM(`
+    const dom = new JSDOM(
+      `
       <button class="settings-toggle" id="toggle-auto-compact"></button>
       <button class="settings-toggle on" id="toggle-show-thinking"></button>
       <button class="settings-toggle" id="toggle-task-notifications"></button>
       <button class="settings-toggle" id="toggle-auth"></button>
       <button class="settings-toggle" id="toggle-beta-updates"></button>
-    `, { url: "http://localhost" });
+    `,
+      { url: "http://localhost" },
+    );
     vi.stubGlobal("document", dom.window.document);
     vi.stubGlobal("localStorage", dom.window.localStorage);
     vi.stubGlobal("window", dom.window);

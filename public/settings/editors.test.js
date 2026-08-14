@@ -9,7 +9,8 @@ describe("settings API key model configuration", () => {
   let dom;
 
   beforeEach(async () => {
-    dom = new JSDOM(`
+    dom = new JSDOM(
+      `
       <div class="settings-content">
         <div id="settings-api-keys"></div>
       </div>
@@ -21,7 +22,9 @@ describe("settings API key model configuration", () => {
       <textarea id="config-editor-textarea"></textarea>
       <div id="config-editor-error"></div>
       <div id="config-editor-path"></div>
-    `, { url: "http://localhost" });
+    `,
+      { url: "http://localhost" },
+    );
     globalThis.window = dom.window;
     globalThis.document = dom.window.document;
     globalThis.confirm = vi.fn(() => true);
@@ -122,7 +125,9 @@ describe("settings API key model configuration", () => {
     });
     await loadApiKeysPanel();
 
-    document.querySelector('[data-model-id="claude-sonnet-5"] .api-model-visibility-toggle').click();
+    document
+      .querySelector('[data-model-id="claude-sonnet-5"] .api-model-visibility-toggle')
+      .click();
     await vi.waitFor(() => {
       expect(configGateway.call).toHaveBeenCalledWith(
         "set_model_visibility",
