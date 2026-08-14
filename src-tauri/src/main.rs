@@ -159,6 +159,42 @@ async fn open_session_in_project(
     open_workspace_at_path(&app, Some(&window), &cwd, resume.as_deref())
 }
 
+/// Show a task notification whose default click opens the completed session.
+#[tauri::command]
+async fn show_task_completion_notification(
+    app: AppHandle,
+    title: String,
+    body: String,
+    workspace_id: String,
+    session_id: String,
+) -> Result<(), String> {
+    let host = app
+        .try_state::<HostServer>()
+        .ok_or_else(|| "Host server is not ready".to_string())?;
+    let cwd = host.workspace_root_path(&workspace_id)?;
+
+    #[cfg(target_os = "macos")]
+    let _ = notify_rust::set_application(&app.config().identifier);
+
+    let notification = notify_rust::Notification::new()
+        .summary(&title)
+        .body(&body)
+        .show()
+        .map_err(|error| format!("Cannot show task notification: {error}"))?;
+
+    tauri::async_runtime::spawn_blocking(move || {
+        notification.wait_for_action(move |action| {
+            if action == "__closed" {
+                return;
+            }
+            if let Err(error) = open_workspace_at_path(&app, None, &cwd, Some(&session_id)) {
+                log::error!("[picot-native] failed to open notification session: {error}");
+            }
+        });
+    });
+    Ok(())
+}
+
 /// Ensure the fixed Agent Inbox workspace exists, has a sidebar-visible saved
 /// session, and has a background runtime running. Unlike normal project opens,
 /// this command intentionally keeps the current window in place; the frontend
@@ -823,8 +859,8 @@ fn setup_native_runtime(app: &mut tauri::App, static_dir: PathBuf) -> Result<(),
 }
 
 fn main() {
-    if let Err(error) = fix_path_env::fix() {
-        eprintln!("[picot] failed to sync PATH from login shell: {error}");
+    if let Err(error) = fix_path_env::fix_all_vars() {
+        eprintln!("[picot] failed to sync login-shell environment: {error}");
     }
 
     tauri::Builder::default()
@@ -851,6 +887,7 @@ fn main() {
             open_folder_as_workspace,
             open_new_session_in_workspace,
             open_session_in_project,
+            show_task_completion_notification,
             ensure_agent_inbox_session,
             check_beta_update,
             install_beta_update

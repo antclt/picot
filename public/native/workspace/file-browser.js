@@ -4,6 +4,8 @@
  * data request scoped to the current workspace root; there is no absolute
  * filesystem path to escape to.
  */
+import { t } from "../../i18n.js";
+
 export class NativeFileBrowser {
   #container;
   #pathEl;
@@ -12,6 +14,7 @@ export class NativeFileBrowser {
   #requestId = 0;
   #onFileOpen;
   #onFileSelect;
+  #onMention;
   #onPathChange;
   #gitFiles = [];
   #gitStat = null;
@@ -28,6 +31,7 @@ export class NativeFileBrowser {
    * @param {{
    *   onFileOpen?: (entry: object) => void,
    *   onFileSelect?: (entry: object) => void,
+   *   onMention?: (entry: object) => void,
    *   onPathChange?: (path: string) => void,
    * }} [options]
    */
@@ -36,7 +40,14 @@ export class NativeFileBrowser {
     pathEl,
     gateway,
     workspaceId,
-    { onFileOpen, onFileSelect, onPathChange, initialView = "files", showViewSwitch = true } = {},
+    {
+      onFileOpen,
+      onFileSelect,
+      onMention,
+      onPathChange,
+      initialView = "files",
+      showViewSwitch = true,
+    } = {},
   ) {
     this.#container = container;
     this.#pathEl = pathEl;
@@ -44,6 +55,7 @@ export class NativeFileBrowser {
     this.#workspaceId = workspaceId;
     this.#onFileOpen = onFileOpen ?? null;
     this.#onFileSelect = onFileSelect ?? null;
+    this.#onMention = onMention ?? null;
     this.#onPathChange = onPathChange ?? null;
     this.#view = initialView === "diff" ? "diff" : "files";
     this.#showViewSwitch = showViewSwitch;
@@ -73,7 +85,7 @@ export class NativeFileBrowser {
       this.#render();
     } catch (error) {
       if (requestId !== this.#requestId) return;
-      this.#container.replaceChildren(messageRow(error?.message || "Failed to load"));
+      this.#container.replaceChildren(messageRow(error?.message || t("files.failedLoad")));
     }
   }
 
@@ -92,7 +104,7 @@ export class NativeFileBrowser {
       return;
     }
     if (this.#entries.length === 0) {
-      this.#container.append(messageRow("Empty directory"));
+      this.#container.append(messageRow(t("files.empty")));
       return;
     }
     for (const entry of this.#entries) {
@@ -122,6 +134,20 @@ export class NativeFileBrowser {
         item.append(size);
       }
 
+      if (this.#onMention) {
+        const mention = document.createElement("button");
+        mention.type = "button";
+        mention.className = "file-mention-btn";
+        mention.title = `@mention ${entry.name}`;
+        mention.textContent = "@";
+        mention.setAttribute("aria-label", `Mention ${entry.name}`);
+        mention.addEventListener("click", (event) => {
+          event.stopPropagation();
+          this.#onMention?.({ ...entry, isDirectory });
+        });
+        item.append(mention);
+      }
+
       if (isDirectory) {
         item.addEventListener("click", () => this.load(entry.relativePath));
       } else {
@@ -135,14 +161,15 @@ export class NativeFileBrowser {
   #renderViewSwitch() {
     const switcher = document.createElement("div");
     switcher.className = "file-browser-view-switch ui-toolbar";
-    for (const [view, label] of [
-      ["files", "Files"],
-      ["diff", "Diff"],
+    for (const [view, labelKey] of [
+      ["files", "nav.files"],
+      ["diff", "files.preview.diff"],
     ]) {
       const button = document.createElement("button");
       button.type = "button";
+      button.dataset.view = view;
       button.className = `ui-button ui-button--sm ui-button--ghost${this.#view === view ? " active" : ""}`;
-      button.textContent = label;
+      button.textContent = t(labelKey);
       button.setAttribute("aria-pressed", String(this.#view === view));
       button.addEventListener("click", () => {
         this.#view = view;
@@ -178,7 +205,7 @@ export class NativeFileBrowser {
 
   #renderChanges() {
     if (this.#gitFiles.length === 0) {
-      this.#container.append(messageRow("No changes"));
+      this.#container.append(messageRow(t("files.noChanges")));
       return;
     }
     const section = document.createElement("section");
@@ -186,11 +213,12 @@ export class NativeFileBrowser {
     const heading = document.createElement("div");
     heading.className = "file-changes-heading";
     const label = document.createElement("span");
-    label.textContent = "Changes";
+    label.textContent = t("git.changesHeading");
     const count = document.createElement("span");
     count.className = "ui-badge file-changes-count";
     count.textContent = String(this.#gitFiles.length);
-    heading.append(label, count);
+    label.append(count);
+    heading.append(label);
     if (this.#gitStat?.isGitRepository) {
       const stat = document.createElement("span");
       stat.className = "file-changes-stat";

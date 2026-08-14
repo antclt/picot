@@ -10,6 +10,41 @@
         <title>Picot</title>
         <link rel="icon" type="image/svg+xml" href="icons/logo-dark.svg" />
         <meta name="theme-color" content="#f5f3ef" />
+        <script id="theme-bootstrap">
+            // Resolve the theme before loading CSS so the browser's first paint
+            // uses the saved palette instead of the default dark tokens.
+            (() => {
+                const supportedThemes = new Set([
+                    "night",
+                    "dawn",
+                    "midnight",
+                    "clean",
+                    "terracotta",
+                    "sage",
+                ]);
+                let savedTheme = null;
+                try {
+                    const prefix = "pi-studio-theme=";
+                    const entry = document.cookie
+                        .split("; ")
+                        .find((cookie) => cookie.startsWith(prefix));
+                    if (entry) {
+                        savedTheme = decodeURIComponent(entry.slice(prefix.length));
+                    } else {
+                        savedTheme = localStorage.getItem("pi-studio-theme");
+                    }
+                } catch (_e) {}
+
+                if (savedTheme === "dark") savedTheme = "night";
+                if (savedTheme === "light") savedTheme = "terracotta";
+                if (!supportedThemes.has(savedTheme)) {
+                    savedTheme = window.matchMedia?.("(prefers-color-scheme: light)").matches
+                        ? "terracotta"
+                        : "night";
+                }
+                document.documentElement.dataset.theme = savedTheme;
+            })();
+        </script>
         <link rel="stylesheet" href="style-theme.css" />
         <link rel="stylesheet" href="design-system.css" />
         <link rel="stylesheet" href="style.css" />
@@ -174,6 +209,21 @@
                         </button>
                     </div>
                 </div>
+                <nav class="sidebar-primary-nav" aria-label="Resource management" data-i18n-aria-label="nav.resourceManagement">
+                    <button type="button" class="sidebar-primary-nav-item" id="sidebar-extensions-btn">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path d="M10 22V7a1 1 0 0 0-1-1H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5a1 1 0 0 0-1-1H2"/><rect width="8" height="8" x="14" y="2" rx="1"/></g></svg>
+                        <span data-i18n="migrated.index.text.extensions">Extensions</span>
+                    </button>
+                    <button type="button" class="sidebar-primary-nav-item" id="sidebar-skills-btn">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594Z"/><path d="M20 2v4m2-2h-4"/><circle cx="4" cy="20" r="2"/></g></svg>
+                        <span data-i18n="migrated.index.text.skills">Skills</span>
+                    </button>
+                    <button type="button" class="sidebar-primary-nav-item hidden" id="sidebar-agent-inbox-btn">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11Z"/></g></svg>
+                        <span data-i18n="settings.agentInbox">Agent Inbox</span>
+                    </button>
+                </nav>
+                <div class="sidebar-section-label" data-i18n="sidebar.sessionList">Sessions</div>
                 <div class="session-list" id="session-list">
                     <div class="session-loading" data-i18n="sidebar.loadingSessions">Loading sessions...</div>
                 </div>
@@ -443,8 +493,8 @@
                         <button
                             class="ui-icon-button ui-icon-button--sm ui-icon-button--ghost icon-btn git-branch-toggle hidden"
                             id="diff-sidebar-toggle"
-                            title="Git changes"
-                            aria-label="Toggle Git changes"
+                            title="Git changes" data-i18n-title="git.changes"
+                            aria-label="Toggle Git changes" data-i18n-aria-label="git.toggleChanges"
                         >
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                                 <line x1="6" y1="3" x2="6" y2="15" />
@@ -481,8 +531,8 @@
                             Type a message below to start chatting with Pi, or select a session from the sidebar.
                         </p>
                         <div class="shortcuts-hint">
-                            <span><kbd>/</kbd> Focus input</span>
-                            <span><kbd>Esc</kbd> Abort</span>
+                            <span><kbd>/</kbd> <span data-i18n="shortcuts.focusInput">Focus input</span></span>
+                            <span><kbd>Esc</kbd> <span data-i18n="shortcuts.abort">Abort</span></span>
                         </div>
                     </div>
                 </div>
@@ -1050,7 +1100,7 @@
                 id="file-sidebar"
             >
                 <div class="file-sidebar-header app-side-panel-header">
-                    <span class="file-sidebar-title" id="file-sidebar-title"
+                    <span class="file-sidebar-title" id="file-sidebar-title" data-i18n="files.title"
                         >Files</span
                     >
                     <button
@@ -1125,12 +1175,12 @@
                 id="diff-sidebar"
             >
                 <div class="file-sidebar-header app-side-panel-header">
-                    <span class="file-sidebar-title">Diff</span>
+                    <span class="file-sidebar-title" data-i18n="files.preview.diff">Diff</span>
                     <button
                         class="ui-icon-button ui-icon-button--sm ui-icon-button--ghost icon-btn app-side-panel-close-btn"
                         id="diff-sidebar-close"
-                        title="Close"
-                        aria-label="Close Git changes"
+                        title="Close" data-i18n-title="migrated.index.title.close"
+                        aria-label="Close Git changes" data-i18n-aria-label="git.closeChanges"
                     >
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                             <line x1="18" y1="6" x2="6" y2="18" />
@@ -1353,7 +1403,7 @@
                                 >
                             </div>
                             <div class="settings-row">
-                                <span class="settings-label"
+                                <span class="settings-label" data-i18n="settings.picotVersion"
                                     >Picot version</span
                                 >
                                 <span
@@ -1401,9 +1451,42 @@
 
                 <div class="settings-tab" data-settings-panel="extensions">
                     <div class="settings-body">
-                        <div class="settings-section">
-                            <div class="settings-section-title" data-i18n="settings.browseCommunityPackages">
-                                Browse Community Packages
+                        <div class="settings-section" id="pkg-manager-section">
+                            <div class="settings-section-title" data-i18n="settings.installedPackages">
+                                Installed Packages
+                            </div>
+                            <p class="settings-help" data-i18n="settings.installedHelp">
+                                Manage the extension packages configured for this
+                                installation: enable, disable, update, or remove.
+                            </p>
+                            <div class="pkg-manager-shell">
+                                <div class="pkg-manager-sidebar">
+                                    <div id="pkg-manager-groups" class="pkg-manager-groups"></div>
+                                    <button
+                                        type="button"
+                                        id="pkg-manager-add-btn"
+                                        class="pkg-manager-add-btn"
+                                        data-i18n="extensions.addPlugin"
+                                    >
+                                        + Add plugin
+                                    </button>
+                                </div>
+                                <div id="pkg-manager-detail" class="pkg-manager-detail"></div>
+                            </div>
+                            <div id="pkg-manager-footer" class="pkg-manager-footer"></div>
+                        </div>
+                        <div class="settings-section" id="pkg-browse-section" hidden>
+                            <div class="pkg-browse-section-header">
+                                <div class="settings-section-title" data-i18n="settings.browseCommunityPackages">
+                                    Browse Community Packages
+                                </div>
+                                <button
+                                    type="button"
+                                    id="pkg-browse-close-btn"
+                                    class="settings-value-btn pkg-browse-close-btn"
+                                    data-i18n="status.done">
+                                    Done
+                                </button>
                             </div>
                             <p class="settings-help" data-i18n="settings.browseHelp">
                                 Discover extensions, skills, themes, and prompts
@@ -1519,11 +1602,9 @@
                                 Providers
                             </div>
                             <p class="settings-help">
-                                Keys are stored locally in
-                                <code data-i18n="migrated.index.text.piAgentAuthJson">~/.pi/agent/auth.json</code> (chmod 600).
-                                Picot launched from Finder does not read shell
-                                environment variables, so set keys here for them
-                                to stick across launches.
+                                <span data-i18n="settings.auth.helpPre">Keys are stored locally in</span>
+                                <code data-i18n="migrated.index.text.piAgentAuthJson">~/.pi/agent/auth.json</code>
+                                <span data-i18n="settings.auth.helpPost">(chmod 600). GUI launches also import provider variables from your login shell.</span>
                             </p>
                             <div
                                 class="settings-api-keys"
@@ -1541,7 +1622,7 @@
                         >
                             <div class="settings-section-title" data-i18n="settings.protection">Protection</div>
                             <div class="settings-row">
-                                <span class="settings-label"
+                                <span class="settings-label" data-i18n="settings.requireLogin"
                                     >Require login</span
                                 >
                                 <button
@@ -1554,13 +1635,28 @@
                         <div class="settings-section">
                             <div class="settings-section-title" data-i18n="settings.agent">Agent</div>
                             <div class="settings-config-meta">
-                                <span class="settings-label"
+                                <span class="settings-label" data-i18n="settings.agentConfigFile"
                                     >Agent config file</span
                                 >
-                                <span
-                                    class="settings-static-value"
-                                    id="inline-config-path"
-                                ></span>
+                                <span class="settings-config-path-row">
+                                    <span
+                                        class="settings-static-value settings-config-path"
+                                        id="inline-config-path"
+                                        title=""
+                                    ></span>
+                                    <button
+                                        type="button"
+                                        class="ui-icon-button ui-icon-button--xs ui-icon-button--ghost settings-config-path-copy"
+                                        id="inline-config-path-copy"
+                                        title="Copy path" data-i18n-title="settings.copyConfigPath"
+                                        aria-label="Copy path" data-i18n-aria-label="settings.copyConfigPath"
+                                    >
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                            <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
+                                            <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
+                                        </svg>
+                                    </button>
+                                </span>
                             </div>
                             <textarea
                                 class="ui-textarea config-editor-textarea settings-config-textarea"
@@ -1593,18 +1689,16 @@
                                 LLM providers
                             </div>
                             <p class="settings-help">
-                                Edit <code data-i18n="migrated.index.text.piAgentModelsJson">~/.pi/agent/models.json</code> to add
-                                custom providers (Ollama, vLLM, LM Studio,
-                                OpenAI-compatible proxies, OpenRouter routing
-                                overrides, etc). See the
-                                <a href="https://github.com/earendil-works/pi-mono/blob/main/packages/coding-agent/docs/models.md" id="models-config-docs-link" target="_blank" rel="noopener noreferrer"
+                                <span data-i18n="settings.models.helpPre">Edit</span>
+                                <code data-i18n="migrated.index.text.piAgentModelsJson">~/.pi/agent/models.json</code>
+                                <span data-i18n="settings.models.helpPost1">to add custom providers (Ollama, vLLM, LM Studio, OpenAI-compatible proxies, OpenRouter routing overrides, etc). See the</span>
+                                <a href="https://github.com/earendil-works/pi-mono/blob/main/packages/coding-agent/docs/models.md" id="models-config-docs-link" target="_blank" rel="noopener noreferrer" data-i18n="settings.models.docsLink"
                                     >models.json docs</a
                                 >
-                                for the full schema. Changes are picked up
-                                immediately — no restart needed.
+                                <span data-i18n="settings.models.helpPost2">for the full schema. Changes are picked up immediately — no restart needed.</span>
                             </p>
                             <div class="settings-config-meta">
-                                <span class="settings-label"
+                                <span class="settings-label" data-i18n="settings.providersFile"
                                     >Providers file</span
                                 >
                                 <span

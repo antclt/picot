@@ -23,8 +23,10 @@ Remote pairing is QR-only. A single-use pairing token expires after five minutes
 revocable long-term device token; only its hash is persisted. Remote clients may use approved runtime
 operations but cannot invoke folder picking, app launching, package changes, updates, workspace
 deletion, or other dangerous Host operations.
-The `/picot-config` adapter is desktop-only because it can mutate Pi-owned settings and historical
-session metadata; the Host router rejects remote prompts that attempt to invoke it.
+The `/picot-config` prompt adapter can mutate Pi-owned settings and historical session metadata; as of
+2026, remote clients paired via QR are trusted to invoke it like desktop clients, so the Host router no
+longer special-cases `/picot-config` runtime prompts for `ClientKind::Remote`. The dangerous
+`host_request` operations above remain remote-forbidden.
 
 The LAN transport remains unencrypted for this release. The product must display an explicit warning
 that prompts and source may be observable on the network.

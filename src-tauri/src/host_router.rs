@@ -12,6 +12,9 @@ const REMOTE_FORBIDDEN_HOST_OPERATIONS: &[&str] = &[
     "remove_package",
     "install_pi_package",
     "remove_pi_package",
+    "update_pi_package",
+    "set_pi_package_disabled",
+    "restart_runtime",
     "update_package",
     "check_for_updates",
     "install_update",
@@ -143,12 +146,6 @@ impl HostRouter {
 
         match frame_type {
             "terminal_command" => {
-                if client_kind != ClientKind::Desktop {
-                    return Err(RouterError::new(
-                        "remote_operation_forbidden",
-                        "Remote clients cannot use local terminals",
-                    ));
-                }
                 if frame.get("workspaceId").and_then(Value::as_str).is_none()
                     || !frame.get("payload").is_some_and(Value::is_object)
                 {
@@ -177,12 +174,6 @@ impl HostRouter {
             "runtime_request" | "runtime_snapshot_request" | "runtime_capabilities_request" => {
                 if frame_type == "runtime_request" {
                     validate_runtime_request(frame)?;
-                    if client_kind == ClientKind::Remote && is_picot_config_prompt(frame) {
-                        return Err(RouterError::new(
-                            "remote_operation_forbidden",
-                            "Remote clients cannot invoke Picot configuration operations",
-                        ));
-                    }
                 }
                 Ok(RoutedAction::Runtime {
                     client_id: client_id.to_owned(),
@@ -229,13 +220,6 @@ impl HostRouter {
             )),
         }
     }
-}
-
-fn is_picot_config_prompt(frame: &Value) -> bool {
-    frame
-        .pointer("/command/message")
-        .and_then(Value::as_str)
-        .is_some_and(|message| message.trim_start().starts_with("/picot-config "))
 }
 
 fn validate_runtime_request(frame: &Value) -> Result<(), RouterError> {
@@ -397,31 +381,7 @@ mod tests {
     }
 
     #[test]
-    fn forbids_picot_config_commands_for_remote_clients() {
-        let mut router = HostRouter::new();
-        router
-            .connect(
-                "phone",
-                &json!({ "type": "hello", "protocolVersion": 2, "clientType": "remote" }),
-            )
-            .unwrap();
-        let error = router
-            .route(
-                "phone",
-                &json!({
-                    "type": "runtime_request",
-                    "requestId": "r1",
-                    "idempotencyKey": "i1",
-                    "target": { "workspaceId": "w", "sessionId": "s", "instanceId": "i" },
-                    "command": { "type": "prompt", "message": "/picot-config {}" }
-                }),
-            )
-            .unwrap_err();
-        assert_eq!(error.code, "remote_operation_forbidden");
-    }
-
-    #[test]
-    fn routes_terminal_commands_only_for_desktop_clients() {
+    fn routes_terminal_commands_for_desktop_and_remote_clients() {
         let mut router = HostRouter::new();
         for (client_id, client_type) in [("window", "desktop"), ("phone", "remote")] {
             router
@@ -445,9 +405,9 @@ mod tests {
             router.route("window", &command),
             Ok(RoutedAction::Terminal { .. })
         ));
-        assert_eq!(
-            router.route("phone", &command).unwrap_err().code,
-            "remote_operation_forbidden"
-        );
+        assert!(matches!(
+            router.route("phone", &command),
+            Ok(RoutedAction::Terminal { .. })
+        ));
     }
 }
