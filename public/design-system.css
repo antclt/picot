@@ -207,7 +207,8 @@
 
    Single source of truth for every centered modal floating layer in the
    app (`.dialog`, `.settings-panel.resource-dialog`, `.command-palette`,
-   `.session-search-dialog`). Each feature keeps only its own positioning,
+   `.session-search-dialog`, `.provider-picker-dialog`,
+   `.provider-setup-dialog`). Each feature keeps only its own positioning,
    sizing, layout and motion; the shared frosted-glass look — background,
    border, radius, elevation and the focused dimmed backdrop — lives here.
 
@@ -223,7 +224,8 @@
 #dialog-container,
 .settings-overlay.resource-dialog-overlay,
 .command-palette-overlay,
-.session-search-overlay {
+.session-search-overlay,
+.provider-picker-backdrop {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.35);
@@ -236,7 +238,9 @@
 .dialog,
 .settings-panel.resource-dialog,
 .command-palette,
-.session-search-dialog {
+.session-search-dialog,
+.provider-picker-dialog,
+.provider-setup-dialog {
   background: var(--bg-frosted);
   backdrop-filter: blur(var(--blur-heavy)) saturate(1.5);
   -webkit-backdrop-filter: blur(var(--blur-heavy)) saturate(1.5);
@@ -254,7 +258,11 @@
 :root:not([data-theme="clean"]):not([data-theme="terracotta"]):not([data-theme="sage"])
   .command-palette,
 :root:not([data-theme="clean"]):not([data-theme="terracotta"]):not([data-theme="sage"])
-  .session-search-dialog {
+  .session-search-dialog,
+:root:not([data-theme="clean"]):not([data-theme="terracotta"]):not([data-theme="sage"])
+  .provider-picker-dialog,
+:root:not([data-theme="clean"]):not([data-theme="terracotta"]):not([data-theme="sage"])
+  .provider-setup-dialog {
   border-color: #3a3a3a;
   box-shadow:
     0 20px 60px rgba(0, 0, 0, 0.55),

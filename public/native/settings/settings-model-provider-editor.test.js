@@ -247,6 +247,19 @@ describe("models provider editor", () => {
     ]);
     expect(saved.providers.local.models[0].id).toBe("qwen");
   });
+
+  test("add-provider dialog uses themed overlay primitives", async () => {
+    const editor = setupSettingsConfig({ configGateway: { call } });
+    await editor.loadInlineModelsEditor();
+
+    document.querySelector(".models-provider-add").click();
+    const dialog = document.querySelector(".provider-picker-dialog");
+    expect(dialog.classList.contains("ui-dialog")).toBe(true);
+    expect(dialog.getAttribute("role")).toBe("dialog");
+    expect(dialog.closest(".ui-overlay.provider-picker-backdrop")).not.toBeNull();
+    expect(dialog.querySelector(".ui-input.provider-picker-search")).not.toBeNull();
+    expect(dialog.querySelector("#provider-picker-title").textContent).toBe("Add provider");
+  });
 });
 
 test("keeps provider keyboard focus inside the clipped sidebar", () => {
@@ -257,6 +270,12 @@ test("keeps provider keyboard focus inside the clipped sidebar", () => {
 
   expect(focusRule?.groups?.declarations).toMatch(/outline:\s*none/);
   expect(focusRule?.groups?.declarations).toMatch(/background:\s*var\(--bg-glass-hover\)/);
+});
+
+test("provider picker dialog does not fall back to a light-theme surface", () => {
+  const css = readFileSync("public/native/settings/settings-config.css", "utf8");
+  expect(css).not.toMatch(/--bg-primary/);
+  expect(css).toMatch(/\.provider-picker-dialog[\s\S]*?color:\s*var\(--text-primary\)/);
 });
 
 test("does not draw a curved inset border on the selected provider or model", () => {

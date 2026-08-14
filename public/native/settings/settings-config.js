@@ -156,19 +156,24 @@ export function setupSettingsConfig({ configGateway, onModelConfigurationChanged
 
   function openProviderPicker(providers) {
     const backdrop = document.createElement("div");
-    backdrop.className = "provider-picker-backdrop";
+    backdrop.className = "ui-overlay provider-picker-backdrop";
     const dialog = document.createElement("div");
-    dialog.className = "provider-picker-dialog";
+    dialog.className = "ui-dialog provider-picker-dialog";
+    dialog.setAttribute("role", "dialog");
+    dialog.setAttribute("aria-modal", "true");
+    dialog.setAttribute("aria-labelledby", "provider-picker-title");
     const head = document.createElement("div");
     head.className = "provider-picker-head";
-    head.innerHTML = `<div><h2>Add provider</h2><p>Connect a provider to start using its models.</p></div>`;
+    head.innerHTML = `<div><h2 id="provider-picker-title">Add provider</h2><p>Connect a provider to start using its models.</p></div>`;
     const close = document.createElement("button");
-    close.className = "provider-picker-close";
+    close.type = "button";
+    close.className = "ui-icon-button ui-icon-button--ghost provider-picker-close";
+    close.setAttribute("aria-label", "Close");
     close.textContent = "×";
     head.appendChild(close);
     dialog.appendChild(head);
     const search = document.createElement("input");
-    search.className = "provider-picker-search";
+    search.className = "ui-input provider-picker-search";
     search.placeholder = "Search providers…";
     dialog.appendChild(search);
     const grid = document.createElement("div");
@@ -271,28 +276,26 @@ export function setupSettingsConfig({ configGateway, onModelConfigurationChanged
 
   function setupDialog(title, subtitle) {
     const backdrop = document.createElement("div");
-    backdrop.className = "provider-picker-backdrop";
+    backdrop.className = "ui-overlay provider-picker-backdrop";
     const dialog = document.createElement("div");
-    dialog.className = "provider-setup-dialog";
-    Object.assign(dialog.style, {
-      width: "min(560px, 100%)",
-      maxHeight: "90vh",
-      overflow: "auto",
-      boxSizing: "border-box",
-      padding: "24px",
-      background: "var(--bg-primary, #fff)",
-      border: "1px solid var(--border)",
-      borderRadius: "16px",
-      boxShadow: "0 24px 80px rgb(0 0 0 / 30%)",
-    });
+    dialog.className = "ui-dialog provider-setup-dialog";
+    dialog.setAttribute("role", "dialog");
+    dialog.setAttribute("aria-modal", "true");
     const head = document.createElement("div");
     head.className = "provider-picker-head";
-    head.innerHTML = `<div><h2>${title}</h2><p>${subtitle}</p></div>`;
+    const heading = document.createElement("h2");
+    heading.textContent = title;
+    const caption = document.createElement("p");
+    caption.textContent = subtitle;
+    const titleWrap = document.createElement("div");
+    titleWrap.append(heading, caption);
     const close = document.createElement("button");
-    close.className = "provider-picker-close";
+    close.type = "button";
+    close.className = "ui-icon-button ui-icon-button--ghost provider-picker-close";
+    close.setAttribute("aria-label", "Close");
     close.textContent = "×";
     close.onclick = () => backdrop.remove();
-    head.appendChild(close);
+    head.append(titleWrap, close);
     dialog.appendChild(head);
     backdrop.appendChild(dialog);
     document.body.appendChild(backdrop);
@@ -330,7 +333,6 @@ export function setupSettingsConfig({ configGateway, onModelConfigurationChanged
     );
     const form = document.createElement("div");
     form.className = "provider-setup-form";
-    Object.assign(form.style, { display: "grid", gap: "14px" });
     const fields = [
       ["Provider ID", "provider", "my-provider"],
       ["Base URL", "baseUrl", "https://api.example.com/v1"],
@@ -341,25 +343,10 @@ export function setupSettingsConfig({ configGateway, onModelConfigurationChanged
     for (const [label, key, placeholder] of fields) {
       const wrap = document.createElement("label");
       wrap.textContent = label;
-      Object.assign(wrap.style, {
-        display: "grid",
-        gap: "6px",
-        color: "var(--text-dim)",
-        fontSize: "13px",
-      });
       const input = document.createElement("input");
+      input.className = "ui-input";
       input.placeholder = placeholder;
       input.type = key === "apiKey" ? "password" : "text";
-      Object.assign(input.style, {
-        boxSizing: "border-box",
-        width: "100%",
-        padding: "10px 12px",
-        border: "1px solid var(--border)",
-        borderRadius: "8px",
-        background: "var(--bg-glass)",
-        color: "var(--text-primary)",
-        font: "inherit",
-      });
       wrap.appendChild(input);
       form.appendChild(wrap);
       inputs[key] = input;
