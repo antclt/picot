@@ -3135,7 +3135,7 @@ dependencies = [
 
 [[package]]
 name = "picot"
-version = "0.3.6"
+version = "0.3.7-10001"
 dependencies = [
  "axum",
  "base64 0.22.1",
