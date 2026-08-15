@@ -47,7 +47,6 @@ import {
   createNativeTaskNotificationSender,
   createTaskCompletionNotifications,
 } from "./notifications/task-completion-notifications.js";
-import { WorkspaceFocusSidebar } from "./session/focus-sidebar.js";
 import { setupSessionInfo } from "./session/session-info.js";
 import { createSessionSelectionHandler } from "./session/session-navigation.js";
 import { setupSessionSearchDialog } from "./session/session-search-dialog.js";
@@ -1078,7 +1077,6 @@ function setupSessionSidebar() {
     },
     onCreateSession: createSessionViaHost,
     onSessionsLoaded: subscribeToLiveSessions,
-    onFocusProject: (project) => enterFocus(project),
     onAgentInboxSessionChange: setAgentInboxNavSession,
   });
 
@@ -1417,82 +1415,6 @@ async function bindDispatchedChildSession(instanceId, boundSessionId) {
   ).catch((error) => console.warn("[SuperAgent] failed to bind child session:", error));
 }
 
-// ── Workspace Focus mode ────────────────────────────────────────────────
-// Focus replaces the full session sidebar with a single-project view.
-// A right-arrow button on each current-project header triggers enterFocus.
-// The sidebar-toggle button exits focus back to the full session list.
-
-let focusSidebar = null;
-let focusActive = false;
-
-function enterFocus(project) {
-  if (!project || !sidebar) return;
-  const sidebarEl = document.getElementById("sidebar");
-  const sessionListEl = document.getElementById("session-list");
-  if (!sidebarEl || !sessionListEl) return;
-
-  // If already in focus for the same project, do nothing
-  if (focusActive && focusSidebar?.project?.path === project.path) return;
-
-  // Exit previous focus if switching projects
-  if (focusSidebar) {
-    focusSidebar.destroy();
-    focusSidebar = null;
-  }
-
-  focusActive = true;
-  sidebarEl.classList.add("focus-mode");
-
-  // Hide the normal session list container and create a focus container
-  sessionListEl.classList.add("hidden");
-  const focusContainer = document.createElement("div");
-  focusContainer.className = "focus-sidebar-container";
-  focusContainer.id = "focus-sidebar-container";
-  sidebarEl.querySelector(".sidebar-header")?.after(focusContainer);
-
-  // The focused project's sessions come from the sidebar's projects list.
-  const projectSessions =
-    Array.isArray(project.sessions) && project.sessions.length > 0
-      ? project.sessions
-      : (sidebar.sessions || []).filter((s) => s.projectPath === project.path);
-
-  const focusCardInfo = {
-    folder: project.folderName || project.name,
-    path: project.path,
-    count: projectSessions.length,
-  };
-
-  focusSidebar = new WorkspaceFocusSidebar(focusContainer, {
-    project: { ...project, sessions: projectSessions },
-    cardInfo: focusCardInfo,
-    activeSessionFile: projectSessions.find((s) => s.id === target.sessionId)?.filePath,
-    onBack: () => exitFocus(),
-    onNewTask: () => spawnSessionViaHost(target.workspaceId),
-    onSessionSelect: (session) => {
-      const handler = createSessionSelectionHandler({
-        switchSession,
-        openSessionInProject,
-        onError: showError,
-      });
-      handler(session);
-    },
-    onDelete: (filePath) => sidebar.deleteSession?.(filePath),
-    onRename: (filePath, sessionItem, el) => sidebar.renameSession?.(filePath, sessionItem, el),
-    isArchived: (filePath) => sidebar.isArchived?.(filePath) ?? false,
-  });
-  focusSidebar.render();
-}
-
-function exitFocus() {
-  if (!focusActive) return;
-  focusActive = false;
-  focusSidebar?.destroy();
-  focusSidebar = null;
-  document.getElementById("sidebar")?.classList.remove("focus-mode");
-  document.getElementById("focus-sidebar-container")?.remove();
-  document.getElementById("session-list")?.classList.remove("hidden");
-}
-
 function setupSidebarToggle() {
   const sidebarEl = document.getElementById("sidebar");
   const toggleBtn = document.getElementById("sidebar-toggle");
@@ -1512,10 +1434,6 @@ function setupSidebarToggle() {
   }
 
   toggleBtn.addEventListener("click", () => {
-    if (focusActive) {
-      exitFocus();
-      return;
-    }
     setCollapsed(!sidebarEl.classList.contains("collapsed"));
   });
   overlay?.addEventListener("click", () => setCollapsed(true));

@@ -101,8 +101,7 @@ Provide your model credentials via `pi /login` inside any workspace, or by writi
 - Full-text search across all session history with highlighted snippets
 - Sessions sorted by creation time; live session marked with a green dot
 - Inline session rename, favourites, tags, and filtering
-- **Workspace Focus** — use the arrow on the current workspace to switch the left sidebar into a task view, including before a new task has created its first saved session
-- **Safe individual deletion** — delete a session from Focus or ARCHIVED; running sessions are refused by the server
+- **Safe individual deletion** — delete a session from the sidebar or ARCHIVED; running sessions are refused by the server
 - **RECENT** — a cross-workspace, most-recently-used list keeps the last five visited sessions at the top of the sidebar
 
 </details>

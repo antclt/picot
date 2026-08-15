@@ -506,7 +506,6 @@
     "unpin": "Unpin",
     "sessionActions": "Session actions",
     "renameErrorGeneric": "Could not rename session. Try again.",
-    "focus": "Focus",
     "sessionList": "Sessions",
     "noSavedSessions": "No saved sessions",
     "searchTasks": "Tasks",
@@ -828,11 +827,7 @@
     "listLabel": "Files"
   },
   "workspace": {
-    "focus": "Enter focus mode",
-    "focusTitle": "Workspace",
-    "back": "Back",
-    "newTask": "New Task",
-    "showMore": "Show more"
+    "back": "Back"
   },
   "migrated": {
     "bootstrap": {

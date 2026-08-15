@@ -211,7 +211,6 @@ export class SessionSidebar {
       onSelect,
       onCreateSession,
       onSessionsLoaded,
-      onFocusProject,
       onAgentInboxSessionChange,
     },
   ) {
@@ -224,7 +223,6 @@ export class SessionSidebar {
     this.onSelect = onSelect;
     this.onCreateSession = onCreateSession;
     this.onSessionsLoaded = onSessionsLoaded;
-    this.onFocusProject = onFocusProject;
     this.onAgentInboxSessionChange = onAgentInboxSessionChange;
 
     this.sessions = [];
@@ -1100,14 +1098,8 @@ export class SessionSidebar {
         </button>`
       : "";
 
-    const focusButtonHtml = project.isCurrent
-      ? `<button class="project-focus-btn" title="Focus on this workspace" aria-label="Focus on ${escapeHtml(project.name)}">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-        </button>`
-      : "";
-
     const moreActionsLabel = t("sidebar.workspaceActions");
-    const moreActionsButtonHtml = `<button class="workspace-more-actions-btn" title="${escapeHtml(moreActionsLabel)}" aria-label="${escapeHtml(moreActionsLabel)}"></button>`;
+    const moreActionsButtonHtml = `<button type="button" class="workspace-more-actions-btn" title="${escapeHtml(moreActionsLabel)}" aria-label="${escapeHtml(moreActionsLabel)}"></button>`;
 
     const header = this.#sectionHeader(
       `project-group-header${collapsed ? " collapsed" : ""}`,
@@ -1118,8 +1110,7 @@ export class SessionSidebar {
       <span class="project-name" title="${escapeHtml(project.path)}">${escapeHtml(project.name)}</span>
       <span class="project-count">${project.sessions.length}</span>
       ${newChatButtonHtml}
-      ${moreActionsButtonHtml}
-      ${focusButtonHtml}`,
+      ${moreActionsButtonHtml}`,
     );
 
     header.querySelector(".project-new-chat-btn")?.addEventListener("click", (event) => {
@@ -1130,11 +1121,6 @@ export class SessionSidebar {
       create?.catch((error) => {
         console.error("[Sidebar] Failed to start new chat:", error);
       });
-    });
-
-    header.querySelector(".project-focus-btn")?.addEventListener("click", (event) => {
-      event.stopPropagation();
-      this.onFocusProject?.(project);
     });
 
     const moreActionsEl = header.querySelector(".workspace-more-actions-btn");

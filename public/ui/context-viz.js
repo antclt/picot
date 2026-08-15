@@ -37,8 +37,10 @@ export function setupContextViz({
       { key: "free", label: t("context.available"), tokens: free, color: "free" },
     ];
     const legendItems = [
-      ...windowSegments,
+      { key: "input", label: t("context.input"), tokens: input, color: "input" },
       { key: "output", label: t("context.output"), tokens: output, color: "output" },
+      { key: "free", label: t("context.available"), tokens: free, color: "free" },
+      { key: "cache", label: t("context.cached"), tokens: cacheRead, color: "cache" },
     ];
 
     if (contextBar) {

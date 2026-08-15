@@ -70,7 +70,10 @@ describe("context usage header", () => {
     expect(pill.textContent).toBe("In 1.6M · Out 6.0k · 7%");
 
     pill.click();
-    expect(document.getElementById("context-legend").textContent).toContain("Output");
+    const legendLabels = [...document.querySelectorAll(".context-legend-item")].map(
+      (item) => item.querySelector(".context-legend-left")?.textContent,
+    );
+    expect(legendLabels).toEqual(["Input", "Output", "Available", "Cached"]);
     expect(document.getElementById("context-legend").textContent).toContain("6.0k");
   });
 

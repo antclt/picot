@@ -506,7 +506,6 @@
     "unpin": "Desanclar",
     "sessionActions": "Acciones de sesión",
     "renameErrorGeneric": "No se pudo cambiar el nombre de la sesión.",
-    "focus": "Enfoque",
     "sessionList": "Sesiones",
     "noSavedSessions": "No hay sesiones guardadas",
     "searchTasks": "Tareas",
@@ -828,11 +827,7 @@
     "listLabel": "Archivos"
   },
   "workspace": {
-    "focus": "Entrar en modo de enfoque",
-    "focusTitle": "Espacio de trabajo",
-    "back": "Atrás",
-    "newTask": "Nueva tarea",
-    "showMore": "Mostrar más"
+    "back": "Atrás"
   },
   "migrated": {
     "bootstrap": {

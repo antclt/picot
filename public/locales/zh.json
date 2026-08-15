@@ -506,7 +506,6 @@
     "unpin": "取消置顶",
     "sessionActions": "会话操作",
     "renameErrorGeneric": "重命名失败，请重试。",
-    "focus": "聚焦",
     "sessionList": "会话",
     "noSavedSessions": "没有已保存的会话",
     "searchTasks": "任务",
@@ -828,11 +827,7 @@
     "listLabel": "文件"
   },
   "workspace": {
-    "focus": "进入专注模式",
-    "focusTitle": "工作区",
-    "back": "返回",
-    "newTask": "新任务",
-    "showMore": "显示更多"
+    "back": "返回"
   },
   "migrated": {
     "bootstrap": {

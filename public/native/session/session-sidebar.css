@@ -169,7 +169,8 @@
   font-size: var(--font-size-md);
 }
 
-.project-new-chat-btn {
+.project-new-chat-btn,
+.workspace-more-actions-btn {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -182,13 +183,20 @@
   color: var(--text-dim);
   cursor: pointer;
   opacity: 1;
+  line-height: 0;
   transition:
     background var(--duration) var(--ease),
     color var(--duration) var(--ease);
   flex-shrink: 0;
 }
 
-.project-new-chat-btn:hover {
+.project-new-chat-btn svg,
+.workspace-more-actions-btn svg {
+  display: block;
+}
+
+.project-new-chat-btn:hover,
+.workspace-more-actions-btn:hover {
   background: var(--accent);
   color: var(--bg-solid);
 }
@@ -612,7 +620,7 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  margin-top: 14px;
+  margin-top: 6px;
 }
 
 .sidebar-section-header:hover {
@@ -790,16 +798,17 @@
   background-color: var(--accent);
 }
 
-.wqi-content {
-  /* design-token-ignore: preserved literal sizing from private fork components */
-  padding: 0 18px 16px;
-}
-
 .wqi-row {
   /* design-token-ignore: preserved literal sizing from private fork components */
   gap: 10px;
   /* design-token-ignore: preserved literal sizing from private fork components */
-  padding: 5px 0;
+  padding: 5px 18px;
+}
+
+.workspace-quick-info > .wqi-row:last-child,
+.workspace-quick-info > .wqi-git-region:last-child {
+  /* design-token-ignore: preserved literal sizing from private fork components */
+  padding-bottom: 16px;
 }
 
 .wqi-row-value {

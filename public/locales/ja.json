@@ -506,7 +506,6 @@
     "unpin": "ピン留め解除",
     "sessionActions": "セッション操作",
     "renameErrorGeneric": "セッション名を変更できませんでした。",
-    "focus": "フォーカス",
     "sessionList": "セッション",
     "noSavedSessions": "保存されたセッションはありません",
     "searchTasks": "タスク",
@@ -828,11 +827,7 @@
     "listLabel": "ファイル"
   },
   "workspace": {
-    "focus": "フォーカスモードに入る",
-    "focusTitle": "ワークスペース",
-    "back": "戻る",
-    "newTask": "新しいタスク",
-    "showMore": "もっと表示"
+    "back": "戻る"
   },
   "migrated": {
     "bootstrap": {

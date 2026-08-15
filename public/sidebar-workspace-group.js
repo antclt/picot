@@ -186,8 +186,6 @@ export function buildSidebarWorkspaceGroup({
   onNewChat = null,
   onContextMenu = null,
   onMoreActions = null,
-  focusEnabled = false,
-  onFocus = null,
   newChatTitleKey = "sidebar.newChat",
   moreActionsTitleKey = "sidebar.workspaceActions",
   renderSessions = null,
@@ -255,23 +253,6 @@ export function buildSidebarWorkspaceGroup({
       onNewChat(event);
     });
     header.appendChild(newChatBtn);
-  }
-
-  if (focusEnabled && onFocus) {
-    const label = t("workspace.focus");
-    const focusBtn = document.createElement("button");
-    focusBtn.type = "button";
-    focusBtn.className = "workspace-focus-btn";
-    focusBtn.title = label;
-    focusBtn.setAttribute("aria-label", label);
-    const focusIcon = createIcon("chevron-right", { size: 14 });
-    if (focusIcon) focusBtn.replaceChildren(focusIcon);
-    else focusBtn.replaceChildren();
-    focusBtn.addEventListener("click", (event) => {
-      event.stopPropagation();
-      onFocus(event);
-    });
-    header.appendChild(focusBtn);
   }
 
   group.appendChild(header);

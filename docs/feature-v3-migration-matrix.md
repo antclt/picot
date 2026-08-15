@@ -66,7 +66,7 @@
 | P1-12 | pin session / pin workspace | `pinned-items.js` cookie | `native/session/pinned-items.js` localStorage | 已覆盖 / 需验证 | 验证 `filePath → session.id` 迁移 | pin、unpin、刷新恢复、跨 workspace 均正确 |
 | P1-13 | session hover toolbar / rename / archive | sidebar item handlers | native session sidebar + config gateway | 部分覆盖 | 核对 rename 是否走 `picot-config`、archive 是否 Host-owned | 操作目标稳定；不能把浏览器 path 当 authoritative input |
 | P1-14 | Cmd-K 全局 session 搜索 | `ui/session-search-dialog.js`、`5d68127` | `native/session/session-search-dialog.js` + `HostDataGateway` | 已覆盖 / 需验证 | 以 session ID/Host search response 为准 | Cmd/Ctrl-K 打开；搜索、结果跳转、关闭、键盘导航正确 |
-| P1-15 | Focus workspace view | `workspace-focus-sidebar.js`、focus state | `native/session/focus-sidebar.js`、focus state | 已覆盖 / 需验证 | 核对 URL route 与 project path | 进入/返回 Focus 不丢 session；按钮只作用于当前 workspace |
+| P1-15 | Focus workspace view | `workspace-focus-sidebar.js`、focus state | — | 已移除 | 不再移植；Workspace Focus 已从 native sidebar 删除 | — |
 | P1-16 | workspace quick-info / git repository metadata | `workspace-quick-info.js`、`/api/workspace-info` | native project header / Host data | 部分覆盖 | 核对 endpoint 是否仍为 Host data，不能使用旧 embedded route | hover/focus 显示 path/count/repository 且跨 workspace 更新 |
 | P1-17 | workspace path pill 打开 Files panel | `ca01566`，旧 `public/app.js` | native header/project header + file sidebar | 需回填 | 在 native header 重新绑定 click；不要复制旧 DOM 引用 | 点击 workspace path 展开 Files tab，刷新当前 workspace root |
 | P1-18 | git repo/branch pill 打开 Git panel | `ca01566`，旧 `public/app.js` | native header + `git-panel-integration.js` | 需回填 | 在 native header 重新绑定 click | 点击 git pill 展开 Git tab；Git status 请求 target 正确 |
