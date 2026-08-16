@@ -979,13 +979,6 @@ async fn handle_websocket(mut socket: WebSocket, state: Arc<HostState>) {
         return;
     }
     let terminal_owner = OwnerId::from_client_id(&client_id);
-    let desktop_owner = state
-        .router
-        .lock()
-        .ok()
-        .and_then(|router| router.client_kind(&client_id))
-        .filter(|kind| *kind == crate::host_router::ClientKind::Desktop)
-        .map(|_| OwnerId::from_client_id(&client_id));
     if socket
         .send(Message::Text(
             json!({ "type": "hello_ack", "protocolVersion": PROTOCOL_VERSION })
@@ -1114,7 +1107,7 @@ async fn handle_websocket(mut socket: WebSocket, state: Arc<HostState>) {
             }
             event = git_events.recv() => {
                 match event {
-                    Ok((owner, outgoing)) if desktop_owner.as_ref() == Some(&OwnerId::from_client_id(&owner)) => {
+                    Ok((owner, outgoing)) if owner == client_id => {
                         if socket.send(Message::Text(outgoing.to_string().into())).await.is_err() {
                             break;
                         }
