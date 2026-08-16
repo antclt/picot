@@ -20,13 +20,12 @@ settings use native RPC; project and global defaults atomically merge into Pi se
 unknown keys.
 
 Remote pairing is QR-only. A single-use pairing token expires after five minutes and exchanges for a
-revocable long-term device token; only its hash is persisted. Remote clients may use approved runtime
-operations but cannot invoke folder picking, app launching, package changes, updates, workspace
-deletion, or other dangerous Host operations.
-The `/picot-config` prompt adapter can mutate Pi-owned settings and historical session metadata; as of
-2026, remote clients paired via QR are trusted to invoke it like desktop clients, so the Host router no
-longer special-cases `/picot-config` runtime prompts for `ClientKind::Remote`. The dangerous
-`host_request` operations above remain remote-forbidden.
+revocable long-term device token; only its hash is persisted. A device that completes QR pairing is
+trusted to the same degree as the desktop app: as of 2026-08, the Host router no longer distinguishes
+`ClientKind::Remote` from `ClientKind::Desktop` for authorization purposes, so a paired mobile/LAN
+client has parity with desktop for Host operations (folder picking, app launching, package and Pi
+package changes, updates, workspace deletion, `/picot-config`) and for local Git operations. The
+`ClientKind` distinction is retained only for identity/telemetry, not for gating.
 
 The LAN transport remains unencrypted for this release. The product must display an explicit warning
 that prompts and source may be observable on the network.
