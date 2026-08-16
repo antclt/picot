@@ -33,28 +33,6 @@ Picot 将 `pi` 运行时**直接打包进 .app**，无需单独安装 `pi`，无
 
 **无需单独安装 `pi` CLI** — Picot 内置了自己的 pi 运行时。
 
-### macOS 未签名提示
-
-Picot 目前发布的 macOS 版本未经 Apple 开发者 ID 签名/公证，系统可能弹出：
-
-`"Picot" 无法打开，因为无法验证开发者。`
-
-**解决方法：**
-
-1. 将 `Picot.app` 拖入 `/Applications`
-2. 右键点击 → **打开**
-3. 若仍被阻止：**系统设置 → 隐私与安全性 → 仍要打开**
-
-<p align="center">
-  <img width="420" alt="macOS Gatekeeper 未验证提示" src="docs/images/gatekeeper-warning-zh.webp" />
-</p>
-
-点击**完成**：
-
-<p align="center">
-  <img width="960" alt="在 macOS 设置中允许打开 Picot" src="docs/images/gatekeeper-allow.webp" />
-</p>
-
 ---
 
 ## 快速开始
