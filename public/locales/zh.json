@@ -192,7 +192,8 @@
     "processToolCalls": "{count} 次工具调用",
     "providerError": "模型请求失败。",
     "turnFiles": "本轮修改的文件（{count}）：",
-    "responseTime": "响应耗时"
+    "responseTime": "响应耗时",
+    "subagentUnavailableOverSsh": "ACP 子代理（#claude、#codex 等）在本地运行，无法访问远程（SSH）工作区的文件，因此在此不可用。"
   },
   "tools": {
     "copyOutput": "复制输出",

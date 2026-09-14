@@ -192,7 +192,8 @@
     "processToolCalls": "{count} 件のツール呼び出し",
     "providerError": "モデルへのリクエストに失敗しました。",
     "turnFiles": "このターンで変更されたファイル（{count}）:",
-    "responseTime": "応答時間"
+    "responseTime": "応答時間",
+    "subagentUnavailableOverSsh": "ACP サブエージェント（#claude、#codex など）はローカルで実行されるため、リモート（SSH）ワークスペースのファイルにアクセスできず、ここでは利用できません。"
   },
   "tools": {
     "copyOutput": "出力をコピー",

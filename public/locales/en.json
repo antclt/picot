@@ -192,7 +192,8 @@
     "processToolCalls": "{count} tool calls",
     "providerError": "The model request failed.",
     "turnFiles": "Files changed this turn ({count}):",
-    "responseTime": "Response time"
+    "responseTime": "Response time",
+    "subagentUnavailableOverSsh": "ACP subagents (#claude, #codex, …) run locally and can't see a remote (SSH) workspace's files, so they're unavailable here."
   },
   "tools": {
     "copyOutput": "Copy output",

@@ -29,6 +29,17 @@ function applyLabels(buttonEl, target) {
   buttonEl.setAttribute("aria-label", t("remoteWorkspace.indicatorTitle", { target }));
 }
 
+/**
+ * Whether the active workspace is currently bound to (and enabled for) a
+ * remote SSH host — reflects the same probe the header pill renders from, so
+ * it can lag the workspace switch by one `refreshSshRemoteIndicator` round
+ * trip. Used to gate features that only make sense against a local checkout,
+ * like delegating to a local ACP subagent CLI via `#claude`.
+ */
+export function isSshRemoteActive() {
+  return Boolean(currentTarget);
+}
+
 /** `user@host:/remote/path`, trimmed to what a header pill can carry. */
 export function formatRemoteTarget(settings) {
   if (!settings?.host) return "";

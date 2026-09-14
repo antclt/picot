@@ -192,7 +192,8 @@
     "processToolCalls": "{count} llamadas a herramientas",
     "providerError": "La solicitud al modelo falló.",
     "turnFiles": "Archivos modificados en este turno ({count}):",
-    "responseTime": "Tiempo de respuesta"
+    "responseTime": "Tiempo de respuesta",
+    "subagentUnavailableOverSsh": "Los subagentes ACP (#claude, #codex, …) se ejecutan localmente y no pueden ver los archivos de un espacio de trabajo remoto (SSH), por lo que no están disponibles aquí."
   },
   "tools": {
     "copyOutput": "Copiar salida",

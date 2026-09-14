@@ -100,6 +100,7 @@ import { setupProjectHeader } from "./workspace/project-header.js";
 import { setupRemoteWorkspaceDialog } from "./workspace/remote-workspace-dialog.js";
 import { createSessionStatus } from "./workspace/session-status.js";
 import {
+  isSshRemoteActive,
   refreshSshRemoteIndicator,
   setupSshRemoteIndicator,
 } from "./workspace/ssh-remote-indicator.js";
@@ -451,6 +452,11 @@ setupComposerAgentMenu({
   input,
   container: document.getElementById("agent-picker-menu"),
   getAgents: () => {
+    // ACP subagents are local CLIs run against this workspace's local
+    // checkout; a remote workspace has no local checkout for them to see, so
+    // there is nothing valid to offer here (see sendComposerInput's matching
+    // guard, which is what actually stops a hand-typed `#claude ...`).
+    if (isSshRemoteActive()) return [];
     ensureSubagentDetection();
     return detectedSubagentIds
       ? SUBAGENTS.filter((agent) => detectedSubagentIds.has(agent.id))
@@ -2066,6 +2072,13 @@ async function sendComposerInput({ altKey }) {
   // Delegate to a subagent: `#claude <task>`, `/codex <task>`, … — the rest of
   // the line is the task; the Pi session is untouched and a card streams the run.
   const subagentTask = parseSubagentTask(value);
+  if (subagentTask && isSshRemoteActive()) {
+    // Subagent CLIs run locally against this workspace's local checkout; a
+    // remote (SSH) workspace has none for them to work against, so refuse
+    // rather than silently starting a run pointed at an empty anchor dir.
+    messageRenderer.renderSystemMessage(t("messages.subagentUnavailableOverSsh"));
+    return;
+  }
   if (subagentTask?.incomplete) {
     const { token, label } = subagentTask.agent;
     messageRenderer.renderSystemMessage(

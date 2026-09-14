@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { initI18n } from "../../i18n.js";
 import {
   formatRemoteTarget,
+  isSshRemoteActive,
   refreshSshRemoteIndicator,
   setupSshRemoteIndicator,
 } from "./ssh-remote-indicator.js";
@@ -122,5 +123,23 @@ describe("ssh-remote-indicator", () => {
       hostRef: "gpu-box",
       remotePath: "/srv/app",
     });
+  });
+
+  it("tracks whether the last-probed workspace is bound to a remote host", async () => {
+    // Module-level state carries over between tests in this file (like the
+    // pill's own currentTarget), so this drives it through both directions
+    // explicitly rather than assuming a starting state.
+    mountPill();
+    await refreshSshRemoteIndicator({
+      call: async () => ({
+        ok: true,
+        data: { resolved: { enabled: true, host: "10.0.0.5", remotePath: "/srv/app" } },
+      }),
+    });
+    expect(isSshRemoteActive()).toBe(true);
+    await refreshSshRemoteIndicator({
+      call: async () => ({ ok: true, data: { config: { enabled: false, host: "" } } }),
+    });
+    expect(isSshRemoteActive()).toBe(false);
   });
 });
