@@ -719,7 +719,7 @@ mod tests {
     #[test]
     fn a_remote_workspace_password_reaches_the_pi_process_it_was_parked_for() {
         let anchor = PathBuf::from("/picot-test/remotes/box/app");
-        crate::remote_workspace::stash_password(&anchor, "hunter2");
+        crate::remote_workspace::stash_password(&anchor, "not-a-real-secret");
         let spec = |cwd: PathBuf| NativeLaunchSpec {
             binary: PathBuf::from("/embedded/pi"),
             cwd,
@@ -735,7 +735,7 @@ mod tests {
                 .environment
                 .get("PICOT_SSH_PASSWORD")
                 .map(String::as_str),
-            Some("hunter2")
+            Some("not-a-real-secret")
         );
         // An ordinary local workspace must not inherit some other host's password.
         assert!(!spec(PathBuf::from("/workspace"))

@@ -277,9 +277,9 @@ mod tests {
     #[test]
     fn a_parked_password_survives_repeated_reads_for_later_respawns() {
         let anchor = PathBuf::from("/tmp/picot-test/respawn");
-        stash_password(&anchor, "hunter2");
-        assert_eq!(peek_password(&anchor).as_deref(), Some("hunter2"));
-        assert_eq!(peek_password(&anchor).as_deref(), Some("hunter2"));
+        stash_password(&anchor, "not-a-real-secret");
+        assert_eq!(peek_password(&anchor).as_deref(), Some("not-a-real-secret"));
+        assert_eq!(peek_password(&anchor).as_deref(), Some("not-a-real-secret"));
     }
 
     #[test]
