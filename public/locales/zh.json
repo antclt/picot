@@ -1325,6 +1325,7 @@
     "cancel": "取消",
     "remotePathRequired": "需要填写远程绝对路径。",
     "needsSession": "已保存主机、连接测试和目录浏览需要已打开的工作区。你仍然可以直接填写主机和路径并连接。",
+    "reauthRequired": "此连接需要重新输入密码——此前的登录凭据已不可用。请在下方重新连接。",
     "channelUnavailable": "配置通道不可用",
     "indicatorTitle": "正在 {target} 上运行 — 点击可更改",
     "indicatorFallbackTitle": "正在远程主机上运行"

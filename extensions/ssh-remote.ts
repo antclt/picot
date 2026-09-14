@@ -403,6 +403,17 @@ function createAskpass(password: string): { env: NodeJS.ProcessEnv; cleanup: () 
   };
 }
 
+/**
+ * Appended to auth-failure messages so the frontend (public/native/app.js)
+ * can tell "this needs a password" apart from an ordinary remote-command
+ * failure without parsing the English prose above it — which stays free to
+ * change for humans since the marker is what code actually matches on. Kept
+ * in sync by hand with the copy of this constant in app.js; there is no
+ * shared module between the extension host and the webview to import it
+ * from.
+ */
+export const SSH_AUTH_REQUIRED_MARKER = "[picot:ssh-auth-required]";
+
 /** Run a command on the remote host, optionally piping `input` to its stdin. */
 /**
  * `Permission denied (publickey,password,keyboard-interactive)` is ssh listing
@@ -414,8 +425,8 @@ function authHint(stderr: string, password?: string): string {
   if (!stderr) return "no output";
   if (!/Permission denied/i.test(stderr)) return stderr;
   return password
-    ? `${stderr} — the password was rejected by the host.`
-    : `${stderr} — no password was given and no usable key was found. Enter the host's password in the connect dialog, or set an identity file.`;
+    ? `${stderr} — the password was rejected by the host. ${SSH_AUTH_REQUIRED_MARKER}`
+    : `${stderr} — no password was given and no usable key was found. Enter the host's password in the connect dialog, or set an identity file. ${SSH_AUTH_REQUIRED_MARKER}`;
 }
 
 export function sshExec(

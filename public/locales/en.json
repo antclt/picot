@@ -1325,6 +1325,7 @@
     "cancel": "Cancel",
     "remotePathRequired": "An absolute remote path is required.",
     "needsSession": "Saved hosts, connection tests and browsing need an open workspace. You can still type a host and path and connect.",
+    "reauthRequired": "This connection needs your password again — the previous credentials are no longer available. Reconnect below.",
     "channelUnavailable": "Configuration channel is unavailable",
     "indicatorTitle": "Running on {target} — click to change",
     "indicatorFallbackTitle": "Running on a remote host"

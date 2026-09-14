@@ -352,6 +352,40 @@ describe("remote-workspace-dialog", () => {
     expect(field("remotePath").value).toBe("/srv/app");
   });
 
+  it("shows a status banner when reopened after an auth failure", async () => {
+    window.__picotConfigCall = vi.fn(async () => ({
+      ok: true,
+      data: { hosts: {}, sshConfigHosts: [] },
+    }));
+
+    const dialog = setupRemoteWorkspaceDialog({ buttonEl: trigger() });
+    dialog.open({
+      prefill: { host: "10.0.0.5", remotePath: "/srv/app" },
+      statusMessage: "Reconnect please",
+    });
+    await flushPromises();
+
+    const status = document.querySelector(".remote-workspace-dialog [data-status]");
+    expect(status.textContent).toBe("Reconnect please");
+    expect(status.classList.contains("hidden")).toBe(false);
+    expect(status.dataset.tone).toBe("error");
+  });
+
+  it("reports open/closed state for callers that reopen it programmatically", async () => {
+    window.__picotConfigCall = vi.fn(async () => ({
+      ok: true,
+      data: { hosts: {}, sshConfigHosts: [] },
+    }));
+
+    const dialog = setupRemoteWorkspaceDialog({ buttonEl: trigger() });
+    expect(dialog.isOpen()).toBe(false);
+    dialog.open();
+    await flushPromises();
+    expect(dialog.isOpen()).toBe(true);
+    click("cancel");
+    expect(dialog.isOpen()).toBe(false);
+  });
+
   it("browses the remote host and fills the path from the listing", async () => {
     window.__picotConfigCall = vi.fn(async (op, params) => {
       if (op === "get_ssh_hosts") return { ok: true, data: { hosts: {}, sshConfigHosts: [] } };

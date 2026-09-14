@@ -147,12 +147,12 @@ function createDialogDom() {
  */
 export function setupRemoteWorkspaceDialog({ buttonEl, onError } = {}) {
   const invoke = resolveInvoke();
-  if (!buttonEl) return { open() {} };
+  if (!buttonEl) return { open() {}, isOpen: () => false };
   if (!invoke) {
     // Remote/browser clients cannot spawn native windows; hide the trigger
     // rather than leave a button that silently does nothing.
     buttonEl.classList.add("hidden");
-    return { open() {} };
+    return { open() {}, isOpen: () => false };
   }
 
   let dom = null;
@@ -567,8 +567,11 @@ export function setupRemoteWorkspaceDialog({ buttonEl, onError } = {}) {
    * @param {object} [options]
    * @param {object} [options.prefill] an existing binding to open the dialog on
    *   (the header pill hands over the workspace's current one).
+   * @param {string} [options.statusMessage] shown as an error banner once the
+   *   dialog is ready, instead of the blank status — used when something
+   *   (rather than the user) triggered the reopen, e.g. an auth failure.
    */
-  function open({ prefill } = {}) {
+  function open({ prefill, statusMessage } = {}) {
     ensureDom();
     dom.overlay.classList.remove("hidden");
     dom.dialog.classList.remove("hidden");
@@ -579,6 +582,7 @@ export function setupRemoteWorkspaceDialog({ buttonEl, onError } = {}) {
     });
     void loadHosts().then(() => {
       if (prefill) applyPrefill(prefill);
+      if (statusMessage) setStatus(statusMessage, "error");
       fields().host.focus();
     });
   }
@@ -596,5 +600,5 @@ export function setupRemoteWorkspaceDialog({ buttonEl, onError } = {}) {
   }
 
   buttonEl.addEventListener("click", () => open());
-  return { open, close };
+  return { open, close, isOpen: () => Boolean(dom) && !dom.dialog.classList.contains("hidden") };
 }

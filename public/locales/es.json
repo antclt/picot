@@ -1325,6 +1325,7 @@
     "cancel": "Cancelar",
     "remotePathRequired": "Se necesita una ruta remota absoluta.",
     "needsSession": "Los hosts guardados, las pruebas de conexión y la navegación necesitan un espacio de trabajo abierto. Aún puedes escribir el host y la ruta y conectar.",
+    "reauthRequired": "Esta conexión necesita tu contraseña de nuevo: las credenciales anteriores ya no están disponibles. Vuelve a conectar abajo.",
     "channelUnavailable": "El canal de configuración no está disponible",
     "indicatorTitle": "Ejecutándose en {target}: haz clic para cambiar",
     "indicatorFallbackTitle": "Ejecutándose en un host remoto"

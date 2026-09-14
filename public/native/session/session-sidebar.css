@@ -642,6 +642,12 @@
   transition: transform var(--duration) var(--ease);
 }
 
+.sidebar-section-header .section-chevron svg {
+  width: 14px;
+  height: 14px;
+  display: block;
+}
+
 .sidebar-section-header:not(.collapsed) .section-chevron {
   transform: rotate(90deg);
 }

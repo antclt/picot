@@ -103,6 +103,7 @@ import {
   refreshSshRemoteIndicator,
   setupSshRemoteIndicator,
 } from "./workspace/ssh-remote-indicator.js";
+import { createSshAuthFailureHandler } from "./workspace/ssh-remote-reauth.js";
 import {
   createSessionViaHost,
   openSessionInProjectViaHost,
@@ -719,6 +720,17 @@ async function requestManualCompaction() {
 }
 
 compactContextButton?.addEventListener("click", () => requestManualCompaction().catch(showError));
+// Built ahead of ExtensionUiHost (rather than alongside setupSshRemoteIndicator
+// further down) so its `notify` hook below can reopen this on an auth failure.
+const remoteWorkspaceDialog = setupRemoteWorkspaceDialog({
+  buttonEl: document.getElementById("open-remote-btn"),
+  onError: showError,
+});
+const handleSshReauthNotify = createSshAuthFailureHandler({
+  call: window.__picotConfigCall,
+  dialog: remoteWorkspaceDialog,
+  reauthMessage: () => t("remoteWorkspace.reauthRequired"),
+});
 const extensionUi = new ExtensionUiHost({
   runtime,
   showDialog: (request, opts) => showNativeDialog(request, undefined, opts),
@@ -729,6 +741,10 @@ const extensionUi = new ExtensionUiHost({
       // Configuration data-plane responses arrive as notify events; swallow
       // them so they don't render as chat messages.
       if (config.consumeNotify(request)) return;
+      // ssh-remote reports a dead password/connection as a notify at session
+      // start; when it does, reopen the connect dialog on this project's
+      // binding instead of leaving the raw message (and its marker) in chat.
+      if (handleSshReauthNotify(request)) return;
       // Custom extension UI panels (ctx.ui.custom) are bridged over notify too;
       // they render as an overlay rather than a transcript entry.
       if (customUiPanel.consumeNotify(request)) return;
@@ -1257,12 +1273,9 @@ window.addEventListener("picot:session-created", (event) => {
 });
 
 setupOpenFolderButton({ onError: showError });
-const remoteWorkspaceDialog = setupRemoteWorkspaceDialog({
-  buttonEl: document.getElementById("open-remote-btn"),
-  onError: showError,
-});
-// The connect dialog is the only place a remote workspace is configured, so the
-// header pill reopens it on this workspace's binding rather than a settings tab.
+// The connect dialog (built above, alongside the ssh-reauth notify hook) is the
+// only place a remote workspace is configured, so the header pill reopens it
+// on this workspace's binding rather than a settings tab.
 setupSshRemoteIndicator({
   onEdit: (binding) => remoteWorkspaceDialog.open({ prefill: binding }),
 });

@@ -1325,6 +1325,7 @@
     "cancel": "キャンセル",
     "remotePathRequired": "リモートの絶対パスが必要です。",
     "needsSession": "保存済みホスト、接続テスト、ディレクトリ参照には開いているワークスペースが必要です。ホストとパスを入力して接続することは可能です。",
+    "reauthRequired": "この接続にはパスワードの再入力が必要です — 以前の認証情報はもう使用できません。下から再接続してください。",
     "channelUnavailable": "設定チャネルを利用できません",
     "indicatorTitle": "{target} で実行中 — クリックで変更",
     "indicatorFallbackTitle": "リモートホストで実行中"
