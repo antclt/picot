@@ -137,7 +137,7 @@
   background: var(--user-bubble);
   color: var(--user-bubble-text);
   border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius);
   border-bottom-right-radius: 6px;
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
