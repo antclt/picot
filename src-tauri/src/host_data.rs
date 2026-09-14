@@ -2340,7 +2340,7 @@ fn text_mime_type(ext: &str) -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    use super::{git_output, FileKind, HostDataError, HostDataPlane};
+    use super::{git_output, is_remote_project_path, FileKind, HostDataError, HostDataPlane};
     use serde_json::json;
     use std::collections::HashMap;
     use std::fs;
@@ -2348,8 +2348,7 @@ mod tests {
     use std::process::Command;
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    fn isolated_workspace(label: &str) -> (std::path::PathBuf, HostDataPlane, std::path::PathBuf) {
-        let nonce = SystemTime::now()
+    fn isolated_workspace(label: &str) -> (std::path::PathBuf, HostDataPlane, std::path::PathBuf) {        let nonce = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
