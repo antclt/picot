@@ -2350,9 +2350,10 @@ async fn dispatch_host_operation(
         // for one task. Unlike the removed `switch_session_agent`, this never
         // touches `state.runtimes`: the session's Pi backend keeps running and
         // owns the conversation, while the returned task target is a throwaway
-        // runtime the frontend drives with `acp_prompt` and tears down with
-        // `acp_task_stop` once the run settles. The synthetic session id keeps
-        // concurrent runs from colliding in the ACP coordinator.
+        // runtime the frontend drives with one or more `acp_prompt` turns
+        // (follow-ups reuse the same session) and tears down with
+        // `acp_task_stop` once the user ends the run. The synthetic session id
+        // keeps concurrent runs from colliding in the ACP coordinator.
         "acp_task_start" => {
             let workspace_id = frame
                 .get("workspaceId")

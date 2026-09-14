@@ -167,6 +167,59 @@ describe("subagent-card", () => {
     expect(document.querySelector(".subagent-fullscreen")).toBeNull();
   });
 
+  it("shows the follow-up composer only for a live run and hides it while a turn is running", () => {
+    const run = baseRun({ status: "done" });
+    const { element, update } = createSubagentCard({ run });
+    expect(element.querySelector(".subagent-card-composer").hidden).toBe(true);
+
+    update({ ...run, target: { instanceId: "acp-task-1" } });
+    expect(element.querySelector(".subagent-card-composer").hidden).toBe(false);
+    expect(element.querySelector(".subagent-card-composer-input").disabled).toBe(false);
+
+    update({ ...run, target: { instanceId: "acp-task-1" }, status: "running" });
+    expect(element.querySelector(".subagent-card-composer").hidden).toBe(false);
+    expect(element.querySelector(".subagent-card-composer-input").disabled).toBe(true);
+  });
+
+  it("sends the composer's trimmed text via onFollowUp on click and on Enter, and clears the input", () => {
+    const onFollowUp = vi.fn();
+    const run = baseRun({ status: "done", target: { instanceId: "acp-task-1" } });
+    const { element } = createSubagentCard({ run, onFollowUp });
+    const input = element.querySelector(".subagent-card-composer-input");
+
+    input.value = "  what next  ";
+    element
+      .querySelector(".subagent-card-composer-send")
+      .dispatchEvent(new Event("click", { bubbles: true }));
+    expect(onFollowUp).toHaveBeenCalledWith("what next");
+    expect(input.value).toBe("");
+
+    input.value = "another one";
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    expect(onFollowUp).toHaveBeenCalledWith("another one");
+    expect(onFollowUp).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not call onFollowUp for a blank composer submission", () => {
+    const onFollowUp = vi.fn();
+    const run = baseRun({ status: "done", target: { instanceId: "acp-task-1" } });
+    const { element } = createSubagentCard({ run, onFollowUp });
+    element
+      .querySelector(".subagent-card-composer-send")
+      .dispatchEvent(new Event("click", { bubbles: true }));
+    expect(onFollowUp).not.toHaveBeenCalled();
+  });
+
+  it("invokes onEnd when the composer's end button is clicked", () => {
+    const onEnd = vi.fn();
+    const run = baseRun({ status: "done", target: { instanceId: "acp-task-1" } });
+    const { element } = createSubagentCard({ run, onEnd });
+    element
+      .querySelector(".subagent-card-composer-end")
+      .dispatchEvent(new Event("click", { bubbles: true }));
+    expect(onEnd).toHaveBeenCalledTimes(1);
+  });
+
   it("routes a permission request through the dialog and replies once", async () => {
     const onRespondPermission = vi.fn();
     const run = baseRun();

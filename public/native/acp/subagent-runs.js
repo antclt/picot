@@ -1,11 +1,20 @@
 // Controller for external ACP subagent runs (Claude Code, Codex, Cursor). A run
-// is a scoped, one-shot delegation: the host spawns a throwaway ACP task runtime
-// (`acp_task_start`), this module drives it with a single `acp_prompt`, folds
-// the streamed `acp_session_update` events into a card in the Pi message list,
-// and retires the runtime (`acp_task_stop`) once the prompt settles. The
-// session's Pi backend is never touched.
+// is a scoped delegation: the host spawns a throwaway ACP task runtime
+// (`acp_task_start`), this module drives it with `acp_prompt` turns (the first
+// one from `start()`, any number more from `sendFollowUp()` once the prior turn
+// settles), and folds the streamed `acp_session_update` events into a card in
+// the Pi message list. The runtime stays alive between turns so a follow-up
+// reuses the same ACP session — it's only retired (`acp_task_stop`) when the
+// card is explicitly ended via `endRun()`, or when the workspace/app tears
+// down (handled host-side). The session's Pi backend is never touched.
 
-import { createAcpState, finalAgentText, reduceAcpEvent, resolvePermissionRequest } from "./acp-store.js";
+import {
+  appendUserPrompt,
+  createAcpState,
+  finalAgentText,
+  reduceAcpEvent,
+  resolvePermissionRequest,
+} from "./acp-store.js";
 import { readRuns, writeRun } from "./subagent-store.js";
 
 // The card pulls in the Markdown renderer, ToolCardRenderer and icon set —
@@ -89,10 +98,37 @@ export function createSubagentRunManager({
         card.update(run);
         persist(run);
       },
+      onFollowUp: (text) => sendFollowUp(run, text),
+      onEnd: () => endRun(run),
     });
     run.card = card;
     mount(card.element);
     return card;
+  }
+
+  /** Runs one `acp_prompt` turn against `run.target`, folding the outcome into `run`. */
+  async function runPromptTurn(run, message) {
+    run.status = "running";
+    run.card?.update(run);
+    persist(run);
+    try {
+      await runtime.request({ type: "acp_prompt", message, images: [] }, run.target, {
+        idempotencyKey: randomId(),
+      });
+      run.status = "done";
+    } catch (error) {
+      run.status = "error";
+      if (!run.state.error) {
+        run.state = reduceAcpEvent(run.state, {
+          type: "acp_error",
+          message: error?.message || String(error),
+        });
+      }
+    }
+    run.finishedAt = new Date().toISOString();
+    run.resultText = finalAgentText(run.state);
+    run.card?.update(run);
+    persist(run);
   }
 
   async function start(taskText, agent = DEFAULT_AGENT) {
@@ -127,26 +163,31 @@ export function createSubagentRunManager({
     await attachCard(run);
     persist(run);
 
-    try {
-      await runtime.request({ type: "acp_prompt", message: task, images: [] }, taskTarget, {
-        idempotencyKey: randomId(),
-      });
-      run.status = "done";
-    } catch (error) {
-      run.status = "error";
-      if (!run.state.error) {
-        run.state = reduceAcpEvent(run.state, {
-          type: "acp_error",
-          message: error?.message || String(error),
-        });
-      }
-    }
-    run.finishedAt = new Date().toISOString();
-    run.resultText = finalAgentText(run.state);
+    await runPromptTurn(run, task);
+    return run;
+  }
+
+  /**
+   * Sends a follow-up message on an already-settled run, reusing its ACP
+   * session. No-ops while a turn is still running, once the run has been
+   * ended, or for a run restored without a live runtime (`run.target` is only
+   * ever set on the in-memory run created by `start()`).
+   */
+  async function sendFollowUp(run, text) {
+    const message = String(text ?? "").trim();
+    if (!message || !run.target || run.status === "running") return;
+    run.state = appendUserPrompt(run.state, message);
+    await runPromptTurn(run, message);
+  }
+
+  /** Explicitly retires a run's ACP runtime; the card keeps its transcript but stops accepting follow-ups. */
+  function endRun(run) {
+    if (!run.target) return;
+    control.stopAcpTask(run.target).catch(() => {});
+    runsByInstance.delete(run.target.instanceId);
+    run.target = null;
     run.card?.update(run);
     persist(run);
-    control.stopAcpTask(run.target).catch(() => {});
-    return run;
   }
 
   /** Fold a background runtime frame into its run's card. Returns true if consumed. */
@@ -212,5 +253,12 @@ export function createSubagentRunManager({
     }
   }
 
-  return { start, applyEvent, restore, list: () => [...runsByInstance.values()] };
+  return {
+    start,
+    sendFollowUp,
+    endRun,
+    applyEvent,
+    restore,
+    list: () => [...runsByInstance.values()],
+  };
 }

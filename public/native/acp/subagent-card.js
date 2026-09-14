@@ -111,8 +111,10 @@ function renderBlocksInto(container, blocks, toolRenderer) {
  * @param {object} opts.run
  * @param {(run: object) => void} [opts.onSendResult]
  * @param {(requestId: string, optionId: string|undefined) => void} [opts.onRespondPermission]
+ * @param {(text: string) => void} [opts.onFollowUp]  send another message on the same ACP session
+ * @param {() => void} [opts.onEnd]  retire the run's ACP runtime for good
  */
-export function createSubagentCard({ run, onSendResult, onRespondPermission }) {
+export function createSubagentCard({ run, onSendResult, onRespondPermission, onFollowUp, onEnd }) {
   const wrapper = document.createElement("div");
   wrapper.className = "subagent-card";
   wrapper.dataset.runId = run.id;
@@ -171,7 +173,54 @@ export function createSubagentCard({ run, onSendResult, onRespondPermission }) {
   });
   footer.append(sendBtn);
 
-  wrapper.append(head, body, footer);
+  // Follow-up composer — reuses the same ACP session for another `acp_prompt`
+  // turn. Only shown while the run has a live runtime (`run.target`); a
+  // restored or explicitly-ended run never gets one.
+  const composer = document.createElement("div");
+  composer.className = "subagent-card-composer";
+  composer.hidden = true;
+
+  const composerInput = document.createElement("textarea");
+  composerInput.className = "subagent-card-composer-input";
+  composerInput.placeholder = "Reply to continue…";
+  composerInput.rows = 1;
+
+  const composerSend = document.createElement("button");
+  composerSend.type = "button";
+  composerSend.className = "subagent-card-composer-send";
+  composerSend.textContent = "Send";
+
+  const composerEnd = document.createElement("button");
+  composerEnd.type = "button";
+  composerEnd.className = "subagent-card-composer-end";
+  composerEnd.title = "End this subagent session";
+  composerEnd.setAttribute("aria-label", "End this subagent session");
+  composerEnd.appendChild(createIcon("x", { size: 13 }) ?? document.createTextNode("✕"));
+  composerEnd.addEventListener("click", () => onEnd?.());
+
+  function autosizeComposer() {
+    composerInput.style.height = "auto";
+    composerInput.style.height = `${Math.min(composerInput.scrollHeight, 160)}px`;
+  }
+  function submitFollowUp() {
+    const text = composerInput.value.trim();
+    if (!text || composerInput.disabled) return;
+    composerInput.value = "";
+    autosizeComposer();
+    onFollowUp?.(text);
+  }
+  composerSend.addEventListener("click", submitFollowUp);
+  composerInput.addEventListener("input", autosizeComposer);
+  composerInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      submitFollowUp();
+    }
+  });
+
+  composer.append(composerInput, composerSend, composerEnd);
+
+  wrapper.append(head, body, footer, composer);
 
   let current = run;
   const agentName = () => current.agentLabel || "Claude Code";
@@ -228,6 +277,12 @@ export function createSubagentCard({ run, onSendResult, onRespondPermission }) {
     renderBody();
     const settled = current.status === "done" || current.status === "error";
     footer.hidden = !(settled && Boolean((current.resultText ?? "").trim()));
+    const live = Boolean(current.target);
+    composer.hidden = !live;
+    const busy = current.status === "running";
+    composerInput.disabled = busy;
+    composerSend.disabled = busy;
+    composerEnd.disabled = busy;
     presentPendingPermissions();
     if (fullscreen) renderFullscreen();
   }

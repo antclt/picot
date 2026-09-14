@@ -38,7 +38,7 @@ describe("subagent-runs", () => {
     vi.clearAllMocks();
   });
 
-  it("start() spawns a task runtime, prompts it, mounts a card, and stops it", async () => {
+  it("start() spawns a task runtime, prompts it, mounts a card, and keeps the runtime alive", async () => {
     const deps = makeDeps();
     const manager = createSubagentRunManager(deps);
 
@@ -53,7 +53,10 @@ describe("subagent-runs", () => {
       expect.objectContaining({ idempotencyKey: expect.any(String) }),
     );
     expect(run.status).toBe("done");
-    expect(deps.control.stopAcpTask).toHaveBeenCalledWith(TASK_TARGET);
+    expect(run.target).toEqual(TASK_TARGET);
+    // The runtime stays up so a follow-up can reuse the same ACP session —
+    // only endRun()/onEnd retires it.
+    expect(deps.control.stopAcpTask).not.toHaveBeenCalled();
     expect(readRuns("s1").map((r) => r.id)).toContain(run.id);
   });
 
@@ -83,7 +86,49 @@ describe("subagent-runs", () => {
     const run = await manager.start("go");
     expect(run.status).toBe("error");
     expect(run.state.error).toContain("agent not logged in");
-    expect(deps.control.stopAcpTask).toHaveBeenCalled();
+    // Still errored, still live — a follow-up on the same session can retry.
+    expect(deps.control.stopAcpTask).not.toHaveBeenCalled();
+  });
+
+  it("sendFollowUp() reuses the same target for another acp_prompt turn and echoes the prompt", async () => {
+    const deps = makeDeps();
+    const manager = createSubagentRunManager(deps);
+    const run = await manager.start("go");
+    const card = cardInstances[0];
+    deps.runtime.request.mockClear();
+
+    await manager.sendFollowUp(run, "  and then what  ");
+
+    expect(deps.runtime.request).toHaveBeenCalledWith(
+      { type: "acp_prompt", message: "and then what", images: [] },
+      TASK_TARGET,
+      expect.objectContaining({ idempotencyKey: expect.any(String) }),
+    );
+    expect(run.status).toBe("done");
+    expect(run.state.blocks.some((b) => b.kind === "user" && b.text === "and then what")).toBe(true);
+    expect(card.update).toHaveBeenCalled();
+    expect(deps.control.stopAcpTask).not.toHaveBeenCalled();
+  });
+
+  it("sendFollowUp() no-ops for an empty message, a still-running turn, or an ended run", async () => {
+    const deps = makeDeps();
+    const manager = createSubagentRunManager(deps);
+    const run = await manager.start("go");
+    deps.runtime.request.mockClear();
+
+    await manager.sendFollowUp(run, "   ");
+    expect(deps.runtime.request).not.toHaveBeenCalled();
+
+    run.status = "running";
+    await manager.sendFollowUp(run, "hello");
+    expect(deps.runtime.request).not.toHaveBeenCalled();
+    run.status = "done";
+
+    manager.endRun(run);
+    expect(deps.control.stopAcpTask).toHaveBeenCalledWith(TASK_TARGET);
+    expect(run.target).toBeNull();
+    await manager.sendFollowUp(run, "hello");
+    expect(deps.runtime.request).not.toHaveBeenCalled();
   });
 
   it("applyEvent folds events for a known instance and ignores others", async () => {

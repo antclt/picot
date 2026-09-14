@@ -212,6 +212,77 @@
   cursor: default;
 }
 
+.subagent-card-composer {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-top: 1px solid var(--border-hover);
+}
+
+.subagent-card-composer-input {
+  flex: 1;
+  min-width: 0;
+  max-height: 160px;
+  padding: var(--space-1-5) var(--space-2);
+  border: 1px solid var(--border-hover);
+  border-radius: var(--radius-sm);
+  background: var(--bg-glass-strong);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--font-size-sm);
+  line-height: 1.4;
+  resize: none;
+}
+
+.subagent-card-composer-input:disabled {
+  opacity: 0.6;
+}
+
+.subagent-card-composer-send {
+  flex-shrink: 0;
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--border-hover);
+  border-radius: var(--radius-sm);
+  background: var(--bg-glass-strong);
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+}
+
+.subagent-card-composer-send:hover:not(:disabled) {
+  background: var(--bg-glass-hover);
+}
+
+.subagent-card-composer-send:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.subagent-card-composer-end {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--border-hover);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.subagent-card-composer-end:hover:not(:disabled) {
+  background: var(--bg-glass-hover);
+  color: var(--text-primary);
+}
+
+.subagent-card-composer-end:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
 /* ── Fullscreen result / transcript overlay ─────────────────────────── */
 
 .subagent-fullscreen {
