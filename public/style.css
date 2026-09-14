@@ -4,7 +4,6 @@
 
 @import url("shared.css");
 @import url("native/instance-swap.css");
-@import url("components/ssh-hosts-manager.css");
 @import url("components/super-agent-chat-header.css");
 @import url("components/super-agent-runtime.css");
 @import url("native/settings/cost-dashboard.css");
@@ -46,7 +45,6 @@
 @import url("native/settings/package-browse.css");
 @import url("native/settings/skills-page.css");
 @import url("components/chat-settings-panel.css");
-@import url("components/ssh-remote-settings-panel.css");
 @import url("native/settings/settings-panel.css");
 @import url("native/settings/remote-access.css");
 @import url("native/settings/settings-config.css");

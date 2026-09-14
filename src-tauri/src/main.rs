@@ -148,9 +148,15 @@ async fn open_remote_workspace(
     app: AppHandle,
     window: WebviewWindow,
     connection: remote_workspace::RemoteWorkspaceRequest,
+    password: Option<String>,
 ) -> Result<String, String> {
     let root = remote_workspace::remotes_root()?;
     let anchor = remote_workspace::prepare_remote_anchor(&connection, &root)?;
+    // Deliberately not part of the binding: a password stays in memory and is
+    // injected into the workspace's pi process at spawn (native_pi_manager).
+    if let Some(password) = password.as_deref() {
+        remote_workspace::stash_password(&anchor, password.trim());
+    }
     open_workspace_at_path(&app, Some(&window), &anchor, None)?;
     Ok(anchor.to_string_lossy().into_owned())
 }

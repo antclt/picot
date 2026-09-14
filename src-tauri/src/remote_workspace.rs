@@ -11,7 +11,40 @@
 use crate::settings_store::{SettingScope, SettingsStore};
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, OnceLock};
+
+/// Passwords handed from the connect dialog to the pi processes that will use
+/// them.
+///
+/// A password is never written to either settings file — not the anchor's
+/// binding, not the global host registry — so the only way a workspace's pi
+/// process can learn it is a hand-off through this process's memory, injected
+/// into the child's environment at spawn (see `native_pi_manager`). Entries
+/// live as long as Picot does: after a restart the user enters the password
+/// again.
+fn password_vault() -> &'static Mutex<HashMap<PathBuf, String>> {
+    static VAULT: OnceLock<Mutex<HashMap<PathBuf, String>>> = OnceLock::new();
+    VAULT.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// Park `password` for the workspace anchor the connect dialog just opened.
+pub fn stash_password(anchor: &Path, password: &str) {
+    if password.is_empty() {
+        return;
+    }
+    if let Ok(mut vault) = password_vault().lock() {
+        vault.insert(anchor.to_path_buf(), password.to_string());
+    }
+}
+
+/// The password parked for `anchor`, if any. Reading does NOT consume it: every
+/// pi process this workspace spawns — a new session, a respawn after a crash —
+/// needs the same credentials, and there is nowhere else to get them from.
+pub fn peek_password(anchor: &Path) -> Option<String> {
+    password_vault().lock().ok()?.get(anchor).cloned()
+}
 
 /// What the connect dialog sends. Either `host_ref` (an alias into the global
 /// `sshHosts` registry) or an inline `host` must be present.
@@ -30,6 +63,11 @@ pub struct RemoteWorkspaceRequest {
     pub identity_file: String,
     #[serde(default)]
     pub remote_path: String,
+    /// A `~/.ssh/config` Host alias this connection was taken from unchanged.
+    /// When set, the extension connects as `ssh <alias>` so OpenSSH applies the
+    /// user's own Host block (ProxyJump and all) instead of our copy of it.
+    #[serde(default)]
+    pub config_alias: String,
 }
 
 impl RemoteWorkspaceRequest {
@@ -41,6 +79,7 @@ impl RemoteWorkspaceRequest {
             user: self.user.trim().to_string(),
             identity_file: self.identity_file.trim().to_string(),
             remote_path: self.remote_path.trim().to_string(),
+            config_alias: self.config_alias.trim().to_string(),
         }
     }
 
@@ -60,6 +99,9 @@ impl RemoteWorkspaceRequest {
             if !self.identity_file.is_empty() {
                 binding.insert("identityFile".into(), json!(self.identity_file));
             }
+            if !self.config_alias.is_empty() {
+                binding.insert("configAlias".into(), json!(self.config_alias));
+            }
         } else {
             binding.insert("hostRef".into(), json!(self.host_ref));
         }
@@ -71,11 +113,12 @@ impl RemoteWorkspaceRequest {
     /// reuse actually points somewhere else.
     fn identity(&self) -> String {
         format!(
-            "{}|{}|{}|{}|{}",
+            "{}|{}|{}|{}|{}|{}",
             self.host_ref,
             self.host,
             self.port.map(|p| p.to_string()).unwrap_or_default(),
             self.user,
+            self.config_alias,
             self.remote_path
         )
     }
@@ -179,11 +222,12 @@ fn conflicts_with_existing(request: &RemoteWorkspaceRequest, candidate: &Path) -
         .map(|port| port.to_string())
         .unwrap_or_default();
     let existing_identity = format!(
-        "{}|{}|{}|{}|{}",
+        "{}|{}|{}|{}|{}|{}",
         field("hostRef"),
         field("host"),
         port,
         field("user"),
+        field("configAlias"),
         field("remotePath")
     );
     existing_identity != request.identity()
@@ -228,6 +272,29 @@ mod tests {
             user: "ubuntu".into(),
             ..RemoteWorkspaceRequest::default()
         }
+    }
+
+    #[test]
+    fn a_parked_password_survives_repeated_reads_for_later_respawns() {
+        let anchor = PathBuf::from("/tmp/picot-test/respawn");
+        stash_password(&anchor, "hunter2");
+        assert_eq!(peek_password(&anchor).as_deref(), Some("hunter2"));
+        assert_eq!(peek_password(&anchor).as_deref(), Some("hunter2"));
+    }
+
+    #[test]
+    fn an_empty_password_parks_nothing() {
+        let anchor = PathBuf::from("/tmp/picot-test/key-based");
+        stash_password(&anchor, "");
+        assert_eq!(peek_password(&anchor), None);
+    }
+
+    #[test]
+    fn a_workspace_with_no_password_parked_reads_as_none() {
+        assert_eq!(
+            peek_password(&PathBuf::from("/tmp/picot-test/never-set")),
+            None
+        );
     }
 
     #[test]

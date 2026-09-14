@@ -1159,11 +1159,15 @@ window.addEventListener("picot:session-created", (event) => {
 });
 
 setupOpenFolderButton({ onError: showError });
-setupRemoteWorkspaceDialog({
+const remoteWorkspaceDialog = setupRemoteWorkspaceDialog({
   buttonEl: document.getElementById("open-remote-btn"),
   onError: showError,
 });
-setupSshRemoteIndicator();
+// The connect dialog is the only place a remote workspace is configured, so the
+// header pill reopens it on this workspace's binding rather than a settings tab.
+setupSshRemoteIndicator({
+  onEdit: (binding) => remoteWorkspaceDialog.open({ prefill: binding }),
+});
 setupAppKeyboardShortcuts({
   input,
   abort: abortCurrentRun,

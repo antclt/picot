@@ -56,10 +56,20 @@ impl NativeLaunchSpec {
             args.push("--session".into());
             args.push(session_path.to_string_lossy().into_owned());
         }
-        let environment = BTreeMap::from([
+        let mut environment = BTreeMap::from([
             ("PATH".into(), self.path_env.clone()),
             ("PI_STUDIO_PI_VERSION".into(), self.pi_version.clone()),
         ]);
+        // A remote workspace opened with an SSH password: hand it to the pi
+        // process that will actually run the SSH calls. Injecting it here
+        // rather than pushing it in from the WebView means it is in place
+        // before the first tool call, and survives a respawn — the frontend
+        // route raced session startup and left `bash` unauthenticated.
+        // Memory only: the vault is never written to disk, so the password is
+        // gone when Picot exits.
+        if let Some(password) = crate::remote_workspace::peek_password(&self.cwd) {
+            environment.insert("PICOT_SSH_PASSWORD".into(), password);
+        }
         LaunchDescription {
             program: self.binary.clone(),
             args,
@@ -675,6 +685,34 @@ mod tests {
             .args
             .iter()
             .any(|argument| argument.parse::<u16>().is_ok()));
+    }
+
+    #[test]
+    fn a_remote_workspace_password_reaches_the_pi_process_it_was_parked_for() {
+        let anchor = PathBuf::from("/picot-test/remotes/box/app");
+        crate::remote_workspace::stash_password(&anchor, "hunter2");
+        let spec = |cwd: PathBuf| NativeLaunchSpec {
+            binary: PathBuf::from("/embedded/pi"),
+            cwd,
+            session_path: None,
+            extensions: vec![],
+            pi_version: env!("PI_STUDIO_PI_VERSION_BUNDLED").into(),
+            path_env: "/usr/bin".into(),
+            approve: false,
+        };
+        assert_eq!(
+            spec(anchor)
+                .command_description()
+                .environment
+                .get("PICOT_SSH_PASSWORD")
+                .map(String::as_str),
+            Some("hunter2")
+        );
+        // An ordinary local workspace must not inherit some other host's password.
+        assert!(!spec(PathBuf::from("/workspace"))
+            .command_description()
+            .environment
+            .contains_key("PICOT_SSH_PASSWORD"));
     }
 
     #[test]

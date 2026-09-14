@@ -102,10 +102,25 @@ describe("ssh-remote-indicator", () => {
     expect(button.classList.contains("hidden")).toBe(false);
   });
 
-  it("opens the project's own settings tab when clicked", () => {
+  it("reopens the connect dialog on this project's binding when clicked", async () => {
     const { button } = mountPill();
-    setupSshRemoteIndicator();
+    await refreshSshRemoteIndicator({
+      call: async () => ({
+        ok: true,
+        data: {
+          config: { enabled: true, hostRef: "gpu-box", remotePath: "/srv/app" },
+          resolved: { enabled: true, host: "10.0.0.5", remotePath: "/srv/app" },
+        },
+      }),
+    });
+    const onEdit = vi.fn();
+    setupSshRemoteIndicator({ onEdit });
     button.click();
-    expect(window.location.hash).toBe("#/settings/ssh-remote");
+    // The raw binding, not the resolved one: the dialog needs the alias back.
+    expect(onEdit).toHaveBeenCalledWith({
+      enabled: true,
+      hostRef: "gpu-box",
+      remotePath: "/srv/app",
+    });
   });
 });

@@ -1679,7 +1679,9 @@ mod tests {
             .args(["for-each-ref", "--format=%(refname)"])
             .output()
             .unwrap();
-        assert!(String::from_utf8_lossy(&refs.stdout).contains(&format!("refs/heads/{}", first.branch)));
+        assert!(
+            String::from_utf8_lossy(&refs.stdout).contains(&format!("refs/heads/{}", first.branch))
+        );
 
         std::fs::write(root.path().join("file.txt"), "second\n").unwrap();
         assert!(Command::new("git")

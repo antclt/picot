@@ -1,5 +1,5 @@
 // ABOUTME: Header pill showing that this workspace's tools run on a remote host.
-// ABOUTME: Visible state beats a buried setting — click opens its settings tab.
+// ABOUTME: Visible state beats a buried setting — click reopens the connect dialog.
 
 import { onLocaleChange, t } from "../../i18n.js";
 
@@ -11,14 +11,17 @@ import { onLocaleChange, t } from "../../i18n.js";
  *
  * The binding is per-project (`.pi/settings.json` → `sshRemote`), so this
  * re-probes on every workspace switch, exactly like the git-branch pill.
+ *
+ * Clicking it reopens the connect dialog on this binding: that dialog is the
+ * only place remote workspaces are configured, so there is nowhere else to send
+ * the user.
  */
-
-const SETTINGS_ROUTE = "#/settings/ssh-remote";
 
 // Only the newest probe may touch the DOM: switching workspaces twice in quick
 // succession must not let the first answer repaint the pill.
 let latestProbeSequence = 0;
 let currentTarget = null;
+let currentBinding = null;
 let localeListenerRegistered = false;
 
 function applyLabels(buttonEl, target) {
@@ -48,9 +51,15 @@ export async function refreshSshRemoteIndicator({ call, buttonEl } = {}) {
   const sequence = ++latestProbeSequence;
 
   let resolved = null;
+  // The raw binding, not the resolved one: it is what the connect dialog wants
+  // back (a `hostRef` must stay an alias, not be flattened into host fields).
+  let binding = null;
   try {
     const result = await call?.("get_ssh_remote_config");
-    if (result?.ok) resolved = result.data?.resolved ?? result.data?.config ?? null;
+    if (result?.ok) {
+      resolved = result.data?.resolved ?? result.data?.config ?? null;
+      binding = result.data?.config ?? resolved;
+    }
   } catch {
     // A workspace whose runtime is not up yet (or a remote browser client with
     // no config channel) simply has no pill to show.
@@ -61,9 +70,11 @@ export async function refreshSshRemoteIndicator({ call, buttonEl } = {}) {
   if (!target) {
     button.classList.add("hidden");
     currentTarget = null;
+    currentBinding = null;
     return;
   }
   currentTarget = target;
+  currentBinding = binding;
   const label = button.querySelector("[data-ssh-remote-label]");
   if (label) label.textContent = target;
   applyLabels(button, target);
@@ -78,14 +89,16 @@ export async function refreshSshRemoteIndicator({ call, buttonEl } = {}) {
   }
 }
 
-/** Bind the pill's click once at startup; it opens Settings → Remote Workspace. */
-export function setupSshRemoteIndicator({ buttonEl } = {}) {
+/**
+ * Bind the pill's click once at startup.
+ *
+ * @param {object} options
+ * @param {HTMLElement|null} [options.buttonEl]
+ * @param {(binding: object|null) => void} [options.onEdit] normally the connect
+ *   dialog's `open`, handed this workspace's current binding to prefill.
+ */
+export function setupSshRemoteIndicator({ buttonEl, onEdit } = {}) {
   const button = buttonEl ?? document.getElementById("ssh-remote-indicator");
   if (!button) return;
-  button.addEventListener("click", () => {
-    // Hash routing is what the settings panel already listens on, so this works
-    // without reaching into its internals.
-    if (window.location.hash === SETTINGS_ROUTE) window.location.hash = "";
-    window.location.hash = SETTINGS_ROUTE;
-  });
+  button.addEventListener("click", () => onEdit?.(currentBinding));
 }

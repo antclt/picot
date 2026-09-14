@@ -692,7 +692,31 @@ describe("picot config ssh remote operations", () => {
       ok: true,
       data: { ok: true, message: "Connected", remotePath: "/srv/app", latencyMs: 12 },
     });
-    expect(testSshRemoteConnection).toHaveBeenCalledWith({ enabled: true, host: "example.com" });
+    expect(testSshRemoteConnection).toHaveBeenCalledWith(
+      { enabled: true, host: "example.com" },
+      undefined,
+    );
+  });
+
+  it("forwards a one-off password to the connection test without persisting it", async () => {
+    const { handlePicotConfig } = await loadConfigWithTempHome();
+    const { testSshRemoteConnection } = await import("./ssh-remote");
+    vi.mocked(testSshRemoteConnection).mockResolvedValue({
+      ok: true,
+      message: "Connected",
+      remotePath: "/srv/app",
+      latencyMs: 12,
+    });
+
+    await handlePicotConfig(
+      "test_ssh_remote_config",
+      { config: { enabled: true, host: "example.com" }, password: "hunter2" },
+      {},
+    );
+    expect(testSshRemoteConnection).toHaveBeenCalledWith(
+      { enabled: true, host: "example.com" },
+      "hunter2",
+    );
   });
 
   it("resolves a hostRef binding against the global registry", async () => {

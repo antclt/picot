@@ -64,6 +64,7 @@ import {
   resolveSshRemoteSettings,
   type SshHostEntry,
   serializeSshRemoteSettings,
+  setSshRemoteSessionPassword,
   testSshRemoteConnection,
 } from "./ssh-remote";
 
@@ -1294,8 +1295,15 @@ export async function handlePicotConfig(
           parseSshRemoteSettings(params.config ?? params),
           readGlobalSshHostRegistry(),
         );
-        return { ok: true, data: await testSshRemoteConnection(config) };
+        return {
+          ok: true,
+          data: await testSshRemoteConnection(config, asString(params.password) || undefined),
+        };
       }
+
+      case "set_ssh_remote_password":
+        setSshRemoteSessionPassword(params.password);
+        return { ok: true, data: {} };
 
       case "list_ssh_remote_dir": {
         const config = resolveSshRemoteSettings(
@@ -1303,7 +1311,14 @@ export async function handlePicotConfig(
           readGlobalSshHostRegistry(),
         );
         const dirPath = asString(params.path);
-        return { ok: true, data: await listSshRemoteDirectories(config, dirPath) };
+        return {
+          ok: true,
+          data: await listSshRemoteDirectories(
+            config,
+            dirPath,
+            asString(params.password) || undefined,
+          ),
+        };
       }
 
       // The saved-host registry is global on purpose: a key path and username
@@ -1314,7 +1329,9 @@ export async function handlePicotConfig(
           ok: true,
           data: {
             hosts: readGlobalSshHostRegistry(),
-            sshConfigHosts: readSshConfigHosts(),
+            // Async now: each `~/.ssh/config` alias is resolved by `ssh -G`
+            // rather than by re-parsing the file here.
+            sshConfigHosts: await readSshConfigHosts(),
             path: AGENT_CONFIG_PATH,
           },
         };

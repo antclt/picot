@@ -1,7 +1,8 @@
 // @vitest-environment node
 
 import { EventEmitter } from "node:events";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
+import * as os from "node:os";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -39,12 +40,15 @@ vi.mock("@earendil-works/pi-coding-agent", () => {
 import { spawn } from "node:child_process";
 import {
   assertSshRemoteSettingsValid,
+  closeSshControlMaster,
+  collectSshConfigAliases,
   createRemoteBashOps,
   createRemoteReadOps,
   createRemoteWriteOps,
   DEFAULT_SSH_REMOTE_SETTINGS,
   listSshRemoteDirectories,
   parseSshConfigHosts,
+  parseSshConfigQuery,
   parseSshHosts,
   parseSshRemoteSettings,
   readProjectSshRemoteSettings,
@@ -52,7 +56,9 @@ import {
   registerSshRemoteExtension,
   resolveSshRemoteSettings,
   serializeSshRemoteSettings,
+  setSshRemoteSessionPassword,
   shQuote,
+  sshControlPath,
   sshExec,
   sshTarget,
   testSshRemoteConnection,
@@ -79,9 +85,51 @@ function makeFakeChild({ stdout = "", stderr = "", code = 0 }: FakeChildOptions 
   return child;
 }
 
+/** A child that connects and then says nothing — a rate-limiting host. */
+function makeStalledChild() {
+  const child = new EventEmitter() as EventEmitter & {
+    stdout: EventEmitter;
+    stderr: EventEmitter;
+    kill: ReturnType<typeof vi.fn>;
+  };
+  child.stdout = new EventEmitter();
+  child.stderr = new EventEmitter();
+  child.kill = vi.fn(() => child.emit("close", null));
+  return child;
+}
+
+// The control-socket directory lives under the pi agent root, and ~/.ssh/config
+// is read from $HOME. Point both at a throwaway directory so running the suite
+// never touches (or depends on) the developer's real home.
+let fakeHome = "";
+let controlDir = "";
+
 beforeEach(() => {
   vi.mocked(spawn).mockReset();
+  setSshRemoteSessionPassword(undefined);
+  fakeHome = mkdtempSync(join(tmpdir(), "ssh-remote-home-"));
+  vi.stubEnv("HOME", fakeHome);
+  vi.stubEnv("USERPROFILE", fakeHome);
+  // A macOS $TMPDIR is long enough that a socket under it would blow the
+  // sockaddr_un limit and disable multiplexing — which is exactly the guard we
+  // do NOT want to be testing here.
+  controlDir = mkdtempSync("/tmp/pct-");
+  vi.stubEnv("PICOT_SSH_CONTROL_DIR", controlDir);
 });
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+  rmSync(fakeHome, { recursive: true, force: true });
+  rmSync(controlDir, { recursive: true, force: true });
+});
+
+/** The ControlMaster options sshArgs adds on a platform that supports them. */
+function controlArgs(settings: Parameters<typeof sshControlPath>[0]) {
+  const controlPath = sshControlPath(settings);
+  return controlPath
+    ? ["-o", "ControlMaster=auto", "-o", `ControlPath=${controlPath}`, "-o", "ControlPersist=600"]
+    : [];
+}
 
 describe("parseSshRemoteSettings", () => {
   it("normalizes valid input and drops empty optional fields", () => {
@@ -197,6 +245,7 @@ describe("sshExec", () => {
       "ConnectTimeout=8",
       "-o",
       "StrictHostKeyChecking=accept-new",
+      ...controlArgs({ enabled: true, host: "example.com", user: "alice" }),
       "alice@example.com",
       "pwd",
     ]);
@@ -209,6 +258,79 @@ describe("sshExec", () => {
     expect(args).toEqual(
       expect.arrayContaining(["-p", "2222", "-i", "/k/id", "example.com", "pwd"]),
     );
+  });
+
+  it("uses an ephemeral askpass helper when a password is supplied", async () => {
+    vi.mocked(spawn).mockReturnValue(makeFakeChild() as never);
+    await sshExec({ enabled: true, host: "example.com" }, "pwd", { password: "test-password" });
+    const [, args, options] = vi.mocked(spawn).mock.calls[0];
+    expect(args).toEqual(
+      expect.arrayContaining([
+        "BatchMode=no",
+        "PasswordAuthentication=yes",
+        // Straight to the password: no key attempts to burn, and one prompt so
+        // a wrong password fails immediately instead of being resubmitted 3x.
+        "PreferredAuthentications=password,keyboard-interactive",
+        "IdentitiesOnly=yes",
+        "NumberOfPasswordPrompts=1",
+      ]),
+    );
+    expect(options?.env).toMatchObject({ SSH_ASKPASS_REQUIRE: "force", DISPLAY: "picot" });
+    expect(options?.env?.PICOT_SSH_PASSWORD).toBe("test-password");
+  });
+
+  it("starts from the password Picot injected at spawn, before anything sets one", async () => {
+    vi.resetModules();
+    vi.stubEnv("PICOT_SSH_PASSWORD", "from-picot");
+    try {
+      const fresh = await import("./ssh-remote");
+      vi.mocked(spawn).mockReturnValue(makeFakeChild() as never);
+      await fresh.sshExec({ enabled: true, host: "example.com" }, "pwd");
+      const [, args, options] = vi.mocked(spawn).mock.calls[0];
+      expect(args).toEqual(expect.arrayContaining(["BatchMode=no"]));
+      expect(options?.env?.PICOT_SSH_PASSWORD).toBe("from-picot");
+    } finally {
+      vi.unstubAllEnvs();
+      vi.resetModules();
+    }
+  });
+
+  it("gives remote bash the session password too, like every other remote call", async () => {
+    setSshRemoteSessionPassword("test-password");
+    vi.mocked(spawn).mockReturnValue(makeFakeChild() as never);
+    const ops = createRemoteBashOps({ enabled: true, host: "example.com" }, "/srv/app", "/local");
+    await ops.exec("ls", "/local", { onData: vi.fn() });
+    const [, args, options] = vi.mocked(spawn).mock.calls[0];
+    expect(args).toEqual(expect.arrayContaining(["BatchMode=no", "PasswordAuthentication=yes"]));
+    expect(options?.env?.PICOT_SSH_PASSWORD).toBe("test-password");
+  });
+
+  it("says which side the denial came from instead of echoing ssh's method list", async () => {
+    const denied = "user@host: Permission denied (publickey,password,keyboard-interactive).";
+    vi.mocked(spawn).mockReturnValue(makeFakeChild({ stderr: denied, code: 255 }) as never);
+    await expect(sshExec({ enabled: true, host: "example.com" }, "pwd")).rejects.toThrow(
+      /no password was given and no usable key was found/,
+    );
+
+    vi.mocked(spawn).mockReturnValue(makeFakeChild({ stderr: denied, code: 255 }) as never);
+    await expect(
+      sshExec({ enabled: true, host: "example.com" }, "pwd", { password: "wrong" }),
+    ).rejects.toThrow(/the password was rejected by the host/);
+  });
+
+  it("kills a stalled command instead of hanging its caller forever", async () => {
+    vi.useFakeTimers();
+    try {
+      const child = makeStalledChild();
+      vi.mocked(spawn).mockReturnValue(child as never);
+      const pending = sshExec({ enabled: true, host: "example.com" }, "pwd");
+      const assertion = expect(pending).rejects.toThrow(/timed out after \d+s/);
+      await vi.advanceTimersByTimeAsync(30_000);
+      await assertion;
+      expect(child.kill).toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("rejects with stderr on non-zero exit", async () => {
@@ -353,6 +475,7 @@ describe("registerSshRemoteExtension", () => {
     }));
 
     const ctx = fakeUiCtx();
+    vi.mocked(spawn).mockReturnValue(makeFakeChild({ stdout: "/remote/app\n" }) as never);
     await trigger("session_start", { type: "session_start", reason: "startup" }, ctx);
 
     expect(ctx.ui.setStatus).toHaveBeenCalledWith(
@@ -387,6 +510,7 @@ describe("registerSshRemoteExtension", () => {
     const [beforeUnresolved] = await trigger("before_agent_start", event);
     expect(beforeUnresolved).toBeUndefined();
 
+    vi.mocked(spawn).mockReturnValue(makeFakeChild({ stdout: "/remote/app\n" }) as never);
     await trigger("session_start", { type: "session_start", reason: "startup" }, fakeUiCtx());
     const [resolvedResult] = (await trigger("before_agent_start", event)) as [
       { systemPrompt: string } | undefined,
@@ -412,6 +536,7 @@ describe("registerSshRemoteExtension", () => {
     });
     expect(unresolved).toBeUndefined();
 
+    vi.mocked(spawn).mockReturnValue(makeFakeChild({ stdout: "/remote/app\n" }) as never);
     await trigger("session_start", { type: "session_start", reason: "startup" }, fakeUiCtx());
     const [resolved] = (await trigger("user_bash", {
       type: "user_bash",
@@ -420,6 +545,32 @@ describe("registerSshRemoteExtension", () => {
       cwd: "/workspace",
     })) as [{ operations: unknown } | undefined];
     expect(resolved?.operations).toBeDefined();
+  });
+
+  it("hangs up the shared connection when the session shuts down", async () => {
+    const { pi, registeredTools, trigger } = createHarness();
+    registerSshRemoteExtension(pi as never, () => ({
+      enabled: true,
+      host: "example.com",
+      remotePath: "/remote/app",
+    }));
+    vi.mocked(spawn).mockReturnValue(makeFakeChild({ stdout: "/remote/app\n" }) as never);
+    await trigger("session_start", { type: "session_start", reason: "startup" }, fakeUiCtx());
+
+    // The master only exists once something has connected through it.
+    writeFileSync(sshControlPath({ enabled: true, host: "example.com" }) as string, "", "utf8");
+    vi.mocked(spawn).mockClear();
+    await trigger("session_shutdown", { type: "session_shutdown" });
+
+    expect(vi.mocked(spawn).mock.calls[0]?.[1]).toEqual(
+      expect.arrayContaining(["-O", "exit", "example.com"]),
+    );
+    // And the tools go back to running locally rather than through a socket
+    // that is now closed.
+    const readResult = (await registeredTools.read.execute("id", {}, undefined, undefined, {})) as {
+      remote: boolean;
+    };
+    expect(readResult.remote).toBe(false);
   });
 
   it("never applies settings for an untrusted project", async () => {
@@ -530,6 +681,158 @@ describe("serializeSshRemoteSettings", () => {
   });
 });
 
+describe("connection multiplexing", () => {
+  const supported = process.platform !== "win32";
+
+  it.runIf(supported)("reuses one socket per connection and separates different ones", () => {
+    const a = sshControlPath({ enabled: true, host: "example.com", user: "alice" });
+    const b = sshControlPath({ enabled: true, host: "example.com", user: "alice" });
+    const c = sshControlPath({ enabled: true, host: "example.com", user: "bob" });
+    const d = sshControlPath({ enabled: true, host: "example.com", user: "alice", port: 2222 });
+    expect(a).toBeTruthy();
+    expect(b).toBe(a);
+    expect(c).not.toBe(a);
+    expect(d).not.toBe(a);
+    // A master grants an authenticated shell to anyone who can open it.
+    expect(statSync(controlDir).mode & 0o077).toBe(0);
+  });
+
+  it.runIf(supported)("keeps the socket path inside the OS limit", () => {
+    const controlPath = sshControlPath({ enabled: true, host: "example.com" }) as string;
+    expect(controlPath.length).toBeLessThan(104);
+  });
+
+  it("never passes ControlMaster on Windows, whose OpenSSH rejects it", () => {
+    if (supported) {
+      expect(controlArgs({ enabled: true, host: "example.com" })).not.toEqual([]);
+    } else {
+      expect(controlArgs({ enabled: true, host: "example.com" })).toEqual([]);
+    }
+  });
+
+  it.runIf(supported)("hangs up the shared connection on request", () => {
+    const settings = { enabled: true, host: "example.com" };
+    const controlPath = sshControlPath(settings) as string;
+    writeFileSync(controlPath, "", "utf8");
+    const child = makeFakeChild();
+    vi.mocked(spawn).mockReturnValue(child as never);
+    closeSshControlMaster(settings);
+    const [bin, args] = vi.mocked(spawn).mock.calls[0];
+    expect(bin).toBe("ssh");
+    expect(args).toEqual(["-O", "exit", "-o", `ControlPath=${controlPath}`, "example.com"]);
+  });
+
+  it("does nothing when there is no master to close", () => {
+    closeSshControlMaster({ enabled: true, host: "example.com" });
+    expect(spawn).not.toHaveBeenCalled();
+  });
+});
+
+describe("connecting through a ~/.ssh/config alias", () => {
+  const settings = {
+    enabled: true,
+    host: "10.0.0.5",
+    user: "ubuntu",
+    port: 2222,
+    identityFile: "/k/id",
+    configAlias: "gpu-box",
+  };
+
+  it("targets the alias so ssh applies the user's own Host block", () => {
+    expect(sshTarget(settings)).toBe("gpu-box");
+  });
+
+  it("passes no -p/-i/user of its own, which would shadow that block", async () => {
+    vi.mocked(spawn).mockReturnValue(makeFakeChild() as never);
+    await sshExec(settings, "pwd");
+    const args = vi.mocked(spawn).mock.calls[0][1] as string[];
+    expect(args).not.toContain("-p");
+    expect(args).not.toContain("-i");
+    expect(args.at(-2)).toBe("gpu-box");
+  });
+
+  it("survives the settings round-trip so a bound project keeps using it", () => {
+    const parsed = parseSshRemoteSettings(serializeSshRemoteSettings(settings));
+    expect(parsed.configAlias).toBe("gpu-box");
+  });
+
+  it("comes along with a host resolved from the registry by alias", () => {
+    const resolved = resolveSshRemoteSettings(
+      { enabled: true, host: "", hostRef: "gpu" },
+      { gpu: { host: "10.0.0.5", configAlias: "gpu-box" } },
+    );
+    expect(resolved.configAlias).toBe("gpu-box");
+  });
+});
+
+describe("collectSshConfigAliases", () => {
+  it("follows Include and skips wildcards, so ssh -G can be asked about each", () => {
+    const sshDir = join(fakeHome, ".ssh");
+    mkdirSync(join(sshDir, "config.d"), { recursive: true });
+    writeFileSync(
+      join(sshDir, "config"),
+      ["Include config.d/*.conf", "Host gpu-box build-box", "  HostName 10.0.0.5", "Host *"].join(
+        "\n",
+      ),
+      "utf8",
+    );
+    writeFileSync(join(sshDir, "config.d", "work.conf"), "Host work-jump\n", "utf8");
+    // Not matched by the Include pattern.
+    writeFileSync(join(sshDir, "config.d", "notes.txt"), "Host ignored\n", "utf8");
+    expect(collectSshConfigAliases(join(sshDir, "config")).sort()).toEqual([
+      "build-box",
+      "gpu-box",
+      "work-jump",
+    ]);
+  });
+
+  it("returns nothing for a config that is not there", () => {
+    expect(collectSshConfigAliases(join(fakeHome, ".ssh", "nope"))).toEqual([]);
+  });
+});
+
+describe("parseSshConfigQuery", () => {
+  const dump = (lines: string[]) => lines.join("\n");
+
+  it("takes the resolved values ssh reports", () => {
+    expect(
+      parseSshConfigQuery(
+        "gpu-box",
+        dump([
+          "host gpu-box",
+          "hostname 10.0.0.5",
+          "user ubuntu",
+          "port 2222",
+          "identityfile /keys/gpu",
+          "proxyjump bastion",
+        ]),
+      ),
+    ).toEqual({
+      alias: "gpu-box",
+      configAlias: "gpu-box",
+      host: "10.0.0.5",
+      user: "ubuntu",
+      port: 2222,
+      identityFile: "/keys/gpu",
+    });
+  });
+
+  it("drops ssh's own defaults instead of echoing them back as configuration", () => {
+    const entry = parseSshConfigQuery(
+      "plain",
+      dump([
+        "hostname plain",
+        `user ${os.userInfo().username}`,
+        "port 22",
+        // The default key list ssh reports for every host.
+        "identityfile ~/.ssh/id_rsa",
+        "identityfile ~/.ssh/id_ed25519",
+      ]),
+    );
+    expect(entry).toEqual({ alias: "plain", configAlias: "plain", host: "plain" });
+  });
+});
+
 describe("parseSshConfigHosts", () => {
   it("reads host blocks, honouring keyword case and = separators", () => {
     expect(
@@ -553,13 +856,14 @@ describe("parseSshConfigHosts", () => {
     ).toEqual([
       {
         alias: "gpu-box",
+        configAlias: "gpu-box",
         host: "10.0.0.5",
         user: "ubuntu",
         port: 2222,
         identityFile: "~/.ssh/id_ed25519",
       },
-      { alias: "plain", host: "plain" },
-      { alias: "eq", host: "10.0.0.9" },
+      { alias: "plain", configAlias: "plain", host: "plain" },
+      { alias: "eq", configAlias: "eq", host: "10.0.0.9" },
     ]);
   });
 
