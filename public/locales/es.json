@@ -647,6 +647,7 @@
     "taskNotificationsDescription": "Muestra una notificación del sistema operativo cuando finaliza una tarea.",
     "taskCompleteTitle": "Tarea completada",
     "taskCompleteMessage": "Tu tarea ha finalizado.",
+    "taskFailedTitle": "La tarea falló",
     "piVersion": "Versión de Pi",
     "picotVersion": "Versión de Picot",
     "checkForUpdates": "Buscar actualizaciones",

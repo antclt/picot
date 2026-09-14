@@ -29,7 +29,9 @@ function loadCardModule() {
 const RUN_EVENT_TYPES = new Set(["acp_session_update", "acp_permission_request", "acp_error"]);
 
 function randomId() {
-  return globalThis.crypto?.randomUUID?.() ?? `run-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  return (
+    globalThis.crypto?.randomUUID?.() ?? `run-${Date.now()}-${Math.random().toString(16).slice(2)}`
+  );
 }
 
 function buildResultPrompt(run) {

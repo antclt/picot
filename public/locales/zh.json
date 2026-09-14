@@ -647,6 +647,7 @@
     "taskNotificationsDescription": "任务完成时显示操作系统通知。",
     "taskCompleteTitle": "任务已完成",
     "taskCompleteMessage": "你的任务已完成。",
+    "taskFailedTitle": "任务失败",
     "piVersion": "Pi 版本",
     "picotVersion": "Picot 版本",
     "checkForUpdates": "检查更新",

@@ -3,7 +3,7 @@ import { type Dirent, constants as fsConstants } from "node:fs";
 import { lstat, open, readdir, realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, extname, isAbsolute, join, relative } from "node:path";
-import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import {
   createBashTool,
   createBashToolDefinition,
@@ -13,9 +13,9 @@ import {
   createReadToolDefinition,
   createWriteTool,
   createWriteToolDefinition,
-} from "@mariozechner/pi-coding-agent";
-import { Box, Text } from "@mariozechner/pi-tui";
-import { Type } from "@sinclair/typebox";
+} from "@earendil-works/pi-coding-agent";
+import { Box, Text } from "@earendil-works/pi-tui";
+import { Type } from "typebox";
 import {
   CHAT_CONFIG_PATH,
   ensureChatHome,

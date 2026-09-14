@@ -2368,6 +2368,17 @@ mod tests {
     }
 
     #[test]
+    fn recognizes_remote_workspace_anchor_paths() {
+        let root = crate::remote_workspace::remotes_root().expect("remotes root");
+        assert!(is_remote_project_path(
+            &root.join("ubuntu@10.0.0.5").join("proj")
+        ));
+        assert!(!is_remote_project_path(
+            &std::env::temp_dir().join("picot-local-project")
+        ));
+    }
+
+    #[test]
     fn workspace_info_without_git_metadata_still_returns_the_path() {
         let (temp, data, workspace) = isolated_workspace("git-optional-info");
         let info = data.workspace_info("workspace-a").unwrap();

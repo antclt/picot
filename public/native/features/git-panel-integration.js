@@ -79,8 +79,7 @@ export function setupGitPanel({
       // A successful push moves the upstream, so the ahead/behind summary in
       // the toolbar is stale until the next status read.
       if (normalized.status === "succeeded") panel.refresh();
-    }
-    else if (normalized.type === "git_commit_result") {
+    } else if (normalized.type === "git_commit_result") {
       panel.applyCommitResult(normalized);
       if (normalized.status === "succeeded") panel.refresh();
     } else if (normalized.type === "git_command_ack") panel.refresh();

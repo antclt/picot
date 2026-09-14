@@ -3,7 +3,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { activeHashQuery, matchAgents, setupComposerAgentMenu } from "./composer-agent-menu.js";
 
 const AGENTS = [
-  { id: "claude-code", token: "claude", label: "Claude Code", description: "Delegate a task via ACP" },
+  {
+    id: "claude-code",
+    token: "claude",
+    label: "Claude Code",
+    description: "Delegate a task via ACP",
+  },
 ];
 
 describe("composer agent menu", () => {

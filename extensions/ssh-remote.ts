@@ -924,49 +924,49 @@ export function registerSshRemoteExtension(
 
   pi.registerTool({
     ...localRead,
-    async execute(id, params, signal, onUpdate, ctx) {
+    async execute(id, params, signal, onUpdate) {
       const remote = getResolved();
-      if (!remote) return localRead.execute(id, params, signal, onUpdate, ctx);
+      if (!remote) return localRead.execute(id, params, signal, onUpdate);
       const tool = createReadTool(localCwd, {
         operations: createRemoteReadOps(remote.settings, remote.remoteCwd, localCwd),
       });
-      return tool.execute(id, params, signal, onUpdate, ctx);
+      return tool.execute(id, params, signal, onUpdate);
     },
   });
 
   pi.registerTool({
     ...localWrite,
-    async execute(id, params, signal, onUpdate, ctx) {
+    async execute(id, params, signal, onUpdate) {
       const remote = getResolved();
-      if (!remote) return localWrite.execute(id, params, signal, onUpdate, ctx);
+      if (!remote) return localWrite.execute(id, params, signal, onUpdate);
       const tool = createWriteTool(localCwd, {
         operations: createRemoteWriteOps(remote.settings, remote.remoteCwd, localCwd),
       });
-      return tool.execute(id, params, signal, onUpdate, ctx);
+      return tool.execute(id, params, signal, onUpdate);
     },
   });
 
   pi.registerTool({
     ...localEdit,
-    async execute(id, params, signal, onUpdate, ctx) {
+    async execute(id, params, signal, onUpdate) {
       const remote = getResolved();
-      if (!remote) return localEdit.execute(id, params, signal, onUpdate, ctx);
+      if (!remote) return localEdit.execute(id, params, signal, onUpdate);
       const tool = createEditTool(localCwd, {
         operations: createRemoteEditOps(remote.settings, remote.remoteCwd, localCwd),
       });
-      return tool.execute(id, params, signal, onUpdate, ctx);
+      return tool.execute(id, params, signal, onUpdate);
     },
   });
 
   pi.registerTool({
     ...localBash,
-    async execute(id, params, signal, onUpdate, ctx) {
+    async execute(id, params, signal, onUpdate) {
       const remote = getResolved();
-      if (!remote) return localBash.execute(id, params, signal, onUpdate, ctx);
+      if (!remote) return localBash.execute(id, params, signal, onUpdate);
       const tool = createBashTool(localCwd, {
         operations: createRemoteBashOps(remote.settings, remote.remoteCwd, localCwd),
       });
-      return tool.execute(id, params, signal, onUpdate, ctx);
+      return tool.execute(id, params, signal, onUpdate);
     },
   });
 

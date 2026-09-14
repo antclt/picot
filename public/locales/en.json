@@ -647,6 +647,7 @@
     "taskNotificationsDescription": "Show an operating system notification when a task finishes.",
     "taskCompleteTitle": "Task completed",
     "taskCompleteMessage": "Your task has finished.",
+    "taskFailedTitle": "Task failed",
     "piVersion": "Pi version",
     "picotVersion": "Picot version",
     "checkForUpdates": "Check for updates",

@@ -91,10 +91,18 @@ export class ConvNav {
       this.#jumpTo(turn, idx);
     };
 
+    this._onDocumentClick = (e) => {
+      if (this.#isTooltipTarget(e.target) || this.#trackEl.contains(e.target)) return;
+      this.#hoveredIdx = -1;
+      this.#clearWave();
+      this.#hideTooltip(true);
+    };
+
     this.#trackEl.addEventListener("mouseenter", this._onTrackPointer);
     this.#trackEl.addEventListener("mousemove", this._onTrackPointer);
     this.#trackEl.addEventListener("mouseleave", this._onTrackLeave);
     this.#navEl.addEventListener("click", this._onNavClick);
+    document.addEventListener("click", this._onDocumentClick);
 
     this._onScroll = () => {
       const threshold = 150;
@@ -123,6 +131,7 @@ export class ConvNav {
     this.#trackEl?.removeEventListener("mousemove", this._onTrackPointer);
     this.#trackEl?.removeEventListener("mouseleave", this._onTrackLeave);
     this.#navEl?.removeEventListener("click", this._onNavClick);
+    document.removeEventListener("click", this._onDocumentClick);
     this._observer?.disconnect();
     clearTimeout(this.#tooltipHideTimer);
     clearTimeout(this.#navLockTimer);

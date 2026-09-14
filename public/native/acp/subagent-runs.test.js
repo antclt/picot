@@ -105,7 +105,9 @@ describe("subagent-runs", () => {
       expect.objectContaining({ idempotencyKey: expect.any(String) }),
     );
     expect(run.status).toBe("done");
-    expect(run.state.blocks.some((b) => b.kind === "user" && b.text === "and then what")).toBe(true);
+    expect(run.state.blocks.some((b) => b.kind === "user" && b.text === "and then what")).toBe(
+      true,
+    );
     expect(card.update).toHaveBeenCalled();
     expect(deps.control.stopAcpTask).not.toHaveBeenCalled();
   });
@@ -143,7 +145,11 @@ describe("subagent-runs", () => {
       event: {
         type: "acp_session_update",
         params: {
-          update: { sessionUpdate: "agent_message_chunk", messageId: "m", content: { type: "text", text: "hi" } },
+          update: {
+            sessionUpdate: "agent_message_chunk",
+            messageId: "m",
+            content: { type: "text", text: "hi" },
+          },
         },
       },
     });
@@ -151,9 +157,9 @@ describe("subagent-runs", () => {
     expect(card.update).toHaveBeenCalled();
     expect(card.run.state.blocks.at(-1)).toMatchObject({ kind: "message", text: "hi" });
 
-    expect(manager.applyEvent({ target: { instanceId: "someone-else" }, event: { type: "acp_error" } })).toBe(
-      false,
-    );
+    expect(
+      manager.applyEvent({ target: { instanceId: "someone-else" }, event: { type: "acp_error" } }),
+    ).toBe(false);
   });
 
   it("restore() re-mounts the live card for an in-flight run", async () => {

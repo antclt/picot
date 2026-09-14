@@ -508,6 +508,35 @@ impl NativePiManager {
         if !temporary.session_id.starts_with("temporary-") {
             return Ok(temporary.clone());
         }
+        self.rebind_session_id_with_event(temporary, session_id, "session_bound")
+    }
+
+    /// Re-point a *formal* (non-"temporary-") session id to another formal
+    /// session id, for an instance whose live session changed identity out
+    /// from under the registry — e.g. pi forking a new session file in place
+    /// for the same running instance. Unlike `bind_session_id`, this has no
+    /// "temporary-" guard: the caller (the fork RPC flow) is responsible for
+    /// only calling this once it has confirmed via `get_session_stats` that
+    /// the instance is actually on a different session now. Without this,
+    /// the registry keeps reporting the old session id forever, which desyncs
+    /// `target_for_session_id` lookups (used by snapshot requests) and the
+    /// per-client event `subscriptions` set (keyed on the full target tuple),
+    /// silently breaking event delivery for any client that adopts the new id
+    /// locally without the backend ever learning about it.
+    pub fn rebind_session_id(
+        &self,
+        current: &RuntimeTarget,
+        session_id: &str,
+    ) -> Result<RuntimeTarget, String> {
+        self.rebind_session_id_with_event(current, session_id, "session_rebound")
+    }
+
+    fn rebind_session_id_with_event(
+        &self,
+        current: &RuntimeTarget,
+        session_id: &str,
+        event_type: &str,
+    ) -> Result<RuntimeTarget, String> {
         let mut coordinator = self
             .inner
             .coordinator
@@ -515,15 +544,15 @@ impl NativePiManager {
             .map_err(|_| "Runtime coordinator lock poisoned".to_string())?;
         let binding_event = coordinator
             .emit_event(
-                temporary,
+                current,
                 serde_json::json!({
-                    "type": "session_bound",
+                    "type": event_type,
                     "sessionId": session_id,
                 }),
             )
             .map_err(|error| format!("Cannot sequence session binding: {error:?}"))?;
         let formal = coordinator
-            .bind_session_id(temporary, session_id)
+            .bind_session_id(current, session_id)
             .map_err(|error| format!("Cannot bind formal session: {error:?}"))?;
         drop(coordinator);
         let runtime = self
@@ -532,7 +561,7 @@ impl NativePiManager {
             .lock()
             .map_err(|_| "Native runtime registry lock poisoned".to_string())?;
         let managed = runtime
-            .get(&temporary.instance_id)
+            .get(&current.instance_id)
             .ok_or_else(|| "Native runtime instance is not running".to_string())?;
         *managed
             .target
@@ -862,5 +891,39 @@ mod tests {
         let event = events.recv().await.unwrap();
         assert_eq!(event.target, formal);
         assert_eq!(manager.target_for_session_id("session-a"), Some(formal));
+    }
+
+    #[tokio::test]
+    async fn rebinds_a_formal_session_after_an_in_place_fork_and_routes_future_events_there() {
+        let manager = NativePiManager::in_memory(8);
+        let original = RuntimeTarget::new("workspace-a", "session-a", "instance-a");
+        let mut events = manager.subscribe();
+        let mut fake = manager.register_in_memory(original.clone()).unwrap();
+
+        // bind_session_id is a no-op once the session id is already formal;
+        // only rebind_session_id can move an instance from one real session
+        // id to another, which is what a fork does in place.
+        assert_eq!(manager.bind_session_id(&original, "session-b").unwrap(), original);
+
+        let forked = manager.rebind_session_id(&original, "session-b").unwrap();
+        let binding = events.recv().await.unwrap();
+        assert_eq!(binding.target, original);
+        assert_eq!(binding.event["type"], "session_rebound");
+        assert_eq!(binding.event["sessionId"], "session-b");
+        assert_eq!(forked.instance_id, "instance-a");
+        assert_eq!(forked.session_id, "session-b");
+
+        // The old session id no longer resolves to this instance, and future
+        // events carry the rebound target rather than the stale one — the
+        // exact desync that broke a client's event subscription when only
+        // the frontend, not the registry, learned about the new session id.
+        assert_eq!(manager.target_for_session_id("session-a"), None);
+        assert_eq!(manager.target_for_session_id("session-b"), Some(forked.clone()));
+
+        fake.write_frame(json!({ "type": "agent_start" }))
+            .await
+            .unwrap();
+        let event = events.recv().await.unwrap();
+        assert_eq!(event.target, forked);
     }
 }

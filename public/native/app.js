@@ -156,8 +156,11 @@ const taskCompletionNotifications = createTaskCompletionNotifications({
         session.id === notificationTarget?.sessionId &&
         session.workspaceId === notificationTarget?.workspaceId,
     ) ?? null,
-  title: (task) => task?.name || task?.firstMessage || t("settings.taskCompleteTitle"),
-  body: () => t("settings.taskCompleteMessage"),
+  title: (task, error) =>
+    task?.name ||
+    task?.firstMessage ||
+    (error ? t("settings.taskFailedTitle") : t("settings.taskCompleteTitle")),
+  body: (_task, error) => error || t("settings.taskCompleteMessage"),
   showNotification: sendNativeTaskNotification,
 });
 
@@ -384,7 +387,12 @@ const customUiPanel = new CustomUiPanel({
 // host detects locally (`control.listAcpAgents()`); adding one here plus a
 // matching preset in acp_launch.rs is enough to surface it.
 const SUBAGENTS = [
-  { id: "claude-code", token: "claude", label: "Claude Code", description: "Delegate a task via ACP" },
+  {
+    id: "claude-code",
+    token: "claude",
+    label: "Claude Code",
+    description: "Delegate a task via ACP",
+  },
   { id: "gemini", token: "gemini", label: "Gemini CLI", description: "Delegate a task via ACP" },
   { id: "codex", token: "codex", label: "Codex", description: "Delegate a task via ACP" },
   { id: "cursor", token: "cursor", label: "Cursor", description: "Delegate a task via ACP" },
@@ -992,13 +1000,67 @@ messagesElement.addEventListener("previewfile", (event) => {
   if (path) void filePreviewFollow.openPath(path).catch(showError);
 });
 messagesElement.addEventListener("messagefork", async (event) => {
-  const { entryId } = event.detail;
+  let { entryId } = event.detail;
+  if (store.lifecycle === "working") {
+    showError(new Error(t("infoPanel.actionWhileStreaming")));
+    return;
+  }
   try {
+    if (!entryId) {
+      // Root cause of "fork does nothing": live-rendered messages (this
+      // turn's `message_start` event) never carry an entryId — that field
+      // only exists on entries from get_entries/get_tree, and AgentMessage
+      // objects streamed during a run don't include it, so the DOM node's
+      // [data-entry-id] is simply absent until the session is reloaded from
+      // disk. Recover it by asking Pi for the ordered list of forkable user
+      // messages and matching by the clicked message's position among all
+      // rendered user messages (get_fork_messages returns exactly the user
+      // turns on the active branch, in the same order they're rendered).
+      const messageEl = event.target?.closest?.(".message.user") ?? null;
+      const index = messageEl
+        ? [...messagesElement.querySelectorAll(".message.user")].indexOf(messageEl)
+        : -1;
+      if (index >= 0) {
+        const forkMessages = await runtime.request({ type: "get_fork_messages" }, target);
+        entryId = forkMessages?.response?.data?.messages?.[index]?.entryId ?? null;
+      }
+      if (!entryId) {
+        showError(new Error(t("errors.treeNavigateFailed", { error: "Invalid entry ID for forking" })));
+        return;
+      }
+    }
     const result = await runtime.request({ type: "fork", entryId }, target, {
       idempotencyKey: randomId(),
     });
     const data = result?.response?.data;
-    if (!data?.cancelled && data?.text != null) {
+    if (data?.cancelled) return;
+    // `fork` moves Pi's active branch pointer in memory immediately (the new
+    // session *file* isn't written until the forked message is actually
+    // sent — see pendingForkSwitchCheck below for that part). But the active
+    // branch itself already changed, so — exactly like navigateActiveTree
+    // does for edit — re-hydrating now re-renders the message list truncated
+    // to the fork point right away, instead of leaving the old conversation
+    // visible until after the next send.
+    //
+    // chooseHydrationMessages() deliberately falls back to the cached disk
+    // history when it has *more* messages than a fresh snapshot, to protect
+    // a normal session switch from a transient race where the snapshot
+    // arrives before the full disk read. That protection actively fights
+    // fork, which *legitimately* shrinks the visible history — so the stale,
+    // longer disk-read cached from before this fork would otherwise win and
+    // the panel would silently stay on the old conversation. Drop it first.
+    if (diskHistoryFallback?.sessionId === target.sessionId) diskHistoryFallback = null;
+    await hydrateSnapshotOnce();
+    // Remember exactly which target this fork applies to. Consuming this
+    // purely as a boolean let it leak across an unrelated session: if the
+    // user forked here but then switched sessions and sent an ordinary first
+    // message elsewhere — the temporary-id-to-formal-id rebind every brand
+    // new session goes through on its first message looks, superficially,
+    // just like a fork's session-id change — the leaked flag would fire
+    // checkAndAdoptForkedSession for that unrelated send, forcing a spurious
+    // full re-render that reads as "the page refreshed".
+    pendingForkSwitchCheck = { ...target };
+    if (data?.text != null) {
       input.value = data.text;
       composerAutoResize.sync();
       input.focus();
@@ -1007,6 +1069,35 @@ messagesElement.addEventListener("messagefork", async (event) => {
     showError(error);
   }
 });
+
+// Set by the messagefork handler above; consumed once the forked prompt's
+// turn fully settles (see the "agent_settled" case in handleRuntimeEvent).
+// Persisting the new session file happens as part of that turn, not at
+// `prompt` acceptance time, so checking any earlier still sees the old
+// session. Waiting for settle (rather than agent_start) also avoids
+// adoptTarget's mid-stream reset of assistantMessageStream/streamingElement,
+// which would otherwise wipe the in-progress reply out from under the user.
+let pendingForkSwitchCheck = null;
+async function checkAndAdoptForkedSession() {
+  try {
+    const statsResult = await runtime.request({ type: "get_session_stats" }, target);
+    const statsData = statsResult?.response?.data;
+    if (!statsData?.sessionId || statsData.sessionId === target.sessionId) return;
+    // Tell the host registry about the identity change *before* adopting it
+    // locally. adoptTarget resubscribes to events for the new target tuple;
+    // if the registry still thinks this instance is on the old session id,
+    // the resubscription won't match the events this instance actually
+    // emits (tagged with whatever the registry believes), and this client
+    // silently stops receiving any runtime events at all.
+    const rebound = await runtime.rebindSession(target, statsData.sessionId);
+    if (!rebound) return;
+    await sidebar?.load({ quiet: true });
+    await adoptTarget(rebound, { updateRoute: true });
+    await hydrateSnapshotOnce();
+  } catch (error) {
+    showError(error);
+  }
+}
 messagesElement.addEventListener("messageedit", async (event) => {
   const { entryId, text } = event.detail || {};
   if (!entryId) return;
@@ -1994,6 +2085,7 @@ async function sendComposerInput({ altKey }) {
     input.value = value;
     composerAutoResize.sync();
     imageAttachments.setImages(images);
+    pendingForkSwitchCheck = null;
     throw error;
   }
 }
@@ -2036,6 +2128,21 @@ async function handleRuntimeEvent(event) {
       turnWrittenPaths = [];
       break;
     case "agent_settled":
+      settleForegroundAgent(event);
+      // Only consume the pending check if it was armed for *this* target — a
+      // session switch in between arm and settle invalidates it, rather than
+      // letting it misfire on an unrelated session's own (ordinary,
+      // fork-unrelated) session-id change.
+      if (
+        pendingForkSwitchCheck &&
+        pendingForkSwitchCheck.workspaceId === target.workspaceId &&
+        pendingForkSwitchCheck.sessionId === target.sessionId &&
+        pendingForkSwitchCheck.instanceId === target.instanceId
+      ) {
+        pendingForkSwitchCheck = null;
+        void checkAndAdoptForkedSession();
+      }
+      break;
     case "agent_end":
       settleForegroundAgent(event);
       break;

@@ -101,7 +101,7 @@ type CatalogRegistry = {
     label?: string;
   };
   getProviderDisplayName: (provider: string) => string;
-  refresh: () => void | Promise<void>;
+  refresh: () => unknown;
   getApiKeyForProvider?: (provider: string) => Promise<string | undefined>;
   getApiKeyAndHeaders?: (model: CatalogModel) => Promise<{
     ok?: boolean;

@@ -359,6 +359,7 @@
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
+  /* design-token-ignore: content column intentionally narrower (860px) than the 960px page max-width */
   padding: var(--space-5) max(var(--space-5), calc((100% - 860px) / 2));
   display: flex;
   flex-direction: column;

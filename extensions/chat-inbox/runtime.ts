@@ -1,16 +1,4 @@
 import { randomUUID } from "node:crypto";
-
-import type {
-  ChatLogRecord,
-  CheckpointRecord,
-  ConversationStatus,
-  DispatchableJob,
-  InboundMessageInput,
-  InboundMessageRecord,
-  JobQueuedRecord,
-  PendingJob,
-  ResolvedConversation,
-} from "../types.js";
 import {
   acquireConversationLock,
   appendConversationRecord,
@@ -27,6 +15,17 @@ import {
   releaseConversationLock,
 } from "./log.js";
 import type { RemoteCommand } from "./remote-operations.js";
+import type {
+  ChatLogRecord,
+  CheckpointRecord,
+  ConversationStatus,
+  DispatchableJob,
+  InboundMessageInput,
+  InboundMessageRecord,
+  JobQueuedRecord,
+  PendingJob,
+  ResolvedConversation,
+} from "./types.js";
 
 function isDMConversation(conversation: ResolvedConversation): boolean {
   return conversation.channel.dm ?? false;

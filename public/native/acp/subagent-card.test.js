@@ -93,16 +93,27 @@ describe("subagent-card", () => {
     const { element, update } = createSubagentCard({ run });
     expect(element.querySelector(".subagent-card-footer").hidden).toBe(true);
 
-    update({ ...run, status: "done", finishedAt: new Date().toISOString(), resultText: "all green" });
+    update({
+      ...run,
+      status: "done",
+      finishedAt: new Date().toISOString(),
+      resultText: "all green",
+    });
     expect(element.querySelector(".subagent-card-footer").hidden).toBe(false);
   });
 
   it("invokes onSendResult with the settled run when the button is clicked", () => {
     const onSendResult = vi.fn();
-    const run = baseRun({ status: "done", resultText: "done deal", finishedAt: new Date().toISOString() });
+    const run = baseRun({
+      status: "done",
+      resultText: "done deal",
+      finishedAt: new Date().toISOString(),
+    });
     const { element } = createSubagentCard({ run, onSendResult });
 
-    element.querySelector(".subagent-card-send").dispatchEvent(new Event("click", { bubbles: true }));
+    element
+      .querySelector(".subagent-card-send")
+      .dispatchEvent(new Event("click", { bubbles: true }));
     expect(onSendResult).toHaveBeenCalledTimes(1);
     expect(element.querySelector(".subagent-card-send").disabled).toBe(true);
   });
@@ -195,7 +206,9 @@ describe("subagent-card", () => {
     expect(input.value).toBe("");
 
     input.value = "another one";
-    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    input.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }),
+    );
     expect(onFollowUp).toHaveBeenCalledWith("another one");
     expect(onFollowUp).toHaveBeenCalledTimes(2);
   });

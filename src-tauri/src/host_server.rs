@@ -1433,6 +1433,29 @@ async fn dispatch(
                     "sourcePreservingFork": false,
                 }));
             }
+            if frame.get("type").and_then(Value::as_str) == Some("runtime_rebind_session_request") {
+                let target: RuntimeTarget = serde_json::from_value(
+                    frame
+                        .get("target")
+                        .cloned()
+                        .ok_or(("invalid_target", "Runtime target is required".into()))?,
+                )
+                .map_err(|_| ("invalid_target", "Runtime target is invalid".into()))?;
+                let new_session_id = frame
+                    .get("newSessionId")
+                    .and_then(Value::as_str)
+                    .ok_or(("invalid_session_id", "newSessionId is required".into()))?;
+                let rebound = state
+                    .runtimes
+                    .rebind_session_id(&target, new_session_id)
+                    .map_err(|message| ("session_rebind_failed", message))?;
+                return Ok(json!({
+                    "type": "runtime_response",
+                    "requestId": request_id,
+                    "acceptance": "completed",
+                    "response": { "success": true, "data": { "target": rebound } },
+                }));
+            }
             if frame.get("type").and_then(Value::as_str) != Some("runtime_request") {
                 return Err((
                     "unsupported_runtime_request",

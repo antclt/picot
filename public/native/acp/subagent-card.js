@@ -40,7 +40,9 @@ function elapsedText(run) {
 }
 
 function truncate(text, max = 120) {
-  const line = String(text ?? "").replace(/\s+/g, " ").trim();
+  const line = String(text ?? "")
+    .replace(/\s+/g, " ")
+    .trim();
   return line.length > max ? `${line.slice(0, max - 1)}…` : line;
 }
 

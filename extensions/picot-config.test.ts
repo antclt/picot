@@ -434,7 +434,7 @@ describe("picot config custom provider operations", () => {
         protocol: "openai-completions",
         models: [{ id: "gpt-4o-mini", contextWindow: 32768, maxTokens: 4096 }],
       },
-      { modelRegistry: registry },
+      { modelRegistry: registry as never },
     );
 
     expect(result).toMatchObject({

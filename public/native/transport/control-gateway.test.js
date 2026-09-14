@@ -205,7 +205,11 @@ describe("HostControlGateway", () => {
     const control = new HostControlGateway(adapter);
     const response = control.listAcpAgents();
     const sent = adapter.takeSent();
-    adapter.receive({ type: "host_response", requestId: sent.requestId, operation: "acp_list_agents" });
+    adapter.receive({
+      type: "host_response",
+      requestId: sent.requestId,
+      operation: "acp_list_agents",
+    });
     await expect(response).resolves.toEqual([]);
   });
 
