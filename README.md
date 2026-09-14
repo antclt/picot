@@ -23,6 +23,7 @@ Picot ships a known-good build of the `pi` runtime **inside the .app bundle**, s
 - [Features](#features)
 - [For Developers](#for-developers)
 - [Upstream](#upstream)
+- [Contributors](#contributors)
 - [License](#license)
 
 ---
@@ -366,6 +367,18 @@ Picot is a maintained fork of **Tau**, adapted for Pi-first, local development w
 - **Embedded pi runtime** — no separate global install; Picot ships its own binary
 - **Protocol v2 host bridge** — typed routing for runtime, data, auth, and extension UI frames
 - **Host data plane** — Rust serves session and workspace data directly to the native UI
+
+---
+
+## Contributors
+
+Avatars are generated on the fly from the GitHub API — no list to maintain.
+
+<a href="https://github.com/shixin-guo/picot/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=shixin-guo/picot" alt="Contributors" />
+</a>
+
+Made with [contrib.rocks](https://contrib.rocks).
 
 ---
 

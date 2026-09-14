@@ -23,6 +23,7 @@ Picot 将 `pi` 运行时**直接打包进 .app**，无需单独安装 `pi`，无
 - [功能特性](#功能特性)
 - [开发者指南](#开发者指南)
 - [上游关系](#上游关系)
+- [贡献者](#贡献者)
 - [License](#license)
 
 ---
@@ -363,6 +364,18 @@ Picot 是 **Tau** 的维护性 fork，专为 Pi 优先的本地开发工作流�
 - **内嵌 pi 运行时** — 无需全局安装，Picot 自带二进制
 - **Protocol v2 host bridge** — 为 runtime、data、auth 和 extension UI 帧提供路由
 - **Host data plane** — Rust 直接向 native UI 提供会话和工作区数据
+
+---
+
+## 贡献者
+
+头像由 GitHub API 实时生成，无需手动维护名单。
+
+<a href="https://github.com/shixin-guo/picot/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=shixin-guo/picot" alt="Contributors" />
+</a>
+
+由 [contrib.rocks](https://contrib.rocks) 生成。
 
 ---
 
