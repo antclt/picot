@@ -137,8 +137,10 @@
   background: var(--user-bubble);
   color: var(--user-bubble-text);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  /* design-token-ignore: user bubble uses a bespoke 12px radius between --radius-md and --radius */
+  border-radius: 12px;
   border-bottom-right-radius: 6px;
+  padding: var(--space-1) var(--space-2);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   box-shadow: var(--shadow-sm);
