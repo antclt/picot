@@ -1238,7 +1238,7 @@ export class SessionSidebar {
     });
 
     if (project.isRemote) {
-      header.querySelector(".folder-icon")?.after(createRemoteBadge());
+      header.querySelector(".folder-icon")?.replaceWith(createRemoteBadge());
     }
 
     const moreActionsEl = header.querySelector(".workspace-more-actions-btn");

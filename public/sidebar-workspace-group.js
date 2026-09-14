@@ -219,10 +219,10 @@ export function buildSidebarWorkspaceGroup({
   const header = document.createElement("div");
   header.className = "project-header workspace-header";
 
-  header.appendChild(createFolderIcon());
-
   if (isRemote) {
     header.appendChild(createRemoteBadge());
+  } else {
+    header.appendChild(createFolderIcon());
   }
 
   const nameEl = document.createElement("span");
