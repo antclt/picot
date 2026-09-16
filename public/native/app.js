@@ -2823,7 +2823,7 @@ async function applyConfiguredModelVisibility(models) {
     const visibleKeys = new Set();
     for (const provider of catalog.data?.providers ?? []) {
       for (const model of provider.models ?? []) {
-        if (model.available && model.visible !== false) {
+        if (model.available && model.visible === true) {
           visibleKeys.add(`${model.provider || provider.provider}/${model.id}`);
         }
       }
@@ -2831,7 +2831,7 @@ async function applyConfiguredModelVisibility(models) {
     return models.filter((model) => visibleKeys.has(`${model.provider}/${model.id}`));
   } catch (error) {
     console.warn("[Native] Failed to load configured model visibility:", error);
-    return models;
+    return [];
   }
 }
 

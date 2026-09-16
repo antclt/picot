@@ -322,7 +322,7 @@ class ModelPreferencesStore {
   }
 
   isVisible(provider: string, modelId: string): boolean {
-    return this.read().visibility[modelPreferenceKey(provider, modelId)] !== false;
+    return this.read().visibility[modelPreferenceKey(provider, modelId)] === true;
   }
 
   setVisibility(provider: string, modelId: string, visible: boolean): void {
@@ -1183,7 +1183,7 @@ export async function handlePicotConfig(
         const provider = asString(params.provider);
         const modelId = asString(params.modelId);
         if (!provider || !modelId) throw new Error("provider and modelId are required");
-        const visible = params.visible !== false;
+        const visible = params.visible === true;
         preferences.setVisibility(provider, modelId, visible);
         return { ok: true, data: { provider, modelId, visible } };
       }
@@ -1204,10 +1204,9 @@ export async function handlePicotConfig(
           return availableKeys.has(modelPreferenceKey(provider, model.id as string));
         });
         if (models.length === 0) throw new Error("No matching models available for health check");
-        const results = [];
-        for (const model of models) {
-          results.push(await runModelHealthCheck(reg, model, preferences));
-        }
+        const results = await Promise.all(
+          models.map((model) => runModelHealthCheck(reg, model, preferences)),
+        );
         return { ok: true, data: { results } };
       }
 
