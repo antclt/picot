@@ -71,18 +71,17 @@ describe("task debugger panel", () => {
     document.body.innerHTML = "";
   });
 
-  it("stays hidden until a turn has finished", () => {
+  it("is visible and usable even before anything is recorded", () => {
     const dom = mountDom();
-    const turns = [turn(1, "running", [])];
-    const panel = setupTaskDebuggerPanel({ ...dom, getTurns: () => turns, t });
+    // A control that only appears once its precondition holds is undiscoverable,
+    // so the button shows from the start and explains itself when opened.
+    const panel = setupTaskDebuggerPanel({ ...dom, getTurns: () => [], t });
 
-    expect(dom.button.classList.contains("hidden")).toBe(true);
-    expect(dom.button.disabled).toBe(true);
-
-    turns[0].status = "completed";
-    panel.refreshAvailability();
     expect(dom.button.classList.contains("hidden")).toBe(false);
     expect(dom.button.disabled).toBe(false);
+
+    panel.open();
+    expect(dom.body.textContent).toContain("No task has been recorded yet");
   });
 
   it("disables itself again while the next turn streams", () => {
@@ -158,15 +157,26 @@ describe("task debugger panel", () => {
     expect(analyze.mock.calls[0][0]).toEqual([turns[0]]);
   });
 
-  it("explains that nothing has been recorded yet", () => {
+  it("offers nothing to copy when there is no report", () => {
     const dom = mountDom();
-    const panel = setupTaskDebuggerPanel({ ...dom, getTurns: () => [], t });
-    panel.open();
-    // The button is unavailable, so opening programmatically is the only path.
-    dom.button.disabled = false;
-    panel.open();
-    expect(dom.body.textContent).toContain("No finished task recorded");
+    setupTaskDebuggerPanel({ ...dom, getTurns: () => [], t }).open();
     expect(dom.copyButton.disabled).toBe(true);
+  });
+
+  it("stays clickable while only an unfinished turn exists", () => {
+    const dom = mountDom();
+    const panel = setupTaskDebuggerPanel({
+      ...dom,
+      getTurns: () => [turn(1, "running", [])],
+      t,
+    });
+    expect(dom.button.disabled).toBe(false);
+
+    // Streaming is reported by the app, not inferred from turn status.
+    panel.setStreaming(true);
+    expect(dom.button.disabled).toBe(true);
+    panel.setStreaming(false);
+    expect(dom.button.disabled).toBe(false);
   });
 
   it("closes on the overlay and the close button", () => {

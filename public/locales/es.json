@@ -1362,7 +1362,7 @@
     "toolCalls": "Llamadas a herramientas",
     "wasted": "Tiempo redundante",
     "cost": "Coste",
-    "noTurns": "Todavía no hay ninguna tarea terminada en esta sesión.",
+    "noTurns": "Todavía no se ha registrado ninguna tarea. El análisis cubre las tareas que esta ventana ha ejecutado desde que se abrió; el historial cargado del disco no lleva tiempos. Envía un mensaje y la próxima tarea quedará registrada.",
     "noSteps": "No se registró ningún paso.",
     "neverFinished": "Este paso nunca informó de que había terminado.",
     "unknownError": "Error desconocido",

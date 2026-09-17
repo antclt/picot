@@ -1362,7 +1362,7 @@
     "toolCalls": "Tool calls",
     "wasted": "Redundant time",
     "cost": "Cost",
-    "noTurns": "No finished task recorded in this session yet.",
+    "noTurns": "No task has been recorded yet. Analysis covers tasks this window ran since it opened - history loaded from disk carries no timings. Send a message and the next task will be traced.",
     "noSteps": "No steps were recorded.",
     "neverFinished": "This step never reported that it finished.",
     "unknownError": "Unknown error",

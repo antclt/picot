@@ -191,8 +191,11 @@ function renderTimeline(turns, t) {
 /**
  * Wire the task debugger button + dialog.
  *
- * The button only becomes usable once a turn has finished: analysing a turn
- * that is still streaming would report its own in-flight spans as "stuck".
+ * The button is always visible, and disabled only while a turn streams:
+ * analysing one in flight would report its own open spans as "stuck". With
+ * nothing recorded yet the dialog opens on an explanation instead, since only
+ * turns this app instance actually watched are traced -- history loaded from
+ * disk carries no timings.
  *
  * @param {{
  *   button: HTMLElement,
@@ -243,15 +246,15 @@ export function setupTaskDebuggerPanel({
     return last ? [last] : [];
   }
 
-  function hasAnalyzableTurn() {
-    return (getTurns() ?? []).some((turn) => turn.status !== "running");
-  }
-
   function refreshAvailability() {
-    const ready = !streaming && hasAnalyzableTurn();
-    button.classList.toggle("hidden", !hasAnalyzableTurn());
-    button.disabled = !ready;
-    button.title = ready ? t("taskDebugger.buttonTitle") : t("taskDebugger.buttonBusy");
+    // The button stays visible even with nothing recorded yet: a control that
+    // only appears once its precondition holds is a control nobody discovers.
+    // Opening it then explains why there is nothing to show. Only a streaming
+    // turn disables it, because analysing one reports its own open spans as
+    // stuck.
+    button.classList.remove("hidden");
+    button.disabled = streaming;
+    button.title = streaming ? t("taskDebugger.buttonBusy") : t("taskDebugger.buttonTitle");
     button.setAttribute("aria-label", button.title);
   }
 
