@@ -189,13 +189,36 @@ function renderTimeline(turns, t) {
 }
 
 /**
+ * Live spans plus history spans, with live winning wherever the two overlap.
+ *
+ * The live recorder only ever covers a suffix of the session -- everything
+ * since this window attached -- and it saw those turns first-hand, including
+ * compaction and spans the log never records. So history is kept only up to
+ * the point live coverage begins; past that the two would double-count the
+ * same work.
+ */
+export function mergeTurnSources(historyTurns, liveTurns) {
+  const live = (liveTurns ?? []).filter(Boolean);
+  const history = (historyTurns ?? []).filter(Boolean);
+  if (!live.length) return history;
+  if (!history.length) return live;
+  const liveFrom = live.reduce(
+    (earliest, turn) => Math.min(earliest, Number(turn.startedAt) || Number.POSITIVE_INFINITY),
+    Number.POSITIVE_INFINITY,
+  );
+  const older = history.filter((turn) => (turn.endedAt ?? turn.startedAt) < liveFrom);
+  return [...older, ...live];
+}
+
+/**
  * Wire the task debugger button + dialog.
  *
  * The button is always visible, and disabled only while a turn streams:
- * analysing one in flight would report its own open spans as "stuck". With
- * nothing recorded yet the dialog opens on an explanation instead, since only
- * turns this app instance actually watched are traced -- history loaded from
- * disk carries no timings.
+ * analysing one in flight would report its own open spans as "stuck". Turns
+ * this window watched live are read from the recorder; everything before that
+ * -- a reopened session, a restarted app -- is rebuilt from the saved session
+ * log when `loadHistoryTurns` is supplied, so the dialog is useful on the
+ * first open rather than only after the next task runs.
  *
  * @param {{
  *   button: HTMLElement,
@@ -206,6 +229,7 @@ function renderTimeline(turns, t) {
  *   copyButton?: HTMLElement,
  *   scopeInputs?: Iterable<HTMLInputElement>,
  *   getTurns: () => Array<object>,
+ *   loadHistoryTurns?: () => Promise<Array<object>> | Array<object>,
  *   analyze?: (turns: Array<object>, options?: object) => object,
  *   t?: (key: string, params?: object) => string,
  *   writeText?: (text: string) => Promise<void> | void,
@@ -220,6 +244,7 @@ export function setupTaskDebuggerPanel({
   copyButton,
   scopeInputs = [],
   getTurns,
+  loadHistoryTurns = null,
   analyze = analyzeTurns,
   t = translate,
   writeText = (text) => navigator.clipboard?.writeText(text),
@@ -232,14 +257,23 @@ export function setupTaskDebuggerPanel({
   let streaming = false;
   let scope = "last";
   let lastReport = null;
+  let historyTurns = [];
+  let historyState = typeof loadHistoryTurns === "function" ? "idle" : "off";
+  // Guards a session switch (or a second open) from letting a stale read of the
+  // previous session's log repaint the dialog.
+  let historySeq = 0;
 
   const scopeList = [...scopeInputs];
   for (const input of scopeList) {
     if (input.checked) scope = input.value;
   }
 
+  function availableTurns() {
+    return mergeTurnSources(historyTurns, getTurns() ?? []);
+  }
+
   function selectedTurns() {
-    const turns = getTurns() ?? [];
+    const turns = availableTurns();
     if (scope === "session") return turns;
     const finished = turns.filter((turn) => turn.status !== "running");
     const last = finished.length ? finished[finished.length - 1] : turns[turns.length - 1];
@@ -262,7 +296,13 @@ export function setupTaskDebuggerPanel({
     const turns = selectedTurns();
     body.replaceChildren();
     if (!turns.length) {
-      body.appendChild(element("p", "task-debugger-empty", t("taskDebugger.noTurns")));
+      const key =
+        historyState === "loading"
+          ? "taskDebugger.loadingHistory"
+          : historyState === "failed"
+            ? "taskDebugger.historyFailed"
+            : "taskDebugger.noTurns";
+      body.appendChild(element("p", "task-debugger-empty", t(key)));
       lastReport = null;
       if (copyButton) copyButton.disabled = true;
       return;
@@ -277,11 +317,41 @@ export function setupTaskDebuggerPanel({
       renderSteps(report, t),
       renderTimeline(turns, t),
     );
+    // Rebuilt spans come from the saved log, which records no compaction and no
+    // step the runtime never wrote down. Say so rather than letting a thinner
+    // report read as a complete one.
+    if (turns.some((turn) => turn.source === "history")) {
+      body.appendChild(element("p", "task-debugger-note", t("taskDebugger.historyNote")));
+    }
+  }
+
+  /**
+   * Re-read the saved log on every open: a turn that ended since the last look
+   * is exactly the one the user came to see, and the read is a single file.
+   */
+  async function refreshHistory() {
+    if (typeof loadHistoryTurns !== "function") return;
+    const seq = ++historySeq;
+    historyState = "loading";
+    if (!historyTurns.length) render();
+    try {
+      const turns = await loadHistoryTurns();
+      if (seq !== historySeq) return;
+      historyTurns = Array.isArray(turns) ? turns : [];
+      historyState = "ready";
+    } catch (error) {
+      if (seq !== historySeq) return;
+      console.warn("[TaskDebugger] session history rebuild failed:", error);
+      historyTurns = [];
+      historyState = "failed";
+    }
+    if (!dialog.classList.contains("hidden")) render();
   }
 
   function open() {
     if (button.disabled) return;
     render();
+    refreshHistory();
     overlay.classList.remove("hidden");
     dialog.classList.remove("hidden");
     button.setAttribute("aria-expanded", "true");
@@ -333,6 +403,12 @@ export function setupTaskDebuggerPanel({
   return {
     open,
     close,
+    /** A session switch invalidates the rebuilt history, not the live trace. */
+    resetHistory() {
+      historySeq += 1;
+      historyTurns = [];
+      historyState = typeof loadHistoryTurns === "function" ? "idle" : "off";
+    },
     /** Streaming turns are excluded: their open spans are not "stuck" yet. */
     setStreaming(value) {
       streaming = Boolean(value);

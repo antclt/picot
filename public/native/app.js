@@ -72,6 +72,7 @@ import { setupSessionSearchDialog } from "./session/session-search-dialog.js";
 import { SessionSidebar } from "./session/session-sidebar.js";
 import { createSessionStore, reduceSessionState } from "./session/session-store.js";
 import { setupTaskDebuggerPanel } from "./session/task-debugger-panel.js";
+import { buildTurnsFromEntries } from "./session/turn-history.js";
 import { createTurnTraceRecorder } from "./session/turn-trace.js";
 import { setupSettingsPanel } from "./settings/settings-panel.js";
 import { resolveBootstrapTarget } from "./transport/bootstrap-target.js";
@@ -568,6 +569,36 @@ async function refreshInfoPanel({ refreshWorkspace = false } = {}) {
   }
 }
 
+/**
+ * Rebuild this session's earlier turns for the task debugger.
+ *
+ * Same two sources as the Info panel tree, for the same reason: Pi owns the
+ * live entry list (including the branch the user navigated to), and the saved
+ * file answers when the runtime cannot. A temporary session has no file yet,
+ * so a failed runtime read there simply means "nothing recorded".
+ */
+async function loadHistoryTurnsForTarget() {
+  const sessionId = target.sessionId;
+  const options = { target, leafId: null };
+  try {
+    const runtimeResponse = await runtime.request({ type: "get_entries" }, target);
+    const tree = runtimeResponse?.response?.data;
+    if (Array.isArray(tree?.entries)) {
+      if (target.sessionId !== sessionId) return [];
+      return buildTurnsFromEntries(tree.entries, { ...options, leafId: tree.leafId ?? null });
+    }
+  } catch (error) {
+    console.warn("[TaskDebugger] runtime entries unavailable, falling back to disk:", error);
+  }
+  if (sessionId.startsWith("temporary-")) return [];
+  const response = await data.readSessionTree(target.workspaceId, sessionId);
+  if (target.sessionId !== sessionId) return [];
+  return buildTurnsFromEntries(response?.tree?.entries ?? [], {
+    ...options,
+    leafId: response?.tree?.leafId ?? null,
+  });
+}
+
 async function navigateActiveTree(entryId) {
   if (!entryId || store.lifecycle === "working") return;
   const result = await config.call("navigate_tree", {
@@ -1003,6 +1034,7 @@ taskDebugger = setupTaskDebuggerPanel({
   copyButton: document.getElementById("task-debugger-copy"),
   scopeInputs: document.querySelectorAll('input[name="task-debugger-scope"]'),
   getTurns: () => turnTrace.getTurns(target),
+  loadHistoryTurns: loadHistoryTurnsForTarget,
   t,
 });
 setupSidebarToggle();
@@ -1571,6 +1603,8 @@ async function switchSession(sessionId) {
   // Keep the current messages visible while the new session loads. The
   // history render below replaces them atomically once the new data is ready.
   setStatus("loading");
+  // The rebuilt turns belong to the session being left, not the one arriving.
+  taskDebugger?.resetHistory();
 
   // Phase 1: fire bootstrap (spawns Pi if needed) and fast disk message read
   // in parallel. The disk read returns messages without waiting for Pi to start.

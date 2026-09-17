@@ -35,7 +35,7 @@ export function traceTargetKey(target) {
   return target?.instanceId || target?.sessionId || null;
 }
 
-function clampText(value, max) {
+export function clampText(value, max) {
   const text = String(value ?? "")
     .replace(/\s+/g, " ")
     .trim();
@@ -57,6 +57,11 @@ function stableSignature(value, depth = 0) {
       .join(",")}}`;
   }
   return String(value);
+}
+
+/** Duplicate-call key shared with the history rebuilder, so both agree. */
+export function toolSignature(toolName, args) {
+  return clampText(`${toolName}|${stableSignature(args ?? null)}`, SIGNATURE_MAX_CHARS);
 }
 
 const DETAIL_KEYS = [
@@ -308,10 +313,7 @@ export function createTurnTraceRecorder({
           turn,
           newStep("tool", toolName, at, {
             detail: describeToolArgs(event.args),
-            signature: clampText(
-              `${toolName}|${stableSignature(event.args ?? null)}`,
-              SIGNATURE_MAX_CHARS,
-            ),
+            signature: toolSignature(toolName, event.args),
             toolCallId: event.toolCallId ?? null,
           }),
         );

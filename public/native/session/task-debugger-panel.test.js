@@ -81,7 +81,7 @@ describe("task debugger panel", () => {
     expect(dom.button.disabled).toBe(false);
 
     panel.open();
-    expect(dom.body.textContent).toContain("No task has been recorded yet");
+    expect(dom.body.textContent).toContain("Nothing to analyse in this session yet");
   });
 
   it("disables itself again while the next turn streams", () => {
@@ -278,5 +278,105 @@ describe("recorder to panel", () => {
     expect(text).toContain("exit 1");
     expect(text).toContain("failed 2 times in a row");
     expect(text).toContain("bottleneck");
+  });
+});
+
+describe("session history", () => {
+  beforeAll(async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ ok: true, json: async () => englishMessages }),
+    );
+    await initI18n();
+  });
+
+  function historyTurn(index, startedAt, endedAt, steps) {
+    return { ...turn(index, "completed", steps, { startedAt, endedAt }), source: "history" };
+  }
+
+  it("analyses a session this window never watched", async () => {
+    const dom = mountDom();
+    const turns = [historyTurn(1, 0, 60_000, [step("tool", "bash", 0, 55_000)])];
+    const panel = setupTaskDebuggerPanel({
+      ...dom,
+      getTurns: () => [],
+      loadHistoryTurns: async () => turns,
+      t,
+    });
+
+    panel.open();
+    // Nothing is claimed while the log is still being read.
+    expect(dom.body.textContent).toContain("Reading the saved session log");
+    await vi.waitFor(() => expect(dom.body.textContent).toContain("bash"));
+    // Rebuilt spans are labelled as such, since the log records less than a
+    // live trace does.
+    expect(dom.body.textContent).toContain("rebuilt from the saved session log");
+  });
+
+  it("prefers live spans over rebuilt ones for the turns both cover", async () => {
+    const dom = mountDom();
+    const live = [
+      turn(9, "completed", [step("tool", "live-tool", 100_000, 1_000)], {
+        startedAt: 100_000,
+        endedAt: 101_000,
+      }),
+    ];
+    const history = [
+      historyTurn(1, 0, 1_000, [step("tool", "old-tool", 0, 1_000)]),
+      historyTurn(2, 100_000, 101_000, [step("tool", "stale-copy", 100_000, 1_000)]),
+    ];
+    const panel = setupTaskDebuggerPanel({
+      ...dom,
+      getTurns: () => live,
+      loadHistoryTurns: async () => history,
+      scopeInputs: document.querySelectorAll('input[name="scope"]'),
+      t,
+    });
+
+    panel.open();
+    document.querySelector('input[value="session"]').checked = true;
+    document.querySelector('input[value="session"]').dispatchEvent(new Event("change"));
+    await vi.waitFor(() => expect(dom.body.textContent).toContain("old-tool"));
+
+    expect(dom.body.textContent).toContain("live-tool");
+    expect(dom.body.textContent).not.toContain("stale-copy");
+  });
+
+  it("says so when the saved log cannot be read", async () => {
+    const dom = mountDom();
+    const panel = setupTaskDebuggerPanel({
+      ...dom,
+      getTurns: () => [],
+      loadHistoryTurns: async () => {
+        throw new Error("no such session");
+      },
+      t,
+    });
+
+    panel.open();
+    await vi.waitFor(() =>
+      expect(dom.body.textContent).toContain("saved session log could not be read"),
+    );
+  });
+
+  it("drops the previous session's rebuilt turns when the session changes", async () => {
+    const dom = mountDom();
+    let loaded = [historyTurn(1, 0, 1_000, [step("tool", "first-session", 0, 1_000)])];
+    const panel = setupTaskDebuggerPanel({
+      ...dom,
+      getTurns: () => [],
+      loadHistoryTurns: async () => loaded,
+      t,
+    });
+
+    panel.open();
+    await vi.waitFor(() => expect(dom.body.textContent).toContain("first-session"));
+    panel.close();
+
+    panel.resetHistory();
+    loaded = [historyTurn(1, 0, 1_000, [step("tool", "second-session", 0, 1_000)])];
+    panel.open();
+    expect(dom.body.textContent).not.toContain("first-session");
+    await vi.waitFor(() => expect(dom.body.textContent).toContain("second-session"));
   });
 });
