@@ -122,7 +122,15 @@
     "copyFile": "复制文件路径",
     "copyId": "复制会话 ID",
     "copied": "已复制",
-    "copyFailed": "复制失败"
+    "copyFailed": "复制失败",
+    "aiTitle": "AI 分析",
+    "aiRun": "AI 分析",
+    "aiRerun": "重新分析",
+    "aiAnalyzing": "分析中…",
+    "aiHint": "让模型读取本次会话的运行记录，找出风险点、卡点和失败原因——而不只是耗时统计。",
+    "aiFailed": "分析失败。",
+    "aiNoTurns": "本次会话还没有可分析的内容。发送一条消息后再试。",
+    "aiBusy": "当前任务结束后可用"
   },
   "context": {
     "cached": "已缓存",
@@ -193,7 +201,8 @@
     "providerError": "模型请求失败。",
     "turnFiles": "本轮修改的文件（{count}）：",
     "responseTime": "响应耗时",
-    "subagentUnavailableOverSsh": "ACP 子代理（#claude、#codex 等）在本地运行，无法访问远程（SSH）工作区的文件，因此在此不可用。"
+    "subagentUnavailableOverSsh": "ACP 子代理（#claude、#codex 等）在本地运行，无法访问远程（SSH）工作区的文件，因此在此不可用。",
+    "sshProjectDisconnected": "该项目的 SSH 连接已断开，请先在下方重新连接再发送消息——重新连接成功之前，该项目下的其他会话也无法发送消息。"
   },
   "tools": {
     "copyOutput": "复制输出",
@@ -498,6 +507,7 @@
     "pinned": "置顶",
     "projects": "项目",
     "remoteWorkspace": "远程工作区",
+    "remoteWorkspaceDisconnected": "远程工作区 — SSH 连接已断开",
     "archived": "已归档",
     "unavailable": "不可用",
     "showMore": "显示更多",
@@ -793,6 +803,8 @@
       "summary": "{enabled} 个已启用 · {healthy} 个健康 · {issues} 个问题",
       "loadFailed": "加载提供者失败。",
       "toggleModels": "切换 {provider} 模型",
+      "searchModels": "搜索模型…",
+      "searchModelsFor": "搜索 {provider} 模型",
       "model": "模型",
       "selectAll": "选择全部 {provider} 模型",
       "deselectAll": "取消选择全部 {provider} 模型",
@@ -1343,9 +1355,6 @@
   },
   "taskDebugger": {
     "title": "任务分析",
-    "buttonTitle": "分析本次任务",
-    "buttonBusy": "任务结束后可用",
-    "close": "关闭任务分析",
     "scopeLast": "最近一次任务",
     "scopeSession": "整个会话",
     "copyReport": "复制报告",

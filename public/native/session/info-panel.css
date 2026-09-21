@@ -1,8 +1,8 @@
-/* ABOUTME: Info right-side panel — fixed workspace actions + scrollable session tree. */
-/* Ported from picot-v3 5dd2bb9. Layout contract (design 2026-08-21): the panel
-   is a vertical flex column with min-height:0; header and Workspace are
-   flex:0 0 auto so they never scroll away; only Session history scrolls
-   (flex:1, overflow-y:auto). */
+/* ABOUTME: Info right-side panel — fixed workspace header + task analysis and
+   session tree in one scroller. Layout contract (design 2026-08-21, revised):
+   the panel is a vertical flex column with min-height:0; the header and
+   Workspace are flex:0 0 auto so they never scroll away; everything below
+   (.info-panel-scroll) is the single scroll region. */
 
 .info-panel {
   display: flex;
@@ -61,12 +61,26 @@
   padding: 0 var(--space-4) var(--space-3);
 }
 
-/* ── Session history (scrolls) ─────────────────────────────────────────── */
+/* Session file + id: icon-only controls; the tooltip carries the value. */
+.session-info-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
 
-.info-panel-history {
+/* ── Scroll region (task analysis + session history) ───────────────────── */
+
+.info-panel-scroll {
   display: flex;
   flex: 1 1 auto;
   min-height: 0;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.info-panel-history {
+  display: flex;
+  flex: 0 0 auto;
   flex-direction: column;
 }
 
@@ -84,9 +98,7 @@
 }
 
 .info-panel-tree-scroll {
-  flex: 1 1 auto;
   min-height: 0;
-  overflow-y: auto;
   padding: 0 var(--space-2) var(--space-4) var(--space-2);
 }
 
@@ -159,6 +171,10 @@
 
 .info-panel-role.assistant {
   color: var(--accent);
+  /* The "✦" assistant glyph carries far less visual mass than the "●" user
+     bullet at the same font size; bump it one step so both markers read the
+     same size in the row. */
+  font-size: var(--font-size-md);
 }
 
 .info-panel-row.inactive .info-panel-role {

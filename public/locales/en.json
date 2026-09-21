@@ -122,7 +122,15 @@
     "copyFile": "Copy file path",
     "copyId": "Copy session ID",
     "copied": "Copied",
-    "copyFailed": "Copy failed"
+    "copyFailed": "Copy failed",
+    "aiTitle": "AI analysis",
+    "aiRun": "Analyze with AI",
+    "aiRerun": "Re-analyze",
+    "aiAnalyzing": "Analyzing…",
+    "aiHint": "Ask the model to read this session's run log and call out risk points, blockers, and failures -- not just timing.",
+    "aiFailed": "Analysis failed.",
+    "aiNoTurns": "Nothing to analyse in this session yet. Send a message and try again.",
+    "aiBusy": "Available when the current task finishes"
   },
   "context": {
     "cached": "Cached",
@@ -193,7 +201,8 @@
     "providerError": "The model request failed.",
     "turnFiles": "Files changed this turn ({count}):",
     "responseTime": "Response time",
-    "subagentUnavailableOverSsh": "ACP subagents (#claude, #codex, …) run locally and can't see a remote (SSH) workspace's files, so they're unavailable here."
+    "subagentUnavailableOverSsh": "ACP subagents (#claude, #codex, …) run locally and can't see a remote (SSH) workspace's files, so they're unavailable here.",
+    "sshProjectDisconnected": "This project's SSH connection is down. Reconnect below before sending another message — other sessions in this project are blocked too until it's back."
   },
   "tools": {
     "copyOutput": "Copy output",
@@ -498,6 +507,7 @@
     "pinned": "PINNED",
     "projects": "PROJECTS",
     "remoteWorkspace": "Remote workspace",
+    "remoteWorkspaceDisconnected": "Remote workspace — SSH connection is down",
     "archived": "Archived",
     "unavailable": "Unavailable",
     "showMore": "Show more",
@@ -793,6 +803,8 @@
       "summary": "{enabled} enabled · {healthy} healthy · {issues} issues",
       "loadFailed": "Failed to load providers.",
       "toggleModels": "Toggle {provider} models",
+      "searchModels": "Search models…",
+      "searchModelsFor": "Search {provider} models",
       "model": "Model",
       "selectAll": "Select all {provider} models",
       "deselectAll": "Deselect all {provider} models",
@@ -1343,9 +1355,6 @@
   },
   "taskDebugger": {
     "title": "Task analysis",
-    "buttonTitle": "Analyze this task",
-    "buttonBusy": "Available when the task finishes",
-    "close": "Close task analysis",
     "scopeLast": "Last task",
     "scopeSession": "Whole session",
     "copyReport": "Copy report",

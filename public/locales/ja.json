@@ -122,7 +122,15 @@
     "copyFile": "ファイルパスをコピー",
     "copyId": "セッション ID をコピー",
     "copied": "コピーしました",
-    "copyFailed": "コピーに失敗しました"
+    "copyFailed": "コピーに失敗しました",
+    "aiTitle": "AI分析",
+    "aiRun": "AIで分析",
+    "aiRerun": "再分析",
+    "aiAnalyzing": "分析中…",
+    "aiHint": "このセッションの実行ログをモデルに読ませ、所要時間の統計ではなくリスク・詰まった箇所・失敗の原因を指摘させます。",
+    "aiFailed": "分析に失敗しました。",
+    "aiNoTurns": "このセッションにはまだ分析できる内容がありません。メッセージを送ってから再試行してください。",
+    "aiBusy": "現在のタスクが終わると利用できます"
   },
   "context": {
     "cached": "キャッシュ済み",
@@ -193,7 +201,8 @@
     "providerError": "モデルへのリクエストに失敗しました。",
     "turnFiles": "このターンで変更されたファイル（{count}）:",
     "responseTime": "応答時間",
-    "subagentUnavailableOverSsh": "ACP サブエージェント（#claude、#codex など）はローカルで実行されるため、リモート（SSH）ワークスペースのファイルにアクセスできず、ここでは利用できません。"
+    "subagentUnavailableOverSsh": "ACP サブエージェント（#claude、#codex など）はローカルで実行されるため、リモート（SSH）ワークスペースのファイルにアクセスできず、ここでは利用できません。",
+    "sshProjectDisconnected": "このプロジェクトの SSH 接続が切断されています。下で再接続してからメッセージを送信してください — 再接続するまで、このプロジェクトの他のセッションでも送信できません。"
   },
   "tools": {
     "copyOutput": "出力をコピー",
@@ -498,6 +507,7 @@
     "pinned": "ピン留め",
     "projects": "プロジェクト",
     "remoteWorkspace": "リモートワークスペース",
+    "remoteWorkspaceDisconnected": "リモートワークスペース — SSH 接続が切断されています",
     "archived": "アーカイブ済み",
     "unavailable": "利用不可",
     "showMore": "もっと表示",
@@ -793,6 +803,8 @@
       "summary": "{enabled}個有効 · {healthy}個正常 · {issues}個の問題",
       "loadFailed": "プロバイダーの読み込みに失敗しました。",
       "toggleModels": "{provider}モデルを切り替え",
+      "searchModels": "モデルを検索…",
+      "searchModelsFor": "{provider}のモデルを検索",
       "model": "モデル",
       "selectAll": "{provider}のすべてのモデルを選択",
       "deselectAll": "{provider}のすべてのモデルを選択解除",
@@ -1343,9 +1355,6 @@
   },
   "taskDebugger": {
     "title": "タスク分析",
-    "buttonTitle": "このタスクを分析",
-    "buttonBusy": "タスク終了後に利用できます",
-    "close": "タスク分析を閉じる",
     "scopeLast": "直近のタスク",
     "scopeSession": "セッション全体",
     "copyReport": "レポートをコピー",

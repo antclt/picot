@@ -156,6 +156,7 @@
 /* Remote workspace badge: marks a workspace whose tools run over SSH, matching
    the header's SSH indicator so the two read as the same state. */
 .workspace-remote-badge {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -163,6 +164,25 @@
   line-height: 0;
   color: var(--accent);
   opacity: 0.75;
+}
+
+/* A dead SSH connection for this project: recolor the badge red and add a
+   small dot so the failure reads at a glance, without a whole extra icon. */
+.workspace-remote-badge--disconnected {
+  color: var(--error);
+  opacity: 1;
+}
+
+.workspace-remote-badge--disconnected::after {
+  content: "";
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--error);
+  border: 1px solid var(--bg-solid);
 }
 
 .project-count {

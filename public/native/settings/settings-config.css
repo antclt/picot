@@ -751,8 +751,8 @@
   display: flex;
   flex-direction: column;
   gap: 0;
-  max-height: 2400px;
-  overflow: hidden;
+  max-height: 640px;
+  overflow: scroll;
   opacity: 1;
   transition:
     max-height 0.2s var(--ease),
@@ -765,6 +765,16 @@
   opacity: 0;
   pointer-events: none;
   border-top-color: transparent;
+}
+
+.api-model-list-search {
+  margin: var(--space-2) var(--space-3) 0;
+  padding: var(--space-1-5) var(--space-2);
+  background: var(--bg-glass-strong, var(--bg-glass));
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
 }
 
 .api-model-check-visible {
@@ -787,6 +797,10 @@
   grid-template-columns: 14px minmax(0, 1fr) max-content max-content;
   align-items: center;
   column-gap: var(--space-2);
+}
+
+.api-model-row.api-model-row-filtered-out {
+  display: none;
 }
 
 .api-model-list-heading {

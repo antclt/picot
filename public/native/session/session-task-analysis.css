@@ -1,79 +1,87 @@
-/* ABOUTME: Task debugger dialog — timing split, findings, slowest steps, timeline. */
-/* The overlay/panel chrome comes from the shared `.ui-overlay` / `.ui-dialog`
-   primitives in design-system.css; only layout, the phase bar and the finding
-   severity colours live here. */
+/* ABOUTME: Info-panel task analysis — timing split, findings, steps, timeline.
+   Lives in the right rail, so every block is a single stacked column instead of
+   the dialog's wider multi-column layout. */
 
-.task-debugger-overlay {
-  z-index: 1000;
-}
-
-.task-debugger-overlay.hidden,
-.task-debugger-dialog.hidden {
-  display: none;
-}
-
-.task-debugger-dialog {
-  position: fixed;
-  top: 10vh;
-  left: 50%;
-  z-index: 1001;
+.session-analysis {
   display: flex;
-  width: min(720px, calc(100vw - var(--space-12)));
-  max-height: min(720px, 78vh);
+  flex: 0 0 auto;
   flex-direction: column;
-  overflow: hidden;
-  transform: translateX(-50%);
-  color: var(--text-primary);
-}
-
-.task-debugger-header {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-4) var(--space-5);
   border-bottom: 1px solid var(--border);
 }
 
-.task-debugger-title {
-  flex: 1;
-  min-width: 0;
-  margin: 0;
-  font-size: var(--font-size-md);
-  font-weight: 600;
+.session-analysis-head {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-4) var(--space-2);
 }
 
-.task-debugger-scope {
+.session-analysis-toggle {
   display: flex;
+  flex: 1;
+  min-width: 0;
   align-items: center;
+  gap: var(--space-1-5);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.session-analysis-toggle:hover {
+  color: var(--accent-text);
+}
+
+.session-analysis-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+.session-analysis-caret {
+  width: 12px;
+  flex: 0 0 12px;
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.session-analysis-scope {
+  display: flex;
+  flex-wrap: wrap;
   gap: var(--space-3);
+  padding: 0 var(--space-4) var(--space-3);
   font-size: var(--font-size-sm);
   color: var(--text-secondary);
 }
 
-.task-debugger-scope label {
+.session-analysis-scope label {
   display: flex;
   align-items: center;
   gap: var(--space-1);
   cursor: pointer;
 }
 
-.task-debugger-body {
+.session-analysis-body {
   display: flex;
-  flex: 1 1 auto;
-  min-height: 0;
   flex-direction: column;
-  gap: var(--space-5);
-  overflow-y: auto;
-  padding: var(--space-5);
+  gap: var(--space-4);
+  padding: 0 var(--space-4) var(--space-4);
 }
 
-.task-debugger-section {
+.session-analysis-section {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
 }
 
-.task-debugger-heading {
+.session-analysis-heading {
   margin: 0;
   font-size: var(--font-size-sm);
   font-weight: 600;
@@ -82,14 +90,14 @@
   color: var(--text-secondary);
 }
 
-.task-debugger-empty {
+.session-analysis-empty {
   margin: 0;
   font-size: var(--font-size-sm);
   color: var(--text-secondary);
 }
 
 /* Provenance footnote: rebuilt-from-log spans are thinner than watched ones. */
-.task-debugger-note {
+.session-analysis-note {
   margin: 0;
   padding-top: var(--space-3);
   border-top: 1px solid var(--border);
@@ -99,20 +107,20 @@
 
 /* ── Summary ───────────────────────────────────────────────────────────── */
 
-.task-debugger-summary {
+.session-analysis-summary {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
 }
 
-.task-debugger-headline {
+.session-analysis-headline {
   display: flex;
   align-items: baseline;
-  gap: var(--space-3);
-  font-size: var(--font-size-xl);
+  gap: var(--space-2);
+  font-size: var(--font-size-lg);
 }
 
-.task-debugger-status {
+.session-analysis-status {
   padding: var(--space-0-5) var(--space-2);
   border-radius: var(--radius-pill);
   background: var(--bg-glass-strong);
@@ -123,44 +131,55 @@
   color: var(--text-secondary);
 }
 
-.task-debugger-status--failed {
+.session-analysis-status--failed {
   background: color-mix(in srgb, var(--error) 18%, transparent);
   color: var(--error);
 }
 
-.task-debugger-status--aborted,
-.task-debugger-status--unknown,
-.task-debugger-status--running {
+.session-analysis-status--aborted,
+.session-analysis-status--unknown,
+.session-analysis-status--running {
   background: color-mix(in srgb, var(--warning) 18%, transparent);
   color: var(--warning);
 }
 
-.task-debugger-status--completed {
+.session-analysis-status--completed {
   background: color-mix(in srgb, var(--success) 16%, transparent);
   color: var(--success);
 }
 
-.task-debugger-stats {
+.session-analysis-stats {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--space-2);
   margin: 0;
 }
 
-.task-debugger-stats dt {
-  font-size: var(--font-size-sm);
-  color: var(--text-secondary);
+/* Each stat is one grid cell so the label always stacks directly above its
+   own value. */
+.session-analysis-stat {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-0-5);
+  min-width: 0;
 }
 
-.task-debugger-stats dd {
-  margin: 0;
+.session-analysis-stat-label {
+  overflow: hidden;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-analysis-stat-value {
   font-size: var(--font-size-md);
   font-variant-numeric: tabular-nums;
 }
 
 /* ── Phase bar ─────────────────────────────────────────────────────────── */
 
-.task-debugger-bar {
+.session-analysis-bar {
   display: flex;
   overflow: hidden;
   height: var(--space-3);
@@ -168,76 +187,82 @@
   background: var(--bg-glass);
 }
 
-.task-debugger-bar-segment {
+.session-analysis-bar-segment {
   flex-basis: 0;
   min-width: 2px;
 }
 
-.task-debugger-bar-empty {
+.session-analysis-bar-empty {
   flex: 1;
   background: var(--bg-glass);
 }
 
-.task-debugger-bar-segment--model {
+.session-analysis-bar-segment--model {
   background: var(--thinking-accent-text);
 }
 
-.task-debugger-bar-segment--tool {
+.session-analysis-bar-segment--tool {
   background: var(--tool-accent-text);
 }
 
-.task-debugger-bar-segment--compaction {
+.session-analysis-bar-segment--compaction {
   background: var(--warning);
 }
 
-.task-debugger-bar-segment--idle {
+.session-analysis-bar-segment--idle {
   background: var(--text-ghost);
 }
 
-.task-debugger-legend {
+.session-analysis-legend {
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-3);
+  flex-direction: column;
+  gap: var(--space-1);
   margin: 0;
   padding: 0;
   list-style: none;
   font-size: var(--font-size-sm);
 }
 
-.task-debugger-legend-item {
+.session-analysis-legend-item {
   display: flex;
   align-items: center;
   gap: var(--space-1-5);
 }
 
-.task-debugger-legend-item::before {
+.session-analysis-legend-item::before {
   content: "";
+  flex: 0 0 auto;
   width: var(--space-2);
   height: var(--space-2);
   border-radius: var(--radius-pill);
   background: var(--text-ghost);
 }
 
-.task-debugger-legend-item--model::before {
+.session-analysis-legend-item--model::before {
   background: var(--thinking-accent-text);
 }
 
-.task-debugger-legend-item--tool::before {
+.session-analysis-legend-item--tool::before {
   background: var(--tool-accent-text);
 }
 
-.task-debugger-legend-item--compaction::before {
+.session-analysis-legend-item--compaction::before {
   background: var(--warning);
 }
 
-.task-debugger-legend-value {
+.session-analysis-legend-label {
+  flex: 1;
+  min-width: 0;
+}
+
+.session-analysis-legend-value {
   color: var(--text-secondary);
   font-variant-numeric: tabular-nums;
 }
 
 /* ── Findings ──────────────────────────────────────────────────────────── */
 
-.task-debugger-findings {
+.session-analysis-findings {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
@@ -246,55 +271,41 @@
   list-style: none;
 }
 
-.task-debugger-finding {
+.session-analysis-finding {
   display: flex;
-  align-items: flex-start;
-  gap: var(--space-2);
+  flex-direction: column;
+  gap: var(--space-0-5);
   padding: var(--space-2) var(--space-3);
   border: 1px solid var(--border);
-  border-left-width: var(--space-0-5);
   border-radius: var(--radius-sm);
   background: var(--bg-glass);
   font-size: var(--font-size-sm);
   line-height: 1.5;
 }
 
-.task-debugger-finding--critical {
-  border-left-color: var(--error);
-}
-
-.task-debugger-finding--warning {
-  border-left-color: var(--warning);
-}
-
-.task-debugger-finding--info {
-  border-left-color: var(--tool-accent);
-}
-
-.task-debugger-finding-severity {
-  flex: 0 0 auto;
+.session-analysis-finding-severity {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--text-secondary);
 }
 
-.task-debugger-finding--critical .task-debugger-finding-severity {
+.session-analysis-finding--critical .session-analysis-finding-severity {
   color: var(--error);
 }
 
-.task-debugger-finding--warning .task-debugger-finding-severity {
+.session-analysis-finding--warning .session-analysis-finding-severity {
   color: var(--warning);
 }
 
-.task-debugger-finding-text {
+.session-analysis-finding-text {
   min-width: 0;
 }
 
 /* ── Steps & timeline ──────────────────────────────────────────────────── */
 
-.task-debugger-steps,
-.task-debugger-timeline {
+.session-analysis-steps,
+.session-analysis-timeline {
   display: flex;
   flex-direction: column;
   gap: var(--space-1-5);
@@ -303,7 +314,7 @@
   list-style: none;
 }
 
-.task-debugger-step {
+.session-analysis-step {
   padding: var(--space-2) var(--space-3);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -311,45 +322,39 @@
   font-size: var(--font-size-sm);
 }
 
-.task-debugger-step--error,
-.task-debugger-step--unfinished {
+.session-analysis-step--error,
+.session-analysis-step--unfinished {
   border-color: color-mix(in srgb, var(--error) 40%, var(--border));
 }
 
-.task-debugger-step-head {
+.session-analysis-step-head {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: var(--space-3);
+  gap: var(--space-2);
 }
 
-.task-debugger-step-label {
+.session-analysis-step-label {
+  overflow: hidden;
   font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.task-debugger-step-duration {
+.session-analysis-step-duration {
   flex: 0 0 auto;
   color: var(--text-secondary);
   font-variant-numeric: tabular-nums;
 }
 
-.task-debugger-step-detail {
+.session-analysis-step-detail {
   overflow: hidden;
   color: var(--text-secondary);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.task-debugger-step-error {
+.session-analysis-step-error {
   color: var(--error);
   overflow-wrap: anywhere;
-}
-
-.task-debugger-footer {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: var(--space-2);
-  padding: var(--space-3) var(--space-5);
-  border-top: 1px solid var(--border);
 }

@@ -3,6 +3,7 @@
 
 import { applyTranslations, onLocaleChange, t } from "../../i18n.js";
 import { bindDialogEscape } from "../../ui/dialog-escape.js";
+import { markProjectConnected } from "./project-connection-status.js";
 import {
   configAvailable,
   deleteSshHost,
@@ -166,6 +167,11 @@ export function setupRemoteWorkspaceDialog({ buttonEl, onError } = {}) {
   // Alias being edited in the manual fields. Renaming would orphan every
   // project bound to the old alias, so the name is fixed once a host exists.
   let editingAlias = "";
+  // Set by `open({ projectPath })` when this dialog is reopening a specific
+  // project's dead connection (rather than configuring a fresh one). A
+  // successful `connect()` then clears that project's disconnected mark so
+  // every session of it can send again — see project-connection-status.js.
+  let reconnectingProjectPath = "";
   // The entry the manual fields were last filled from. When it carries a
   // `configAlias` and the user has not touched the connection fields since,
   // the connection is still exactly that `~/.ssh/config` block and we let ssh
@@ -487,6 +493,7 @@ export function setupRemoteWorkspaceDialog({ buttonEl, onError } = {}) {
       // The password rides along out-of-band: Rust parks it in memory for the
       // window that is about to open, and nothing writes it to disk.
       await invoke("open_remote_workspace", { connection, password: password() || null });
+      if (reconnectingProjectPath) markProjectConnected(reconnectingProjectPath);
       close();
     } catch (error) {
       setStatus(messageFromError(error), "error");
@@ -570,8 +577,12 @@ export function setupRemoteWorkspaceDialog({ buttonEl, onError } = {}) {
    * @param {string} [options.statusMessage] shown as an error banner once the
    *   dialog is ready, instead of the blank status — used when something
    *   (rather than the user) triggered the reopen, e.g. an auth failure.
+   * @param {string} [options.projectPath] the project this reopen is for, so
+   *   a successful connect can clear its disconnected mark. Omit when opening
+   *   on a fresh (not previously failing) binding.
    */
-  function open({ prefill, statusMessage } = {}) {
+  function open({ prefill, statusMessage, projectPath = "" } = {}) {
+    reconnectingProjectPath = projectPath;
     ensureDom();
     dom.overlay.classList.remove("hidden");
     dom.dialog.classList.remove("hidden");

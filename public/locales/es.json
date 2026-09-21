@@ -122,7 +122,15 @@
     "copyFile": "Copiar ruta del archivo",
     "copyId": "Copiar ID de sesión",
     "copied": "Copiado",
-    "copyFailed": "Error al copiar"
+    "copyFailed": "Error al copiar",
+    "aiTitle": "Análisis con IA",
+    "aiRun": "Analizar con IA",
+    "aiRerun": "Volver a analizar",
+    "aiAnalyzing": "Analizando…",
+    "aiHint": "Pide al modelo que lea el registro de esta sesión y señale riesgos, bloqueos y fallos, no solo los tiempos.",
+    "aiFailed": "El análisis falló.",
+    "aiNoTurns": "Aún no hay nada que analizar en esta sesión. Envía un mensaje e inténtalo de nuevo.",
+    "aiBusy": "Disponible cuando termine la tarea actual"
   },
   "context": {
     "cached": "En caché",
@@ -193,7 +201,8 @@
     "providerError": "La solicitud al modelo falló.",
     "turnFiles": "Archivos modificados en este turno ({count}):",
     "responseTime": "Tiempo de respuesta",
-    "subagentUnavailableOverSsh": "Los subagentes ACP (#claude, #codex, …) se ejecutan localmente y no pueden ver los archivos de un espacio de trabajo remoto (SSH), por lo que no están disponibles aquí."
+    "subagentUnavailableOverSsh": "Los subagentes ACP (#claude, #codex, …) se ejecutan localmente y no pueden ver los archivos de un espacio de trabajo remoto (SSH), por lo que no están disponibles aquí.",
+    "sshProjectDisconnected": "La conexión SSH de este proyecto está caída. Reconéctate abajo antes de enviar otro mensaje — las demás sesiones de este proyecto también están bloqueadas hasta que vuelva."
   },
   "tools": {
     "copyOutput": "Copiar salida",
@@ -498,6 +507,7 @@
     "pinned": "FIJADO",
     "projects": "PROYECTOS",
     "remoteWorkspace": "Espacio remoto",
+    "remoteWorkspaceDisconnected": "Espacio remoto — la conexión SSH está caída",
     "archived": "Archivado",
     "unavailable": "No disponible",
     "showMore": "Mostrar más",
@@ -793,6 +803,8 @@
       "summary": "{enabled} habilitados · {healthy} saludables · {issues} problemas",
       "loadFailed": "Error al cargar proveedores.",
       "toggleModels": "Alternar modelos de {provider}",
+      "searchModels": "Buscar modelos…",
+      "searchModelsFor": "Buscar modelos de {provider}",
       "model": "Modelo",
       "selectAll": "Seleccionar todos los modelos de {provider}",
       "deselectAll": "Deseleccionar todos los modelos de {provider}",
@@ -1343,9 +1355,6 @@
   },
   "taskDebugger": {
     "title": "Análisis de la tarea",
-    "buttonTitle": "Analizar esta tarea",
-    "buttonBusy": "Disponible cuando termine la tarea",
-    "close": "Cerrar el análisis de la tarea",
     "scopeLast": "Última tarea",
     "scopeSession": "Toda la sesión",
     "copyReport": "Copiar informe",

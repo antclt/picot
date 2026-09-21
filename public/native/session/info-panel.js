@@ -4,14 +4,17 @@
 /**
  * Info panel — ported from picot-v3 (5dd2bb9) for the 2026-08-21 design.
  *
- * Two independent sections:
+ * Fixed header plus one scroller:
  * 1. **Workspace** (fixed, never scrolls away): workspace path with an icon-only
- *    copy control, and compact Session Info (file basename + session id; copy
- *    and hover still expose the full path / id).
+ *    copy control, and compact Session Info. Session file + id are abstracted
+ *    to one icon each -- clicking the icon copies the value, the tooltip
+ *    reveals it.
  *    Open-in-app lives only in the header — it is not duplicated here.
- * 2. **Session history** (own vertical scroll): the session tree projected by
- *    `session-tree.js` from the session's entries + leafId (host
- *    `read_session_tree` snapshot).
+ * 2. **Scroll region**: the injected task analysis section (timing/failure
+ *    report plus the optional AI block, built by `session-task-analysis.js`)
+ *    and the session history tree projected by `session-tree.js` from the
+ *    session's entries + leafId (host `read_session_tree` snapshot). Both
+ *    scroll together rather than competing for height in the rail.
  *
  * Interaction contract (design):
  * - Clicking an ACTIVE node scrolls the main chat to the rendered message
@@ -39,15 +42,19 @@ export class InfoPanel {
    *   onNavigateLeaf?: (entryId: string) => void,
    *   isStreaming?: () => boolean,
    *   writeText?: (text: string) => Promise<void> | void,
+   *   taskAnalysis?: { element: HTMLElement, resetHistory: Function } | null,
    * }} options
    */
-  constructor({ panel, actions, t, onNavigateLeaf, isStreaming, writeText }) {
+  constructor({ panel, actions, t, onNavigateLeaf, isStreaming, writeText, taskAnalysis }) {
     this.panel = panel;
     this.actions = actions;
     this.t = t;
     this.onNavigateLeaf = onNavigateLeaf || (() => {});
     this.isStreaming = isStreaming || (() => false);
     this.writeText = writeText || ((text) => navigator.clipboard?.writeText(text));
+    // Built by the composition root: the section owns its own turn sources and
+    // state, this view only decides where it sits in the rail.
+    this.taskAnalysis = taskAnalysis || null;
     this.workspacePath = "";
     this.sessionFilePath = "";
     this.sessionId = "";
@@ -72,11 +79,18 @@ export class InfoPanel {
     this.workspaceSection = document.createElement("section");
     this.workspaceSection.className = "info-panel-workspace";
 
+    // One scroller for everything below the fixed workspace header: the task
+    // analysis and the session tree scroll together instead of fighting for
+    // height in a rail this narrow.
+    this.scrollEl = document.createElement("div");
+    this.scrollEl.className = "info-panel-scroll";
+
     this.historySection = document.createElement("section");
     this.historySection.className = "info-panel-history";
     this.historySection.setAttribute("aria-labelledby", "info-panel-history-heading");
 
-    p.append(this.workspaceSection, this.historySection);
+    this.scrollEl.append(...[this.taskAnalysis?.element, this.historySection].filter(Boolean));
+    p.append(this.workspaceSection, this.scrollEl);
     this._renderWorkspace();
     this._renderHistory();
   }
@@ -126,77 +140,78 @@ export class InfoPanel {
     heading.dataset.i18n = "sessionInfo.heading";
     heading.textContent = t("sessionInfo.heading");
 
-    const list = document.createElement("dl");
-    list.className = "session-info-list";
+    // Session file + id are abstracted to one icon each: the value is noise
+    // in a narrow rail, the only action anyone takes on it is copying it, so
+    // the icon is the control and the tooltip carries the value.
+    const actions = document.createElement("div");
+    actions.className = "session-info-actions";
+    actions.setAttribute("role", "group");
+    actions.setAttribute("aria-label", t("sessionInfo.heading"));
 
-    const fileRow = this._sessionInfoRow({
+    this.fileButton = this._sessionInfoButton({
       labelKey: "sessionInfo.file",
       copyKey: "sessionInfo.copyFile",
       field: "file",
+      icon: "file",
     });
-    this.fileValue = fileRow.value;
-    const idRow = this._sessionInfoRow({
+    this.idButton = this._sessionInfoButton({
       labelKey: "sessionInfo.id",
       copyKey: "sessionInfo.copyId",
       field: "id",
+      icon: "hash",
     });
-    this.idValue = idRow.value;
+    actions.append(this.fileButton, this.idButton);
 
-    list.append(fileRow.row, idRow.row);
-    wrap.append(heading, list);
+    wrap.append(heading, actions);
     section.append(wrap);
     this._paintSessionInfo();
   }
 
-  _sessionInfoRow({ labelKey, copyKey, field }) {
-    const row = document.createElement("div");
-    row.className = "session-info-row";
-
-    const dt = document.createElement("dt");
-    dt.dataset.i18n = labelKey;
-    dt.textContent = this.t(labelKey);
-
-    const dd = document.createElement("dd");
-    const value = document.createElement("span");
-    value.className = "session-info-value";
-    value.dataset.sessionField = field;
-
-    const copy = document.createElement("button");
-    copy.type = "button";
-    copy.className = "ui-icon-button ui-icon-button--xs ui-icon-button--ghost session-info-copy";
-    copy.dataset.copySessionField = field;
-    copy.title = this.t(copyKey);
-    copy.setAttribute("aria-label", this.t(copyKey));
-    copy.append(createIcon("clipboard", { size: 14 }));
-    copy.addEventListener("click", () => {
-      const raw = field === "file" ? this.sessionFilePath : this.sessionId;
-      void this._copySessionField(copy, raw || value.textContent, copyKey);
+  _sessionInfoButton({ labelKey, copyKey, field, icon }) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "ui-icon-button ui-icon-button--sm ui-icon-button--ghost session-info-copy";
+    button.dataset.copySessionField = field;
+    button.dataset.copyLabelKey = labelKey;
+    button.dataset.copyActionKey = copyKey;
+    button.append(createIcon(icon, { size: 15 }));
+    button.addEventListener("click", () => {
+      void this._copySessionField(button);
     });
-
-    dd.append(value, copy);
-    row.append(dt, dd);
-    return { row, value };
+    return button;
   }
 
   _paintSessionInfo() {
-    if (this.fileValue) {
-      const file = describeSessionFile(this.sessionFilePath, this.t("sessionInfo.inMemory"));
-      this.fileValue.textContent = file.text;
-      if (file.title) this.fileValue.setAttribute("title", file.title);
-      else this.fileValue.removeAttribute("title");
-    }
-    if (this.idValue) {
-      const id = describeSessionId(this.sessionId, this.t("sessionInfo.unavailable"));
-      this.idValue.textContent = id.text;
-      if (id.title) this.idValue.setAttribute("title", id.title);
-      else this.idValue.removeAttribute("title");
-    }
+    const t = this.t;
+    const file = describeSessionFile(this.sessionFilePath, t("sessionInfo.inMemory"));
+    const id = describeSessionId(this.sessionId, t("sessionInfo.unavailable"));
+    this._paintSessionButton(this.fileButton, {
+      labelKey: "sessionInfo.file",
+      copyKey: "sessionInfo.copyFile",
+      description: file.title || file.text,
+      value: file.copyValue,
+    });
+    this._paintSessionButton(this.idButton, {
+      labelKey: "sessionInfo.id",
+      copyKey: "sessionInfo.copyId",
+      description: id.text,
+      value: id.copyValue,
+    });
   }
 
-  async _copySessionField(button, value, defaultLabelKey) {
-    const defaultLabel = this.t(defaultLabelKey);
+  _paintSessionButton(button, { labelKey, copyKey, description, value }) {
+    if (!button) return;
+    button.dataset.copyValue = value;
+    const label = `${this.t(labelKey)}: ${description} · ${this.t(copyKey)}`;
+    button.title = label;
+    button.setAttribute("aria-label", label);
+    button._defaultLabel = label;
+  }
+
+  async _copySessionField(button) {
+    const defaultLabel = button._defaultLabel || this.t(button.dataset.copyActionKey);
     try {
-      const result = this.writeText?.(value);
+      const result = this.writeText?.(button.dataset.copyValue || "");
       if (!result) throw new Error("Clipboard unavailable");
       await result;
       button.title = this.t("sessionInfo.copied");
@@ -237,8 +252,11 @@ export class InfoPanel {
 
   /** Update Session Info (jsonl file path + session id). */
   updateSessionInfo({ filePath, sessionId } = {}) {
+    const changed = this.sessionId !== (sessionId || "");
     this.sessionFilePath = filePath || "";
     this.sessionId = sessionId || "";
+    // The task analysis describes the session that was active when it ran.
+    if (changed) this.taskAnalysis?.resetHistory();
     this._paintSessionInfo();
   }
 

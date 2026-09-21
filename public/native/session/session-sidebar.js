@@ -10,6 +10,10 @@ import { isSuperAgentEnabled } from "../../super-agent/settings.js";
 import { bindDialogEscape } from "../../ui/dialog-escape.js";
 import { createLoadingPlaceholder } from "../../ui/loading-placeholder.js";
 import { basenameLocalPath } from "../../workspace/path-utils.js";
+import {
+  isProjectDisconnected,
+  subscribeProjectConnectionStatus,
+} from "../workspace/project-connection-status.js";
 import { randomId } from "../utils/random-id.js";
 import { createPinnedItemsStore, migrateFavourites, startPinnedItemsSync } from "./pinned-items.js";
 
@@ -292,6 +296,11 @@ export class SessionSidebar {
     }
     this._unsubscribePinned = this.pinnedStore.subscribe(() => this.render());
     this._stopPinnedSync = startPinnedItemsSync({});
+    // A project's SSH connection can go down (or come back) from any of its
+    // sessions' own pi processes, not just the one this sidebar is currently
+    // showing — re-render whenever that shared status changes so the badge
+    // stays in sync. See project-connection-status.js.
+    this._unsubscribeConnectionStatus = subscribeProjectConnectionStatus(() => this.render());
 
     document.addEventListener("click", () => this.closeContextMenu());
   }
@@ -1101,6 +1110,7 @@ export class SessionSidebar {
             folderName: ws?.folderName || t("sidebar.unavailable"),
             workspacePath: ws?.path || "",
             isRemote: Boolean(pinned.isRemote),
+            isDisconnected: isProjectDisconnected(ws?.path),
             sessionCount: pinned.sessions.length,
             expanded: true,
             onNewChat: canCreateSession
@@ -1238,7 +1248,9 @@ export class SessionSidebar {
     });
 
     if (project.isRemote) {
-      header.querySelector(".folder-icon")?.replaceWith(createRemoteBadge());
+      header
+        .querySelector(".folder-icon")
+        ?.replaceWith(createRemoteBadge({ disconnected: isProjectDisconnected(project.path) }));
     }
 
     const moreActionsEl = header.querySelector(".workspace-more-actions-btn");
@@ -1564,6 +1576,11 @@ export class SessionSidebar {
       this._stopPinnedSync?.();
     } catch (error) {
       console.error("[Sidebar] Pin sync stop failed:", error);
+    }
+    try {
+      this._unsubscribeConnectionStatus?.();
+    } catch (error) {
+      console.error("[Sidebar] Connection-status unsubscribe failed:", error);
     }
     try {
       this.pinnedStore?.destroy?.();

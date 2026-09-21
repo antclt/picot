@@ -60,6 +60,12 @@ impl NativeLaunchSpec {
             ("PATH".into(), self.path_env.clone()),
             ("PI_STUDIO_PI_VERSION".into(), self.pi_version.clone()),
         ]);
+        // Dev-only signal for extensions (e.g. picot-config's model-load
+        // perf tracing): only `cargo tauri dev` / debug builds set this, so
+        // a release install never writes perf logs to disk.
+        if cfg!(debug_assertions) {
+            environment.insert("PICOT_DEV".into(), "1".into());
+        }
         // A remote workspace opened with an SSH password: hand it to the pi
         // process that will actually run the SSH calls. Injecting it here
         // rather than pushing it in from the WebView means it is in place

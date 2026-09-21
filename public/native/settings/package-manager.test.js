@@ -13,6 +13,7 @@ function renderManagerDom() {
           </div>
           <div id="pkg-manager-detail" class="pkg-manager-detail"></div>
         </div>
+        <div id="pkg-manager-banner" class="pkg-manager-banner"></div>
         <div id="pkg-manager-footer" class="pkg-manager-footer"></div>
       </div>
       <div class="settings-section" id="pkg-browse-section" hidden></div>
@@ -285,7 +286,7 @@ describe("setupPackageManager", () => {
 
     // The list survives a failed check; a notice explains why buttons are disabled.
     expect(sidebarRows()).toHaveLength(1);
-    expect(document.getElementById("pkg-manager-footer").textContent).toContain(
+    expect(document.getElementById("pkg-manager-banner").textContent).toContain(
       t("extensions.checkUpdatesFailed"),
     );
   });
@@ -315,7 +316,7 @@ describe("setupPackageManager", () => {
       expect(sidebarRows()[0].querySelector(".pkg-manager-update-badge")).toBeNull();
       expect(sidebarRows()[1].querySelector(".pkg-manager-update-badge")).toBeTruthy();
     });
-    expect(document.getElementById("pkg-manager-footer").textContent).toContain(
+    expect(document.getElementById("pkg-manager-banner").textContent).toContain(
       t("extensions.updatedAllWithFailures", { count: 1, failed: 1 }),
     );
   });

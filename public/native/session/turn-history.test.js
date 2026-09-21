@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { analyzeTurns } from "./turn-analysis.js";
-import { activeChain, buildTurnsFromEntries } from "./turn-history.js";
+import { activeChain, buildTurnsFromEntries, mergeTurnSources } from "./turn-history.js";
 
 const T0 = Date.parse("2026-09-16T10:00:00.000Z");
 const iso = (offsetMs) => new Date(T0 + offsetMs).toISOString();
@@ -217,5 +217,37 @@ describe("turn history rebuild", () => {
   it("returns nothing for a log with no messages", () => {
     expect(buildTurnsFromEntries([])).toEqual([]);
     expect(buildTurnsFromEntries(null)).toEqual([]);
+  });
+});
+
+describe("mergeTurnSources", () => {
+  const live = (startedAt, id = "live") => ({ id, startedAt, endedAt: startedAt + 100 });
+  const history = (startedAt, endedAt, id = `h-${startedAt}`) => ({
+    id,
+    startedAt,
+    endedAt,
+  });
+
+  it("returns history when the recorder watched nothing", () => {
+    const older = [history(0, 100)];
+    expect(mergeTurnSources(older, [])).toEqual(older);
+    expect(mergeTurnSources([], [])).toEqual([]);
+  });
+
+  it("returns live turns when there is no rebuilt history", () => {
+    const watched = [live(100)];
+    expect(mergeTurnSources([], watched)).toEqual(watched);
+  });
+
+  it("keeps only the history older than live coverage begins", () => {
+    const rebuilt = [history(0, 1_000, "old"), history(100_000, 101_000, "overlap")];
+    const watched = [live(100_000, "live")];
+    expect(mergeTurnSources(rebuilt, watched).map((turn) => turn.id)).toEqual(["old", "live"]);
+  });
+
+  it("treats a missing endedAt as the turn's start when deciding overlap", () => {
+    const rebuilt = [history(500, undefined, "no-end")];
+    const watched = [live(1_000, "live")];
+    expect(mergeTurnSources(rebuilt, watched).map((turn) => turn.id)).toEqual(["no-end", "live"]);
   });
 });

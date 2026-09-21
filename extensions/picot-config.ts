@@ -223,6 +223,28 @@ const CHAT_WORKER_STATUS_DIR = path.join(PI_AGENT_ROOT, "chat", "worker-status")
 const SUPER_AGENT_TASKS_PATH = path.join(PI_AGENT_ROOT, "super-agent", "tasks.json");
 const PISTUDIO_INSTANCES_DIR = path.join(os.homedir(), ".pi", "pistudio-instances");
 const PROJECT_CONFIG_DIR_NAME = ".pi";
+const MODEL_LOAD_LOG_PATH = path.join(PI_AGENT_ROOT, "logs", "model-load.log");
+
+// Dev-only tracing: native_pi_manager.rs only sets PICOT_DEV when spawning
+// under `cargo tauri dev` / a debug build, so a release install never writes
+// this file — no perf-log cleanup story needed for shipped Picot.
+const MODEL_LOAD_TRACING_ENABLED = process.env.PICOT_DEV === "1";
+
+/**
+ * Appends one JSON line to `model-load.log` for offline analysis of model
+ * catalog load timing (frontend round trip + backend registry cost). Best
+ * effort: a logging failure must never break the config op it's attached to.
+ */
+function logModelLoadEvent(event: string, fields: Record<string, unknown> = {}): void {
+  if (!MODEL_LOAD_TRACING_ENABLED) return;
+  try {
+    fs.mkdirSync(path.dirname(MODEL_LOAD_LOG_PATH), { recursive: true });
+    const line = `${JSON.stringify({ ts: new Date().toISOString(), event, ...fields })}\n`;
+    fs.appendFileSync(MODEL_LOAD_LOG_PATH, line, "utf8");
+  } catch {
+    // Best-effort only — never let logging break the caller.
+  }
+}
 const THINKING_LEVELS = new Set<ThinkingLevel>([
   "off",
   "minimal",
@@ -343,8 +365,19 @@ class ModelPreferencesStore {
 }
 
 async function buildModelCatalog(registry: CatalogRegistry, preferences: ModelPreferencesStore) {
+  const startedAt = performance.now();
   const allModels = registry.getAll();
+  const getAllMs = performance.now() - startedAt;
   const availableModels = await registry.getAvailable();
+  const getAvailableMs = performance.now() - startedAt - getAllMs;
+  logModelLoadEvent("catalog_built", {
+    source: "backend",
+    getAllMs: Math.round(getAllMs),
+    getAvailableMs: Math.round(getAvailableMs),
+    totalMs: Math.round(performance.now() - startedAt),
+    modelCount: allModels.length,
+    availableCount: availableModels.length,
+  });
   const availableKeys = new Set(
     availableModels
       .filter((model) => model.provider && model.id)
@@ -1003,7 +1036,10 @@ export async function handlePicotConfig(
   const preferences = new ModelPreferencesStore();
 
   const requireRegistry = (): CatalogRegistry => {
-    if (!registry) throw new Error("Model registry not ready yet — try again in a moment.");
+    if (!registry) {
+      logModelLoadEvent("registry_not_ready", { source: "backend", op });
+      throw new Error("Model registry not ready yet — try again in a moment.");
+    }
     return registry;
   };
 
@@ -1175,8 +1211,23 @@ export async function handlePicotConfig(
         return { ok: true, data: { title } };
       }
       case "list_model_catalog": {
+        const handlerStartedAt = performance.now();
         const catalog = await buildModelCatalog(requireRegistry(), preferences);
+        logModelLoadEvent("list_model_catalog_handled", {
+          source: "backend",
+          totalMs: Math.round(performance.now() - handlerStartedAt),
+        });
         return { ok: true, data: catalog };
+      }
+
+      // Sink for frontend-measured perf events (see [MODEL-LOAD] tracing in
+      // public/native/settings/models-page.js) so both ends of the model
+      // catalog round trip land in the same local log file for analysis.
+      case "log_client_perf": {
+        const event = asString(params.event) || "client_event";
+        const { event: _event, ...fields } = params;
+        logModelLoadEvent(event, { source: "frontend", ...fields });
+        return { ok: true };
       }
 
       case "set_model_visibility": {

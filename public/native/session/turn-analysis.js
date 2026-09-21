@@ -306,6 +306,10 @@ export function analyzeTurns(
     totals,
     phases,
     slowest,
+    // Lets the panel skip the "slowest steps" section when it would be a
+    // verbatim re-render of every row already in the step timeline (ranking
+    // only earns its own section once it actually filters something out).
+    totalSteps: steps.length,
     bottleneck,
     unfinished,
     failures,

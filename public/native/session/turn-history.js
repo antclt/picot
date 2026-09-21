@@ -306,3 +306,29 @@ export function buildTurnsFromEntries(
   // Same window as the live recorder: the most recent turns, oldest first.
   return turns.slice(-maxTurns);
 }
+
+/**
+ * Live spans plus history spans, with live winning wherever the two overlap.
+ *
+ * The live recorder only ever covers a suffix of the session -- everything
+ * since this window attached -- and it saw those turns first-hand, including
+ * compaction and spans the log never records. So history is kept only up to
+ * the point live coverage begins; past that the two would double-count the
+ * same work.
+ *
+ * @param {Array<object>} historyTurns - turns rebuilt from the saved log.
+ * @param {Array<object>} liveTurns - turns the recorder watched live.
+ * @returns {Array<object>} chronological turns.
+ */
+export function mergeTurnSources(historyTurns, liveTurns) {
+  const live = (liveTurns ?? []).filter(Boolean);
+  const history = (historyTurns ?? []).filter(Boolean);
+  if (!live.length) return history;
+  if (!history.length) return live;
+  const liveFrom = live.reduce(
+    (earliest, turn) => Math.min(earliest, Number(turn.startedAt) || Number.POSITIVE_INFINITY),
+    Number.POSITIVE_INFINITY,
+  );
+  const older = history.filter((turn) => (turn.endedAt ?? turn.startedAt) < liveFrom);
+  return [...older, ...live];
+}

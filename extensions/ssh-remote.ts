@@ -58,7 +58,7 @@ export type SshConfigHost = SshHostEntry & { alias: string };
 
 export const DEFAULT_SSH_REMOTE_SETTINGS: SshRemoteSettings = { enabled: false, host: "" };
 
-const SSH_CONNECT_TIMEOUT_SECONDS = 8;
+const SSH_CONNECT_TIMEOUT_SECONDS = 4;
 // Whole-command ceiling for the short metadata calls that go through sshExec
 // (pwd, cat, ls, mkdir). Long-running user commands do not use it — the bash
 // tool spawns its own ssh with the caller's own timeout.
@@ -73,6 +73,10 @@ const SSH_CONTROL_PATH_MAX_BYTES = 96;
 // `ssh -G` resolves a Host block without touching the network, so it is fast,
 // but a pathological config should not wedge the connect dialog.
 const SSH_CONFIG_QUERY_TIMEOUT_MS = 3000;
+// A prompt gate has to answer promptly: a host that accepted a connection and
+// then went silent must not leave the send button hanging for the whole command
+// timeout. Long enough for a genuine fresh SSH handshake on a slow link.
+const SSH_PROBE_TIMEOUT_MS = 4000;
 const PROJECT_CONFIG_DIR_NAME = ".pi";
 // Deliberately process-local: passwords are never written to either settings
 // file. Picot injects PICOT_SSH_PASSWORD when it spawns this process for a
@@ -404,15 +408,31 @@ function createAskpass(password: string): { env: NodeJS.ProcessEnv; cleanup: () 
 }
 
 /**
- * Appended to auth-failure messages so the frontend (public/native/app.js)
- * can tell "this needs a password" apart from an ordinary remote-command
- * failure without parsing the English prose above it — which stays free to
- * change for humans since the marker is what code actually matches on. Kept
- * in sync by hand with the copy of this constant in app.js; there is no
- * shared module between the extension host and the webview to import it
+ * Appended to a `ctx.ui.notify` call, one specific meaning each, so the
+ * frontend (public/native/app.js) can tell them apart without parsing the
+ * English prose above them — which stays free to change for humans since the
+ * marker is what code actually matches on. Kept in sync by hand with the
+ * copies of these constants in app.js/ssh-remote-reauth.js; there is no
+ * shared module between the extension host and the webview to import them
  * from.
+ *
+ * Deliberately NOT embedded in thrown `Error` messages (e.g. from
+ * `authHint` below): those surface as tool-call failures or chat bubbles,
+ * never through `ctx.ui.notify`, and if they carried this marker it would
+ * leak into whichever notify happens to relay their text later — including
+ * the `session_start` failure notify, which must never auto-reopen the
+ * dialog (only a live send attempt should).
+ *
+ * `SSH_AUTH_REQUIRED_MARKER` means "reopen the connect dialog right now" —
+ * only the `input` gate's disconnected notify carries it, because that is
+ * the one point where the failure is a direct response to the user trying
+ * to send something. `SSH_PROJECT_DISCONNECTED_MARKER` means "mark this
+ * project's SSH binding as down" — attached to every notify that reports a
+ * failure to reach the host, so every session of the project (not just this
+ * one) can skip re-probing a host already known to be unreachable.
  */
 export const SSH_AUTH_REQUIRED_MARKER = "[picot:ssh-auth-required]";
+export const SSH_PROJECT_DISCONNECTED_MARKER = "[picot:ssh-project-disconnected]";
 
 /** Run a command on the remote host, optionally piping `input` to its stdin. */
 /**
@@ -425,14 +445,14 @@ function authHint(stderr: string, password?: string): string {
   if (!stderr) return "no output";
   if (!/Permission denied/i.test(stderr)) return stderr;
   return password
-    ? `${stderr} — the password was rejected by the host. ${SSH_AUTH_REQUIRED_MARKER}`
-    : `${stderr} — no password was given and no usable key was found. Enter the host's password in the connect dialog, or set an identity file. ${SSH_AUTH_REQUIRED_MARKER}`;
+    ? `${stderr} — the password was rejected by the host.`
+    : `${stderr} — no password was given and no usable key was found. Enter the host's password in the connect dialog, or set an identity file.`;
 }
 
 export function sshExec(
   settings: SshRemoteSettings,
   remoteCommand: string,
-  options: { input?: Buffer; password?: string } = {},
+  options: { input?: Buffer; password?: string; timeoutMs?: number } = {},
 ): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const password = options.password ?? sessionPassword;
@@ -445,11 +465,12 @@ export function sshExec(
     // connection and then stalls — sshd rate-limiting a source that failed
     // auth too often is the common case — would otherwise hang every caller
     // indefinitely, and the connect dialog just sits on "Listing…".
+    const timeoutMs = options.timeoutMs ?? SSH_EXEC_TIMEOUT_SECONDS * 1000;
     let timedOut = false;
     const deadline = setTimeout(() => {
       timedOut = true;
       child.kill();
-    }, SSH_EXEC_TIMEOUT_SECONDS * 1000);
+    }, timeoutMs);
     const cleanup = () => {
       clearTimeout(deadline);
       askpass?.cleanup();
@@ -467,7 +488,7 @@ export function sshExec(
       if (timedOut) {
         reject(
           new Error(
-            `SSH command timed out after ${SSH_EXEC_TIMEOUT_SECONDS}s. The host accepted the connection but never answered — it may be rate-limiting this machine after failed sign-ins.`,
+            `SSH command timed out after ${Math.round(timeoutMs / 1000)}s. The host accepted the connection but never answered — it may be rate-limiting this machine after failed sign-ins.`,
           ),
         );
       } else if (code !== 0) {
@@ -931,12 +952,61 @@ export function registerSshRemoteExtension(
   const localBash = createBashTool(localCwd);
 
   let resolved: { settings: SshRemoteSettings; remoteCwd: string } | null = null;
-  const getResolved = () => resolved;
+  // The binding for a session that IS remote, whether or not we are connected
+  // right now. Non-null means local execution is never a valid fallback: the
+  // local cwd for a remote workspace is only the `~/.picot/remotes` anchor, so
+  // a tool that ran "locally" would silently touch the wrong machine. When the
+  // host is unreachable we fail instead — see `resolveRemote`.
+  let binding: SshRemoteSettings | null = null;
+
+  const statusLabel = (connection: { settings: SshRemoteSettings; remoteCwd: string }) =>
+    `SSH: ${sshTarget(connection.settings)}:${connection.remoteCwd}`;
+
+  const disconnectedText = () =>
+    `SSH remote execution is not connected to ${sshTarget(binding as SshRemoteSettings)}. Reconnect to continue.`;
+
+  /** Connect (or reconnect) and record the connection as this session's remote. */
+  async function connect(settings: SshRemoteSettings, { timeoutMs }: { timeoutMs?: number } = {}) {
+    // Always talk to the host here, even when remotePath already tells us the
+    // cwd. This one call establishes the shared ControlMaster connection before
+    // any tool runs; without it the first burst of concurrent tool calls would
+    // each race to become master and each authenticate separately — exactly the
+    // cost multiplexing exists to remove.
+    const probedCwd = (await sshExec(settings, "pwd", { timeoutMs })).toString("utf8").trim();
+    const connection = { settings, remoteCwd: settings.remotePath || probedCwd };
+    resolved = connection;
+    return connection;
+  }
+
+  /**
+   * The live remote for this session, reconnecting on demand. Null when the
+   * session is not remote at all. `verify` forces a fresh round trip so a
+   * continuation cannot ride a dead ControlMaster into a half-run turn.
+   */
+  async function resolveRemote({
+    verify = false,
+    timeoutMs,
+  }: {
+    verify?: boolean;
+    timeoutMs?: number;
+  } = {}) {
+    if (!binding) return null;
+    if (resolved && !verify) return resolved;
+    try {
+      return await connect(binding, { timeoutMs });
+    } catch {
+      // Do not leave a dead connection on record: a later tool call must not
+      // try to ride a ControlMaster we have just proven unreachable.
+      resolved = null;
+      return null;
+    }
+  }
 
   pi.registerTool({
     ...localRead,
     async execute(id, params, signal, onUpdate) {
-      const remote = getResolved();
+      const remote = await resolveRemote();
+      if (!remote && binding) throw new Error(disconnectedText());
       if (!remote) return localRead.execute(id, params, signal, onUpdate);
       const tool = createReadTool(localCwd, {
         operations: createRemoteReadOps(remote.settings, remote.remoteCwd, localCwd),
@@ -948,7 +1018,8 @@ export function registerSshRemoteExtension(
   pi.registerTool({
     ...localWrite,
     async execute(id, params, signal, onUpdate) {
-      const remote = getResolved();
+      const remote = await resolveRemote();
+      if (!remote && binding) throw new Error(disconnectedText());
       if (!remote) return localWrite.execute(id, params, signal, onUpdate);
       const tool = createWriteTool(localCwd, {
         operations: createRemoteWriteOps(remote.settings, remote.remoteCwd, localCwd),
@@ -960,7 +1031,8 @@ export function registerSshRemoteExtension(
   pi.registerTool({
     ...localEdit,
     async execute(id, params, signal, onUpdate) {
-      const remote = getResolved();
+      const remote = await resolveRemote();
+      if (!remote && binding) throw new Error(disconnectedText());
       if (!remote) return localEdit.execute(id, params, signal, onUpdate);
       const tool = createEditTool(localCwd, {
         operations: createRemoteEditOps(remote.settings, remote.remoteCwd, localCwd),
@@ -972,7 +1044,8 @@ export function registerSshRemoteExtension(
   pi.registerTool({
     ...localBash,
     async execute(id, params, signal, onUpdate) {
-      const remote = getResolved();
+      const remote = await resolveRemote();
+      if (!remote && binding) throw new Error(disconnectedText());
       if (!remote) return localBash.execute(id, params, signal, onUpdate);
       const tool = createBashTool(localCwd, {
         operations: createRemoteBashOps(remote.settings, remote.remoteCwd, localCwd),
@@ -983,24 +1056,34 @@ export function registerSshRemoteExtension(
 
   pi.on("session_start", async (_event, ctx) => {
     resolved = null;
+    binding = null;
     ctx.ui.setStatus("ssh-remote", undefined);
     const settings = resolveSettings(ctx.cwd, ctx.isProjectTrusted());
     if (!settings) return;
+    binding = settings;
     try {
-      // Always talk to the host here, even when remotePath already tells us the
-      // cwd. This one call establishes the shared ControlMaster connection
-      // before any tool runs; without it the first burst of concurrent tool
-      // calls would each race to become master and each authenticate
-      // separately — exactly the cost multiplexing exists to remove.
-      const probedCwd = (await sshExec(settings, "pwd")).toString("utf8").trim();
-      const remoteCwd = settings.remotePath || probedCwd;
-      resolved = { settings, remoteCwd };
-      const label = `SSH: ${sshTarget(settings)}:${remoteCwd}`;
-      ctx.ui.setStatus("ssh-remote", ctx.ui.theme.fg("accent", label));
-      ctx.ui.notify(`SSH remote execution active — ${label}`, "info");
+      // Same fast probe timeout the reconnect gate uses below, not the general
+      // 25s command ceiling: an unreachable host at startup should fail in
+      // ~4s, not leave the workspace stalled on "Listing…" for the time a
+      // long-running remote command is allowed to take.
+      const connection = await connect(settings, { timeoutMs: SSH_PROBE_TIMEOUT_MS });
+      // Header status stays generic (working/connected/disconnected); the
+      // specific target and any failure detail go through notify() as a
+      // system-message instead, so a stale remote host name never lingers in
+      // the header.
+      ctx.ui.setStatus("ssh-remote", "Connected");
+      ctx.ui.notify(`SSH remote execution active — ${statusLabel(connection)}`, "info");
     } catch (error) {
+      // Keep `binding` set even though we could not connect: the workspace is
+      // still remote, so the session must reconnect before it can run anything
+      // — it must never fall back to the local `~/.picot/remotes` anchor.
+      ctx.ui.setStatus("ssh-remote", "Disconnected");
+      // Marks the project disconnected (so its sidebar badge and every other
+      // session of it can skip re-probing) but deliberately does NOT carry
+      // SSH_AUTH_REQUIRED_MARKER: opening or restarting a session must never
+      // pop the connect dialog on its own — only a live send attempt should.
       ctx.ui.notify(
-        `SSH remote execution could not connect: ${error instanceof Error ? error.message : String(error)}`,
+        `SSH: ${sshTarget(settings)} could not connect: ${error instanceof Error ? error.message : String(error)} ${SSH_PROJECT_DISCONNECTED_MARKER}`,
         "error",
       );
     }
@@ -1010,25 +1093,69 @@ export function registerSshRemoteExtension(
   // expire it anyway; this keeps a closed workspace from leaving an
   // authenticated session open on the remote host for the rest of that window.
   pi.on("session_shutdown", () => {
-    const remote = getResolved();
+    const remote = resolved;
     resolved = null;
+    binding = null;
     if (remote) closeSshControlMaster(remote.settings);
   });
 
+  // A remote workspace has no local checkout, so a prompt can only do
+  // meaningful work once the host is reachable — running it locally would
+  // silently operate on the empty `~/.picot/remotes` anchor. Require a live
+  // connection before the turn starts: reconnect on the way in, and if the host
+  // is still unreachable, swallow the input and reopen the connect dialog
+  // instead of letting the agent run against the wrong machine.
+  pi.on("input", async (event, ctx) => {
+    if (!binding) return;
+    // Messages an extension injects already passed this gate on the way in; do
+    // not swallow them on re-dispatch.
+    if (event.source === "extension") return;
+    // `verify` every continuation: a stale ControlMaster must not let a turn
+    // start and then discover the host is gone halfway through.
+    const remote = await resolveRemote({ verify: true, timeoutMs: SSH_PROBE_TIMEOUT_MS });
+    if (remote) {
+      ctx.ui.setStatus("ssh-remote", "Connected");
+      return;
+    }
+    ctx.ui.setStatus("ssh-remote", "Disconnected");
+    // Hand the prompt back to the composer rather than dropping it: the user
+    // only has to reconnect, not retype.
+    ctx.ui.setEditorText(event.text);
+    // This IS a live send attempt, so unlike session_start it also carries
+    // SSH_AUTH_REQUIRED_MARKER to reopen the connect dialog right now.
+    ctx.ui.notify(
+      `${disconnectedText()} ${SSH_PROJECT_DISCONNECTED_MARKER} ${SSH_AUTH_REQUIRED_MARKER}`,
+      "error",
+    );
+    return { action: "handled" };
+  });
+
   // Route user-triggered `!`/`!!` shell commands to the remote host too, so
-  // ad-hoc checks match what the agent's own bash tool would run.
-  pi.on("user_bash", () => {
-    const remote = getResolved();
-    if (!remote) return;
-    return { operations: createRemoteBashOps(remote.settings, remote.remoteCwd, localCwd) };
+  // ad-hoc checks match what the agent's own bash tool would run — and never
+  // let them fall through to the local anchor when the host is unreachable.
+  pi.on("user_bash", async () => {
+    const remote = await resolveRemote();
+    if (remote) {
+      return { operations: createRemoteBashOps(remote.settings, remote.remoteCwd, localCwd) };
+    }
+    if (binding) {
+      return {
+        result: {
+          output: `${disconnectedText()}\n`,
+          exitCode: 1,
+          cancelled: false,
+          truncated: false,
+        },
+      };
+    }
+    return;
   });
 
   pi.on("before_agent_start", (event) => {
-    const remote = getResolved();
-    if (!remote) return;
+    if (!resolved) return;
     const modified = event.systemPrompt.replace(
       `Current working directory: ${localCwd}`,
-      `Current working directory: ${remote.remoteCwd} (via SSH: ${sshTarget(remote.settings)})`,
+      `Current working directory: ${resolved.remoteCwd} (via SSH: ${sshTarget(resolved.settings)})`,
     );
     return { systemPrompt: modified };
   });
