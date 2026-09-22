@@ -199,6 +199,21 @@ function renderSteps(report, t) {
   return section;
 }
 
+/**
+ * A model step can close with no `text` block at all -- a completion that is
+ * nothing but tool calls, or pure reasoning with no visible reply -- and
+ * without a fallback the row shows a duration and nothing else, which reads
+ * as missing data rather than as "this step didn't say anything."
+ */
+function stepDetail(step, t) {
+  if (step.detail) return step.detail;
+  if (step.kind === "model" && step.toolNames?.length) {
+    return t("taskDebugger.stepToolCalls", { tools: step.toolNames.join(", ") });
+  }
+  if (step.kind === "model") return t("taskDebugger.stepNoOutput");
+  return "";
+}
+
 function stepRow(step, t) {
   const item = element("li", `session-analysis-step session-analysis-step--${step.status}`);
   const head = element("div", "session-analysis-step-head");
@@ -207,7 +222,8 @@ function stepRow(step, t) {
     element("span", "session-analysis-step-duration", formatMs(step.durationMs)),
   );
   item.appendChild(head);
-  if (step.detail) item.appendChild(element("div", "session-analysis-step-detail", step.detail));
+  const detail = stepDetail(step, t);
+  if (detail) item.appendChild(element("div", "session-analysis-step-detail", detail));
   if (step.error) item.appendChild(element("div", "session-analysis-step-error", step.error));
   if (step.status === "unfinished") {
     item.appendChild(

@@ -1376,6 +1376,8 @@
     "historyFailed": "No se pudo leer el registro guardado de la sesión; solo se muestran las tareas que esta ventana observó.",
     "historyNote": "Las tareas anteriores se reconstruyeron a partir del registro guardado: sus tiempos provienen de las marcas que registró y los pasos que no guarda (como la compactación) no aparecen.",
     "noSteps": "No se registró ningún paso.",
+    "stepToolCalls": "Llamó a: {tools}",
+    "stepNoOutput": "Sin respuesta visible (solo razonamiento).",
     "neverFinished": "Este paso nunca informó de que había terminado.",
     "unknownError": "Error desconocido",
     "status": {

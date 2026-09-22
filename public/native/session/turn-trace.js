@@ -86,6 +86,19 @@ export function describeToolArgs(args) {
   return "";
 }
 
+/**
+ * Names of the tools an assistant message called, in the order it called
+ * them. A model step can close with no `text` block at all -- a completion
+ * that is nothing but tool calls -- and without this the step shows no
+ * detail whatsoever even though it clearly did something.
+ */
+export function toolNamesFromContent(content) {
+  if (!Array.isArray(content)) return [];
+  return content
+    .filter((block) => block?.type === "toolCall" || block?.type === "tool_use")
+    .map((block) => String(block?.name || block?.toolName || "tool"));
+}
+
 function textFromContent(content) {
   if (typeof content === "string") return content;
   if (!Array.isArray(content)) return "";
@@ -182,6 +195,7 @@ export function createTurnTraceRecorder({
       kind,
       label,
       detail: "",
+      toolNames: [],
       signature: null,
       toolCallId: null,
       startedAt: at,
@@ -300,6 +314,7 @@ export function createTurnTraceRecorder({
             : null;
         step.stopReason = stopReason;
         step.detail = clampText(textFromContent(event.message.content), DETAIL_MAX_CHARS);
+        step.toolNames = toolNamesFromContent(event.message.content);
         closeStep(step, at, {
           status: error ? "error" : stopReason === "aborted" ? "aborted" : "ok",
           error,

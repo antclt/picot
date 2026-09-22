@@ -90,6 +90,7 @@ function summarizeStep(step) {
     kind: step.kind,
     label: step.label,
     detail: step.detail || "",
+    toolNames: Array.isArray(step.toolNames) ? step.toolNames : [],
     status: step.status,
     error: step.error || null,
     durationMs: Number(step.durationMs) || 0,

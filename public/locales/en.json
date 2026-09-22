@@ -1376,6 +1376,8 @@
     "historyFailed": "The saved session log could not be read, so only tasks this window watched are shown.",
     "historyNote": "Earlier tasks were rebuilt from the saved session log: their timings come from the stamps it recorded, and steps it does not record (such as compaction) are missing.",
     "noSteps": "No steps were recorded.",
+    "stepToolCalls": "Called: {tools}",
+    "stepNoOutput": "No visible reply (reasoning only).",
     "neverFinished": "This step never reported that it finished.",
     "unknownError": "Unknown error",
     "status": {

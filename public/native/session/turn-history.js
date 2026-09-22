@@ -251,6 +251,7 @@ export function buildTurnsFromEntries(
         kind: "model",
         label: "assistant",
         detail: clampText(textFromContent(message.content), DETAIL_MAX_CHARS),
+        toolNames: toolCallBlocks(message).map(toolCallName),
         signature: null,
         toolCallId: null,
         startedAt,

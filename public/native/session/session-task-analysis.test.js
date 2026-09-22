@@ -13,6 +13,7 @@ function step(kind, label, startedAt, durationMs, extra = {}) {
     kind,
     label,
     detail: extra.detail ?? "",
+    toolNames: extra.toolNames ?? [],
     signature: extra.signature ?? `${label}|{}`,
     toolCallId: null,
     startedAt,
@@ -91,6 +92,28 @@ describe("session task analysis", () => {
     expect(text).toContain("exit 1");
     expect(el.querySelector(".session-analysis-finding--critical")).toBeTruthy();
     expect(el.querySelectorAll(".session-analysis-step").length).toBeGreaterThan(0);
+  });
+
+  it("shows which tools a model step called when it closed with no reply text", () => {
+    const { el } = mount({
+      getTurns: () => [
+        turn(1, "completed", [
+          step("model", "assistant", 0, 6_100, { detail: "", toolNames: ["Bash", "Read"] }),
+        ]),
+      ],
+    });
+
+    expect(el.textContent).toContain("Called: Bash, Read");
+  });
+
+  it("says a model step had no visible reply when it made no tool calls either", () => {
+    const { el } = mount({
+      getTurns: () => [
+        turn(1, "completed", [step("model", "assistant", 0, 6_100, { detail: "" })]),
+      ],
+    });
+
+    expect(el.textContent).toContain(t("taskDebugger.stepNoOutput"));
   });
 
   it("hides the slowest-steps ranking when it would just repeat the timeline verbatim", () => {
