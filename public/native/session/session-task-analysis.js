@@ -2,7 +2,13 @@
 // ABOUTME: stuck, which steps were redundant, and the model's own reading of it.
 
 /**
- * Task analysis, rendered as a section of the Info panel instead of a dialog.
+ * Task analysis: a compact summary row in the Info panel rail (title + total
+ * elapsed time) that opens a dialog with the full report. The report itself
+ * -- phase split, findings, slowest steps -- has too many stacked sections
+ * to read as an inline block in a ~280px rail; it earns a proper modal
+ * instead. It stays a report on trouble, not a full run log: findings are
+ * pared to the ones that explain a failure or a slow step, and the step
+ * list is capped to the 5 slowest rather than every step the turn took.
  *
  * Answers the four questions a "why was this slow / why did it fail" report has
  * to answer, from the spans `turn-trace.js` recorded:
@@ -25,12 +31,12 @@
 
 import { t as translate } from "../../i18n.js";
 import { createIcon } from "../../icons.js";
+import { bindDialogEscape } from "../../ui/dialog-escape.js";
 import { createSessionAiAnalysis } from "./session-ai-analysis.js";
 import { analyzeTurns, formatMs, formatShare } from "./turn-analysis.js";
 import { mergeTurnSources } from "./turn-history.js";
 
 const PHASE_ORDER = ["model", "tool", "compaction", "idle"];
-const MAX_TIMELINE_STEPS = 60;
 
 let instanceSeq = 0;
 
@@ -56,11 +62,14 @@ export function buildMarkdownReport(report, t = translate) {
   if (report.totals.wastedMs > 0) {
     lines.push(`- ${t("taskDebugger.wasted")}: ${formatMs(report.totals.wastedMs)}`);
   }
-  lines.push("", `## ${t("taskDebugger.findings")}`);
-  for (const finding of report.findings) {
-    lines.push(
-      `- **${t(`taskDebugger.severity.${finding.severity}`)}** ${findingText(finding, t)}`,
-    );
+  const findings = problemFindings(report);
+  if (findings.length) {
+    lines.push("", `## ${t("taskDebugger.findings")}`);
+    for (const finding of findings) {
+      lines.push(
+        `- **${t(`taskDebugger.severity.${finding.severity}`)}** ${findingText(finding, t)}`,
+      );
+    }
   }
   if (report.slowest.length) {
     lines.push("", `## ${t("taskDebugger.slowest")}`);
@@ -81,6 +90,16 @@ export function buildMarkdownReport(report, t = translate) {
 
 function findingText(finding, t) {
   return t(`taskDebugger.finding.${finding.code}`, finding.params || {});
+}
+
+/**
+ * "Info" findings (tool/model-bound, compaction, "nothing stands out") are
+ * commentary, not problems. The report exists to answer "why did this fail"
+ * and "why did this take so long" -- keep only the findings that answer one
+ * of those two questions.
+ */
+function problemFindings(report) {
+  return report.findings.filter((finding) => finding.severity !== "info");
 }
 
 function renderSummary(report, t) {
@@ -158,10 +177,12 @@ function renderPhases(report, t) {
 }
 
 function renderFindings(report, t) {
+  const findings = problemFindings(report);
+  if (!findings.length) return null;
   const section = element("section", "session-analysis-section");
   section.appendChild(element("h3", "session-analysis-heading", t("taskDebugger.findings")));
   const list = element("ul", "session-analysis-findings");
-  for (const finding of report.findings) {
+  for (const finding of findings) {
     const item = element(
       "li",
       `session-analysis-finding session-analysis-finding--${finding.severity}`,
@@ -181,14 +202,13 @@ function renderFindings(report, t) {
 }
 
 /**
- * Ranking only earns its own section once it actually filters something out
- * of the full step list -- otherwise it is a verbatim re-render of the same
- * rows the step timeline already shows just below it (same `stepRow`
- * renderer, same durations), which reads as a duplicated section rather
- * than a distinct view.
+ * The report's only step-level view: the top 5 slowest steps, not the full
+ * run. A turn can have dozens of steps and most of them are unremarkable --
+ * showing all of them buries the ones that actually explain where the time
+ * went.
  */
 function renderSteps(report, t) {
-  if (report.totalSteps <= report.slowest.length) return null;
+  if (!report.slowest.length) return null;
   const section = element("section", "session-analysis-section");
   section.appendChild(element("h3", "session-analysis-heading", t("taskDebugger.slowest")));
   const list = element("ol", "session-analysis-steps");
@@ -233,26 +253,6 @@ function stepRow(step, t) {
   return item;
 }
 
-function renderTimeline(turns, t) {
-  const section = element("section", "session-analysis-section");
-  section.appendChild(element("h3", "session-analysis-heading", t("taskDebugger.timeline")));
-  const list = element("ol", "session-analysis-timeline");
-  let rendered = 0;
-  for (const turn of turns) {
-    for (const step of turn.steps) {
-      if (rendered >= MAX_TIMELINE_STEPS) break;
-      rendered += 1;
-      list.appendChild(stepRow({ ...step, durationMs: step.durationMs ?? 0 }, t));
-    }
-  }
-  if (!rendered) {
-    section.appendChild(element("p", "session-analysis-empty", t("taskDebugger.noSteps")));
-    return section;
-  }
-  section.appendChild(list);
-  return section;
-}
-
 /**
  * Build the Info panel's task analysis section.
  *
@@ -287,49 +287,59 @@ export function createSessionTaskAnalysis({
   const uid = ++instanceSeq;
   section.setAttribute("aria-labelledby", `session-analysis-heading-${uid}`);
 
-  const head = element("div", "session-analysis-head");
-  const toggle = document.createElement("button");
-  toggle.type = "button";
-  toggle.className = "session-analysis-toggle";
-  const caret = element("span", "session-analysis-caret", "▾");
-  caret.setAttribute("aria-hidden", "true");
+  // Compact trigger row: the only part of the report that lives in the rail
+  // permanently. It opens the dialog rather than expanding inline -- the
+  // full report (phase bar, findings, step list, timeline) has too many
+  // stacked sections to read as a block in a rail this narrow.
+  const head = document.createElement("button");
+  head.type = "button";
+  head.className = "session-analysis-toggle";
+  head.setAttribute("aria-haspopup", "dialog");
   const title = element("span", "session-analysis-title", t("taskDebugger.title"));
   title.id = `session-analysis-heading-${uid}`;
-  toggle.append(caret, title);
+  const time = element("span", "session-analysis-time", "");
+  const caret = element("span", "session-analysis-caret");
+  caret.setAttribute("aria-hidden", "true");
+  caret.append(createIcon("chevron-right", { size: 14 }));
+  head.append(title, time, caret);
 
+  // Dialog: portaled to <body>, not left as a child of `section`. The rail
+  // that hosts `section` (.info-sidebar / .app-side-panel) carries its own
+  // `backdrop-filter`, and a `backdrop-filter` on an ancestor creates a new
+  // containing block for `position: fixed` descendants -- so a fixed dialog
+  // left inside it paints relative to the narrow rail instead of the
+  // viewport. Matches the pattern other dialogs in this app already use
+  // (see workspace/remote-workspace-dialog.js).
+  const overlay = element("div", "session-analysis-overlay hidden");
+  const dialogTitleId = `session-analysis-dialog-heading-${uid}`;
+  const content = element("div", "session-analysis-content hidden");
+  content.setAttribute("role", "dialog");
+  content.setAttribute("aria-modal", "true");
+  content.setAttribute("aria-labelledby", dialogTitleId);
+
+  const dialogHead = element("div", "session-analysis-dialog-head");
+  const dialogTitle = element("span", "session-analysis-dialog-title", t("taskDebugger.title"));
+  dialogTitle.id = dialogTitleId;
   const copyButton = document.createElement("button");
   copyButton.type = "button";
   copyButton.className =
     "ui-icon-button ui-icon-button--xs ui-icon-button--ghost session-analysis-copy";
   copyButton.append(createIcon("clipboard", { size: 14 }));
-  head.append(toggle, copyButton);
-
-  const content = element("div", "session-analysis-content");
-  const scope = element("div", "session-analysis-scope");
-  scope.setAttribute("role", "radiogroup");
-  scope.setAttribute("aria-label", t("taskDebugger.title"));
-  const scopeInputs = ["last", "session"].map((value) => {
-    const label = document.createElement("label");
-    const input = document.createElement("input");
-    input.type = "radio";
-    input.name = `session-analysis-scope-${uid}`;
-    input.value = value;
-    if (value === "last") input.checked = true;
-    label.append(
-      input,
-      element("span", "", t(`taskDebugger.scope${value === "last" ? "Last" : "Session"}`)),
-    );
-    scope.appendChild(label);
-    return input;
-  });
+  const closeButton = document.createElement("button");
+  closeButton.type = "button";
+  closeButton.className =
+    "ui-icon-button ui-icon-button--sm ui-icon-button--ghost session-analysis-close";
+  closeButton.append(createIcon("x", { size: 16 }));
+  dialogHead.append(dialogTitle, copyButton, closeButton);
 
   const body = element("div", "session-analysis-body");
-  content.append(scope, body);
-  section.append(head, content);
+  content.append(dialogHead, body);
+  section.append(head);
+  document.body.append(overlay, content);
 
   let streaming = false;
-  let scopeValue = "last";
-  let collapsed = false;
+  // The dialog opens on demand; the rail only ever shows the compact trigger.
+  let collapsed = true;
   let lastReport = null;
   let historyTurns = [];
   let historyState = typeof loadHistoryTurns === "function" ? "idle" : "off";
@@ -355,11 +365,7 @@ export function createSessionTaskAnalysis({
     const turns = availableTurns();
     // A turn still streaming has open spans; calling them "stuck" would be a
     // lie, so it is left out until it settles.
-    const settled = streaming ? turns.filter((turn) => turn.status !== "running") : turns;
-    if (scopeValue === "session") return settled;
-    const finished = settled.filter((turn) => turn.status !== "running");
-    const last = finished.length ? finished[finished.length - 1] : settled[settled.length - 1];
-    return last ? [last] : [];
+    return streaming ? turns.filter((turn) => turn.status !== "running") : turns;
   }
 
   function renderCopyButton() {
@@ -391,7 +397,6 @@ export function createSessionTaskAnalysis({
         renderFindings(report, t),
         renderPhases(report, t),
         renderSteps(report, t),
-        renderTimeline(turns, t),
       ].filter(Boolean),
     );
     // Rebuilt spans come from the saved log, which records no compaction and no
@@ -404,20 +409,31 @@ export function createSessionTaskAnalysis({
   }
 
   function render() {
+    overlay.classList.toggle("hidden", collapsed);
     content.classList.toggle("hidden", collapsed);
-    toggle.setAttribute("aria-expanded", String(!collapsed));
-    caret.textContent = collapsed ? "▸" : "▾";
+    head.setAttribute("aria-expanded", String(!collapsed));
     // Labels change with the locale; re-render them here rather than only at build.
     title.textContent = t("taskDebugger.title");
-    scope.setAttribute("aria-label", t("taskDebugger.title"));
-    for (const input of scopeInputs) {
-      input.parentElement.querySelector("span").textContent = t(
-        `taskDebugger.scope${input.value === "last" ? "Last" : "Session"}`,
-      );
-    }
+    dialogTitle.textContent = t("taskDebugger.title");
     renderBody();
+    // The trigger always shows the whole session's total, visible without
+    // opening the dialog.
+    time.textContent = lastReport ? formatMs(lastReport.totals.wallMs) : "";
     renderCopyButton();
     aiAnalysis?.refresh();
+  }
+
+  function open() {
+    if (!collapsed) return;
+    collapsed = false;
+    render();
+  }
+
+  function close() {
+    if (collapsed) return;
+    collapsed = true;
+    render();
+    head.focus();
   }
 
   /**
@@ -443,17 +459,13 @@ export function createSessionTaskAnalysis({
     render();
   }
 
-  toggle.addEventListener("click", () => {
-    collapsed = !collapsed;
-    render();
+  head.addEventListener("click", () => {
+    if (collapsed) open();
+    else close();
   });
-  for (const input of scopeInputs) {
-    input.addEventListener("change", () => {
-      if (!input.checked) return;
-      scopeValue = input.value;
-      render();
-    });
-  }
+  overlay.addEventListener("click", close);
+  closeButton.addEventListener("click", close);
+  bindDialogEscape(close, { isActive: () => !collapsed });
   let copyResetTimer = null;
   copyButton.addEventListener("click", async () => {
     if (!lastReport) return;
@@ -476,7 +488,7 @@ export function createSessionTaskAnalysis({
   return {
     element: section,
     refresh,
-    /** Repaint translated labels from cached state (locale change, scope change). */
+    /** Repaint translated labels from cached state (locale change). */
     rerender: render,
     /** A session switch invalidates the rebuilt history, not the live trace. */
     resetHistory() {
@@ -484,6 +496,7 @@ export function createSessionTaskAnalysis({
       historyTurns = [];
       historyState = typeof loadHistoryTurns === "function" ? "idle" : "off";
       aiAnalysis?.reset();
+      collapsed = true;
       render();
     },
     /** Streaming turns are excluded: their open spans are not "stuck" yet. */

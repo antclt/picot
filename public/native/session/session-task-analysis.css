@@ -1,6 +1,7 @@
-/* ABOUTME: Info-panel task analysis — timing split, findings, steps, timeline.
-   Lives in the right rail, so every block is a single stacked column instead of
-   the dialog's wider multi-column layout. */
+/* ABOUTME: Info-panel task analysis — a compact trigger row in the rail
+   (title + total elapsed time) that opens the full report as a dialog.
+   The report has too many stacked sections (phase bar, findings, steps,
+   timeline) to read as an inline block in a rail this narrow. */
 
 .session-analysis {
   display: flex;
@@ -9,30 +10,22 @@
   border-bottom: 1px solid var(--border);
 }
 
-.session-analysis-head {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: var(--space-1);
-  padding: var(--space-3) var(--space-4) var(--space-2);
-}
+/* ── Compact trigger (always visible in the rail) ───────────────────────── */
 
 .session-analysis-toggle {
   display: flex;
-  flex: 1;
-  min-width: 0;
+  width: 100%;
   align-items: center;
   gap: var(--space-1-5);
-  padding: 0;
+  padding: var(--space-3) var(--space-4);
   border: 0;
   background: transparent;
-  color: var(--text-primary);
+  color: var(--text-secondary);
   cursor: pointer;
   font-size: var(--font-size-sm);
   font-weight: 600;
   letter-spacing: 0.04em;
   text-align: left;
-  text-transform: uppercase;
 }
 
 .session-analysis-toggle:hover {
@@ -41,38 +34,98 @@
 
 .session-analysis-toggle:focus-visible {
   outline: 2px solid var(--accent);
-  outline-offset: 2px;
+  outline-offset: -2px;
   border-radius: var(--radius-sm);
 }
 
+.session-analysis-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-analysis-time {
+  flex: 0 0 auto;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: normal;
+  text-transform: none;
+}
+
 .session-analysis-caret {
+  display: flex;
   width: 12px;
   flex: 0 0 12px;
-  text-align: center;
-  color: var(--text-secondary);
-}
-
-.session-analysis-scope {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-3);
-  padding: 0 var(--space-4) var(--space-3);
-  font-size: var(--font-size-sm);
-  color: var(--text-secondary);
-}
-
-.session-analysis-scope label {
-  display: flex;
   align-items: center;
-  gap: var(--space-1);
-  cursor: pointer;
+  justify-content: center;
+  color: var(--text-secondary);
+}
+
+/* ── Dialog ──────────────────────────────────────────────────────────────── */
+
+.session-analysis-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.session-analysis-overlay.hidden {
+  display: none;
+}
+
+.session-analysis-content {
+  position: fixed;
+  top: 8vh;
+  left: 50%;
+  z-index: 1001;
+  display: flex;
+  width: min(560px, calc(100vw - var(--space-12)));
+  max-height: min(820px, 84vh);
+  flex-direction: column;
+  overflow: hidden;
+  transform: translateX(-50%);
+  background: var(--bg-frosted);
+  backdrop-filter: blur(var(--blur-heavy)) saturate(1.5);
+  -webkit-backdrop-filter: blur(var(--blur-heavy)) saturate(1.5);
+  border: 1px solid var(--border-hover);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg), var(--shadow-inset);
+}
+
+.session-analysis-content.hidden {
+  display: none;
+}
+
+.session-analysis-dialog-head {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--space-1-5);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border);
+}
+
+.session-analysis-dialog-title {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
 }
 
 .session-analysis-body {
   display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
   gap: var(--space-4);
-  padding: 0 var(--space-4) var(--space-4);
+  overflow-y: auto;
+  padding: var(--space-4);
 }
 
 .session-analysis-section {
@@ -86,7 +139,6 @@
   font-size: var(--font-size-sm);
   font-weight: 600;
   letter-spacing: 0.04em;
-  text-transform: uppercase;
   color: var(--text-secondary);
 }
 
@@ -126,7 +178,6 @@
   background: var(--bg-glass-strong);
   font-size: var(--font-size-sm);
   font-weight: 600;
-  text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--text-secondary);
 }
@@ -285,7 +336,6 @@
 
 .session-analysis-finding-severity {
   font-weight: 600;
-  text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--text-secondary);
 }
@@ -302,10 +352,9 @@
   min-width: 0;
 }
 
-/* ── Steps & timeline ──────────────────────────────────────────────────── */
+/* ── Steps ─────────────────────────────────────────────────────────────── */
 
-.session-analysis-steps,
-.session-analysis-timeline {
+.session-analysis-steps {
   display: flex;
   flex-direction: column;
   gap: var(--space-1-5);

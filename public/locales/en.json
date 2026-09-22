@@ -457,7 +457,8 @@
     "modelsMustBeObject": "models.json must be a JSON object.",
     "providersMustBeObject": "'providers' must be an object.",
     "compactionFailed": "Context compaction failed.",
-    "compactionFailedDetail": "Context compaction failed: {error}"
+    "compactionFailedDetail": "Context compaction failed: {error}",
+    "compactionTimedOut": "Context compaction timed out — no response from Pi."
   },
   "onboarding": {
     "openProject": "Open a project to start chatting.",
@@ -1355,8 +1356,6 @@
   },
   "taskDebugger": {
     "title": "Task analysis",
-    "scopeLast": "Last task",
-    "scopeSession": "Whole session",
     "copyReport": "Copy report",
     "copied": "Copied",
     "copyFailed": "Copy failed",
@@ -1365,7 +1364,6 @@
     "timeSplit": "Where the time went",
     "findings": "Findings",
     "slowest": "Slowest steps",
-    "timeline": "Step timeline",
     "failures": "Failures",
     "turns": "Turns",
     "toolCalls": "Tool calls",
@@ -1375,7 +1373,6 @@
     "loadingHistory": "Reading the saved session log…",
     "historyFailed": "The saved session log could not be read, so only tasks this window watched are shown.",
     "historyNote": "Earlier tasks were rebuilt from the saved session log: their timings come from the stamps it recorded, and steps it does not record (such as compaction) are missing.",
-    "noSteps": "No steps were recorded.",
     "stepToolCalls": "Called: {tools}",
     "stepNoOutput": "No visible reply (reasoning only).",
     "neverFinished": "This step never reported that it finished.",

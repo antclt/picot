@@ -457,7 +457,8 @@
     "modelsMustBeObject": "models.json 必须是 JSON 对象。",
     "providersMustBeObject": "'providers' 必须是对象。",
     "compactionFailed": "上下文压缩失败。",
-    "compactionFailedDetail": "上下文压缩失败：{error}"
+    "compactionFailedDetail": "上下文压缩失败：{error}",
+    "compactionTimedOut": "上下文压缩超时 — Pi 没有响应。"
   },
   "onboarding": {
     "openProject": "打开一个项目以开始对话。",
@@ -1355,8 +1356,6 @@
   },
   "taskDebugger": {
     "title": "任务分析",
-    "scopeLast": "最近一次任务",
-    "scopeSession": "整个会话",
     "copyReport": "复制报告",
     "copied": "已复制",
     "copyFailed": "复制失败",
@@ -1365,7 +1364,6 @@
     "timeSplit": "时间都花在哪里",
     "findings": "分析结论",
     "slowest": "最慢的步骤",
-    "timeline": "步骤时间线",
     "failures": "失败点",
     "turns": "轮次",
     "toolCalls": "工具调用",
@@ -1375,7 +1373,6 @@
     "loadingHistory": "正在读取已保存的会话记录…",
     "historyFailed": "无法读取已保存的会话记录，仅显示本窗口实时记录的任务。",
     "historyNote": "较早的任务由已保存的会话记录重建：耗时来自记录中的时间戳，记录中没有的步骤（如上下文压缩）不会出现。",
-    "noSteps": "没有记录到任何步骤。",
     "stepToolCalls": "调用了：{tools}",
     "stepNoOutput": "没有可见回复（仅推理，未输出文字）。",
     "neverFinished": "该步骤始终没有上报结束。",

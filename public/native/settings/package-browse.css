@@ -664,7 +664,6 @@
 .pkg-manager-scope {
   flex-shrink: 0;
   padding: var(--space-0-5) var(--space-1);
-  text-transform: uppercase;
   letter-spacing: 0.04em;
   background: var(--bg-glass);
   border: 1px solid var(--border);

@@ -140,76 +140,102 @@ export class InfoPanel {
     heading.dataset.i18n = "sessionInfo.heading";
     heading.textContent = t("sessionInfo.heading");
 
-    // Session file + id are abstracted to one icon each: the value is noise
-    // in a narrow rail, the only action anyone takes on it is copying it, so
-    // the icon is the control and the tooltip carries the value.
-    const actions = document.createElement("div");
-    actions.className = "session-info-actions";
-    actions.setAttribute("role", "group");
-    actions.setAttribute("aria-label", t("sessionInfo.heading"));
+    // Each row shows the actual value (truncated to one line, full value in
+    // the tooltip) instead of hiding it behind an icon-only control -- an
+    // icon with no label doesn't say what it does. The copy button stays a
+    // separate control next to the value.
+    const list = document.createElement("div");
+    list.className = "info-panel-session-list";
+    list.setAttribute("role", "group");
+    list.setAttribute("aria-label", t("sessionInfo.heading"));
 
-    this.fileButton = this._sessionInfoButton({
+    this.fileRow = this._sessionInfoRow({
       labelKey: "sessionInfo.file",
       copyKey: "sessionInfo.copyFile",
       field: "file",
-      icon: "file",
     });
-    this.idButton = this._sessionInfoButton({
+    this.idRow = this._sessionInfoRow({
       labelKey: "sessionInfo.id",
       copyKey: "sessionInfo.copyId",
       field: "id",
-      icon: "hash",
     });
-    actions.append(this.fileButton, this.idButton);
+    list.append(this.fileRow.row, this.idRow.row);
 
-    wrap.append(heading, actions);
+    wrap.append(heading, list);
     section.append(wrap);
     this._paintSessionInfo();
   }
 
-  _sessionInfoButton({ labelKey, copyKey, field, icon }) {
+  _sessionInfoRow({ labelKey, copyKey, field }) {
+    const t = this.t;
+    const row = document.createElement("div");
+    row.className = "info-panel-session-row";
+
+    const label = document.createElement("span");
+    label.className = "info-panel-session-label";
+    const labelText = document.createElement("span");
+    labelText.className = "info-panel-session-label-text";
+    labelText.dataset.i18n = labelKey;
+    labelText.textContent = t(labelKey);
+    label.append(labelText);
+    label.title = t(labelKey);
+
+    const value = document.createElement("span");
+    value.className = "info-panel-session-value";
+    value.dataset.sessionField = field;
+
     const button = document.createElement("button");
     button.type = "button";
-    button.className = "ui-icon-button ui-icon-button--sm ui-icon-button--ghost session-info-copy";
+    button.className =
+      "ui-icon-button ui-icon-button--xs ui-icon-button--ghost info-panel-session-copy";
     button.dataset.copySessionField = field;
     button.dataset.copyLabelKey = labelKey;
     button.dataset.copyActionKey = copyKey;
-    button.append(createIcon(icon, { size: 15 }));
+    button.append(createIcon("clipboard", { size: 13 }));
     button.addEventListener("click", () => {
       void this._copySessionField(button);
     });
-    return button;
+
+    row.append(label, value, button);
+    return { row, value, button };
   }
 
   _paintSessionInfo() {
     const t = this.t;
     const file = describeSessionFile(this.sessionFilePath, t("sessionInfo.inMemory"));
     const id = describeSessionId(this.sessionId, t("sessionInfo.unavailable"));
-    this._paintSessionButton(this.fileButton, {
+    this._paintSessionRow(this.fileRow, {
       labelKey: "sessionInfo.file",
       copyKey: "sessionInfo.copyFile",
+      text: file.text,
       description: file.title || file.text,
       value: file.copyValue,
     });
-    this._paintSessionButton(this.idButton, {
+    this._paintSessionRow(this.idRow, {
       labelKey: "sessionInfo.id",
       copyKey: "sessionInfo.copyId",
+      text: id.text,
       description: id.text,
       value: id.copyValue,
     });
   }
 
-  _paintSessionButton(button, { labelKey, copyKey, description, value }) {
-    if (!button) return;
+  _paintSessionRow(entry, { labelKey, copyKey, text, description, value }) {
+    if (!entry) return;
+    entry.value.textContent = text;
+    entry.value.title = description;
+    const button = entry.button;
     button.dataset.copyValue = value;
     const label = `${this.t(labelKey)}: ${description} · ${this.t(copyKey)}`;
-    button.title = label;
+    button.title = this.t(copyKey);
     button.setAttribute("aria-label", label);
-    button._defaultLabel = label;
+    button._defaultLabel = this.t(copyKey);
+    button._defaultAriaLabel = label;
   }
 
   async _copySessionField(button) {
-    const defaultLabel = button._defaultLabel || this.t(button.dataset.copyActionKey);
+    const defaultTitle = button._defaultLabel || this.t(button.dataset.copyActionKey);
+    const defaultAriaLabel = button._defaultAriaLabel || defaultTitle;
     try {
       const result = this.writeText?.(button.dataset.copyValue || "");
       if (!result) throw new Error("Clipboard unavailable");
@@ -221,8 +247,8 @@ export class InfoPanel {
       button.setAttribute("aria-label", this.t("sessionInfo.copyFailed"));
     }
     setTimeout(() => {
-      button.title = defaultLabel;
-      button.setAttribute("aria-label", defaultLabel);
+      button.title = defaultTitle;
+      button.setAttribute("aria-label", defaultAriaLabel);
     }, 1500);
   }
 
@@ -374,10 +400,17 @@ export class InfoPanel {
       el.setAttribute("aria-current", "true");
     }
 
+    // Fixed-size marker: drawn as a dot / icon at an explicit pixel size
+    // rather than a text glyph, so "user" and "assistant" read as the same
+    // size regardless of how each glyph's own font metrics differ.
     const role = document.createElement("span");
     role.className = `info-panel-role ${row.role === "user" ? "user" : "assistant"}`;
-    role.textContent = row.role === "user" ? "●" : "✦";
     role.setAttribute("aria-hidden", "true");
+    if (row.role === "user") {
+      role.classList.add("info-panel-role-dot");
+    } else {
+      role.append(createIcon("sparkles", { size: 11, filled: true }));
+    }
 
     const preview = document.createElement("span");
     preview.className = "info-panel-preview";

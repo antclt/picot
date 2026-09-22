@@ -525,7 +525,22 @@ export class TerminalPanel {
       }
     };
     window.addEventListener("resize", update);
-    this._fullscreenBoundsCleanup = () => window.removeEventListener("resize", update);
+    const cleanups = [() => window.removeEventListener("resize", update)];
+
+    // The workspace's `.main` panel can change width without a window resize
+    // (e.g. closing the diff/file sidebar just toggles a CSS class), so track
+    // it directly rather than relying on `--terminal-fullscreen-right` staying
+    // fresh only on window resize.
+    if (typeof ResizeObserver !== "undefined") {
+      const main = document.querySelector(".workspace .main");
+      if (main) {
+        const observer = new ResizeObserver(update);
+        observer.observe(main);
+        cleanups.push(() => observer.disconnect());
+      }
+    }
+
+    this._fullscreenBoundsCleanup = () => cleanups.forEach((fn) => fn());
   }
 
   _stopFullscreenBoundsTracking() {

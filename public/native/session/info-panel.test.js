@@ -75,7 +75,7 @@ function makePanel(overrides = {}) {
 }
 
 describe("InfoPanel workspace section", () => {
-  test("renders copy icon and icon-only Session Info without open-in-app links", () => {
+  test("renders the copy path icon and Session Info with visible, truncatable values", () => {
     const { panel } = makePanel();
     const copy = panel.querySelector(".info-panel-copy-path");
     expect(copy).not.toBeNull();
@@ -85,32 +85,40 @@ describe("InfoPanel workspace section", () => {
     expect(panel.querySelector(".info-panel-link-app")).toBeNull();
     expect(panel.querySelector("#info-panel-session-heading").textContent).toBe("Session Info");
 
-    // File and id are abstracted to one icon each: no value text in the DOM,
-    // the tooltip carries it and the click copies it.
-    const file = panel.querySelector('[data-copy-session-field="file"]');
-    const id = panel.querySelector('[data-copy-session-field="id"]');
-    expect(file).not.toBeNull();
-    expect(id).not.toBeNull();
-    expect(file.querySelector("svg")).not.toBeNull();
-    expect(id.querySelector("svg")).not.toBeNull();
-    expect(panel.querySelector("[data-session-field]")).toBeNull();
-    expect(file.title).toBe("File: In memory (not saved yet) · Copy file path");
-    expect(id.title).toBe("ID: Unavailable · Copy session ID");
+    // File and id show their actual value (truncated to one line by CSS, full
+    // value in the tooltip) instead of hiding behind an icon-only control; a
+    // separate copy button sits beside each value.
+    const fileValue = panel.querySelector('[data-session-field="file"]');
+    const idValue = panel.querySelector('[data-session-field="id"]');
+    const fileCopy = panel.querySelector('[data-copy-session-field="file"]');
+    const idCopy = panel.querySelector('[data-copy-session-field="id"]');
+    expect(fileValue.textContent).toBe("In memory (not saved yet)");
+    expect(idValue.textContent).toBe("Unavailable");
+    expect(fileCopy).not.toBeNull();
+    expect(idCopy).not.toBeNull();
+    expect(fileCopy.querySelector("svg")).not.toBeNull();
+    expect(idCopy.querySelector("svg")).not.toBeNull();
+    expect(fileCopy.title).toBe("Copy file path");
+    expect(idCopy.title).toBe("Copy session ID");
   });
 
-  test("updateSessionInfo exposes the file path and session id through the icons", () => {
+  test("updateSessionInfo exposes the file path and session id as visible values", () => {
     const { info, panel } = makePanel();
     info.updateSessionInfo({
       filePath: "/sessions/a.jsonl",
       sessionId: "session-a",
     });
-    const file = panel.querySelector('[data-copy-session-field="file"]');
-    const id = panel.querySelector('[data-copy-session-field="id"]');
-    expect(file.title).toBe("File: /sessions/a.jsonl · Copy file path");
-    expect(file.getAttribute("aria-label")).toBe("File: /sessions/a.jsonl · Copy file path");
-    expect(file.dataset.copyValue).toBe("/sessions/a.jsonl");
-    expect(id.title).toBe("ID: session-a · Copy session ID");
-    expect(id.dataset.copyValue).toBe("session-a");
+    const fileValue = panel.querySelector('[data-session-field="file"]');
+    const idValue = panel.querySelector('[data-session-field="id"]');
+    const fileCopy = panel.querySelector('[data-copy-session-field="file"]');
+    const idCopy = panel.querySelector('[data-copy-session-field="id"]');
+    expect(fileValue.textContent).toBe("a.jsonl");
+    expect(fileValue.title).toBe("/sessions/a.jsonl");
+    expect(fileCopy.getAttribute("aria-label")).toBe("File: /sessions/a.jsonl · Copy file path");
+    expect(fileCopy.dataset.copyValue).toBe("/sessions/a.jsonl");
+    expect(idValue.textContent).toBe("session-a");
+    expect(idCopy.getAttribute("aria-label")).toBe("ID: session-a · Copy session ID");
+    expect(idCopy.dataset.copyValue).toBe("session-a");
   });
 
   test("updateWorkspace updates the path text and title", () => {
@@ -152,21 +160,24 @@ describe("InfoPanel workspace section", () => {
     expect(writeText).toHaveBeenNthCalledWith(2, "session-a");
   });
 
-  test("session file icon copies the full path while the tooltip shows it", async () => {
+  test("session file value shows the basename with the full path in its tooltip, and copies the full path", async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     const { info, panel } = makePanel({ writeText });
     const filePath =
       "/Users/ShixinGuo/.pi/agent/sessions/picot/2026-08-28T06-21-25-01a04707-0620-750f-a29a-5bc353f97d06.jsonl";
     const sessionId = "01a04707-0620-750f-a29a-5bc353f97d06";
     info.updateSessionInfo({ filePath, sessionId });
-    const file = panel.querySelector('[data-copy-session-field="file"]');
-    const id = panel.querySelector('[data-copy-session-field="id"]');
-    expect(file.title).toContain(filePath);
-    expect(file.textContent).toBe("");
-    expect(id.title).toContain(sessionId);
-    file.click();
+    const fileValue = panel.querySelector('[data-session-field="file"]');
+    const idValue = panel.querySelector('[data-session-field="id"]');
+    const fileCopy = panel.querySelector('[data-copy-session-field="file"]');
+    expect(fileValue.title).toBe(filePath);
+    expect(fileValue.textContent).toBe(
+      "2026-08-28T06-21-25-01a04707-0620-750f-a29a-5bc353f97d06.jsonl",
+    );
+    expect(idValue.title).toBe(sessionId);
+    fileCopy.click();
     await vi.waitFor(() => expect(writeText).toHaveBeenCalledWith(filePath));
-    await vi.waitFor(() => expect(file.getAttribute("aria-label")).toBe("Copied"));
+    await vi.waitFor(() => expect(fileCopy.getAttribute("aria-label")).toBe("Copied"));
   });
 
   test("mounts the injected task analysis section above the session tree", () => {

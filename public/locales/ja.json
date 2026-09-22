@@ -457,7 +457,8 @@
     "modelsMustBeObject": "models.jsonはJSONオブジェクトである必要があります。",
     "providersMustBeObject": "'providers'はオブジェクトである必要があります。",
     "compactionFailed": "Context compaction failed.",
-    "compactionFailedDetail": "Context compaction failed: {error}"
+    "compactionFailedDetail": "Context compaction failed: {error}",
+    "compactionTimedOut": "Context compaction timed out — no response from Pi."
   },
   "onboarding": {
     "openProject": "チャットを始めるためにプロジェクトを開いてください。",
@@ -1355,8 +1356,6 @@
   },
   "taskDebugger": {
     "title": "タスク分析",
-    "scopeLast": "直近のタスク",
-    "scopeSession": "セッション全体",
     "copyReport": "レポートをコピー",
     "copied": "コピーしました",
     "copyFailed": "コピーに失敗しました",
@@ -1365,7 +1364,6 @@
     "timeSplit": "時間の内訳",
     "findings": "分析結果",
     "slowest": "最も遅いステップ",
-    "timeline": "ステップのタイムライン",
     "failures": "失敗",
     "turns": "ターン",
     "toolCalls": "ツール呼び出し",
@@ -1375,7 +1373,6 @@
     "loadingHistory": "保存されたセッションログを読み込んでいます…",
     "historyFailed": "保存されたセッションログを読み取れませんでした。このウィンドウが記録したタスクのみ表示します。",
     "historyNote": "以前のタスクは保存されたセッションログから再構成しています。所要時間はログのタイムスタンプに基づき、ログに残らない処理（コンパクションなど）は含まれません。",
-    "noSteps": "ステップが記録されていません。",
     "stepToolCalls": "呼び出したツール: {tools}",
     "stepNoOutput": "表示できる返信がありません(推論のみ)。",
     "neverFinished": "このステップは終了を報告しませんでした。",

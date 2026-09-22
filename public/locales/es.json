@@ -457,7 +457,8 @@
     "modelsMustBeObject": "models.json debe ser un objeto JSON.",
     "providersMustBeObject": "'providers' debe ser un objeto.",
     "compactionFailed": "Context compaction failed.",
-    "compactionFailedDetail": "Context compaction failed: {error}"
+    "compactionFailedDetail": "Context compaction failed: {error}",
+    "compactionTimedOut": "Context compaction timed out — no response from Pi."
   },
   "onboarding": {
     "openProject": "Abre un proyecto para comenzar a chatear.",
@@ -1355,8 +1356,6 @@
   },
   "taskDebugger": {
     "title": "Análisis de la tarea",
-    "scopeLast": "Última tarea",
-    "scopeSession": "Toda la sesión",
     "copyReport": "Copiar informe",
     "copied": "Copiado",
     "copyFailed": "No se pudo copiar",
@@ -1365,7 +1364,6 @@
     "timeSplit": "En qué se fue el tiempo",
     "findings": "Hallazgos",
     "slowest": "Pasos más lentos",
-    "timeline": "Cronología de pasos",
     "failures": "Fallos",
     "turns": "Turnos",
     "toolCalls": "Llamadas a herramientas",
@@ -1375,7 +1373,6 @@
     "loadingHistory": "Leyendo el registro guardado de la sesión…",
     "historyFailed": "No se pudo leer el registro guardado de la sesión; solo se muestran las tareas que esta ventana observó.",
     "historyNote": "Las tareas anteriores se reconstruyeron a partir del registro guardado: sus tiempos provienen de las marcas que registró y los pasos que no guarda (como la compactación) no aparecen.",
-    "noSteps": "No se registró ningún paso.",
     "stepToolCalls": "Llamó a: {tools}",
     "stepNoOutput": "Sin respuesta visible (solo razonamiento).",
     "neverFinished": "Este paso nunca informó de que había terminado.",

@@ -805,6 +805,14 @@ const compactCoordinator = createCompactCoordinator({
   onState: (state) => {
     contextUsage.setCompacting(state === "requested" || state === "running");
   },
+  onTimeout: () => {
+    // store.compaction is a second, independent "running" flag (set by the
+    // compaction_start event, see session-store.js) that requestManualCompaction
+    // also guards on. Giving up locally must clear it too, or every future
+    // click silently no-ops forever with no error shown.
+    if (store.compaction?.status === "running") store = { ...store, compaction: null };
+    showError(new Error(t("errors.compactionTimedOut")));
+  },
 });
 
 async function requestManualCompaction() {
@@ -1069,7 +1077,15 @@ runtime.subscribe((frame) => {
 setupConfigGatewayConnectionListener({
   adapter,
   isReady: () => configGatewayTargetReady,
-  onDisconnected: () => setStatus("disconnected"),
+  onDisconnected: () => {
+    setStatus("disconnected");
+    // The pi connection dropped mid-compaction — compaction_end will never
+    // arrive, so don't leave the button spinning until the next timeout.
+    compactCoordinator.reset();
+    // Same reasoning applies to the independent store.compaction "running"
+    // flag requestManualCompaction guards on; see the onTimeout handler above.
+    if (store.compaction?.status === "running") store = { ...store, compaction: null };
+  },
 });
 adapter.connect();
 

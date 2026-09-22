@@ -350,7 +350,7 @@ body {
 .git-history-meta {
   flex: none;
   color: var(--text-secondary);
-  font-size: 0.75rem;
+  font-size: var(--font-size-sm);
 }
 .git-history-detail-body {
   border-top: 0;
@@ -397,7 +397,7 @@ body {
   flex: none;
   color: var(--text-secondary);
   font-family: var(--font-mono, monospace);
-  font-size: 0.75rem;
+  font-size: var(--font-size-sm);
 }
 .git-panel section:not(.git-history-section) {
   border-top: 1px solid var(--border);
@@ -502,7 +502,7 @@ body {
   min-width: 0;
   overflow: hidden;
   color: var(--text-primary);
-  font-size: 0.8125rem;
+  font-size: var(--font-size-md);
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -512,7 +512,7 @@ body {
   border: 1px solid var(--border);
   border-radius: var(--radius-pill);
   color: var(--text-secondary);
-  font-size: 0.6875rem;
+  font-size: var(--font-size-sm);
   line-height: 1;
   padding: 0.25rem 0.4rem;
   text-transform: capitalize;
@@ -549,7 +549,6 @@ body {
   font-size: var(--font-size-sm);
   font-weight: 650;
   letter-spacing: 0.04em;
-  text-transform: uppercase;
 }
 .git-diff-cell {
   display: block;
@@ -581,7 +580,7 @@ body {
 .git-diff-empty {
   margin: auto;
   color: var(--text-secondary);
-  font-size: 0.8125rem;
+  font-size: var(--font-size-sm);
 }
 .git-diff-fallback {
   min-height: 0;
@@ -591,7 +590,7 @@ body {
 .git-diff-fallback-reason {
   margin: 0 0 var(--space-2);
   color: var(--text-secondary);
-  font-size: 0.8125rem;
+  font-size: var(--font-size-sm);
 }
 .git-diff-fallback pre {
   margin: 0;
@@ -622,7 +621,7 @@ body {
 .git-confirm-message {
   margin: 0;
   color: var(--text-primary);
-  font-size: 0.875rem;
+  font-size: var(--font-size-md);
   line-height: 1.5;
 }
 .git-confirm-actions {
@@ -646,14 +645,14 @@ body {
 }
 .git-commit-dialog h3 {
   margin: 0;
-  font-size: 1rem;
+  font-size: var(--font-size-lg);
 }
 .git-commit-textarea {
   width: 100%;
   min-height: 120px;
   resize: vertical;
   font-family: inherit;
-  font-size: 0.875rem;
+  font-size: var(--font-size-md);
   padding: 0.5rem;
   box-sizing: border-box;
 }
@@ -665,7 +664,7 @@ body {
 .git-commit-error,
 .git-commit-confirmation,
 .git-commit-warning {
-  font-size: 0.8125rem;
+  font-size: var(--font-size-sm);
   margin: 0;
 }
 .git-commit-error {
@@ -824,7 +823,6 @@ body.is-resizing-side-panel {
   flex: 1;
   font-size: var(--font-size-md);
   font-weight: 600;
-  text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--text-primary);
 }

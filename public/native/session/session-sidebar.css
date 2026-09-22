@@ -473,7 +473,6 @@
   font-size: var(--font-size-sm);
   padding: var(--space-0-5) var(--space-1);
   border-radius: var(--radius-pill);
-  text-transform: uppercase;
   letter-spacing: 0.5px;
   flex-shrink: 0;
 }
@@ -638,7 +637,6 @@
   color: var(--text-secondary);
   font-size: var(--font-size-sm);
   font-weight: 600;
-  text-transform: uppercase;
   letter-spacing: 0.04em;
   margin-top: 6px;
 }

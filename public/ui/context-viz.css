@@ -35,7 +35,6 @@
 
 .context-viz-title {
   font-size: var(--font-size-sm);
-  text-transform: uppercase;
   letter-spacing: 0.04em;
   margin-bottom: 12px;
 }

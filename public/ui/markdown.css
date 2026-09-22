@@ -23,7 +23,6 @@
 .message.assistant .message-content th {
   background: var(--bg-glass-strong);
   font-size: var(--font-size-sm);
-  text-transform: uppercase;
   letter-spacing: 0.03em;
   padding: var(--space-2) var(--space-3);
   border-bottom: 1px solid var(--border-hover);
@@ -180,6 +179,6 @@ code {
   border: 1px solid var(--border);
   padding: var(--space-0-5) var(--space-2);
   border-radius: var(--radius-sm);
-  font-size: 0.88em;
+  font-size: var(--font-size-sm);
   color: var(--accent-text);
 }

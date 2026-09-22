@@ -258,7 +258,6 @@
   font-size: var(--font-size-sm);
   font-weight: 700;
   letter-spacing: 0.08em;
-  text-transform: uppercase;
 }
 
 .models-config-form {
@@ -515,7 +514,6 @@
   font-size: var(--font-size-sm);
   font-weight: 600;
   letter-spacing: 0.08em;
-  text-transform: uppercase;
 }
 .provider-setup-note {
   padding: var(--space-3);
@@ -812,7 +810,6 @@
   font-size: var(--font-size-sm);
   font-weight: 600;
   letter-spacing: 0.06em;
-  text-transform: uppercase;
 }
 
 .api-model-list-heading > :last-child {

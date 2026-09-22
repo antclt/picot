@@ -35,7 +35,6 @@
 
 .queued-msg-label {
   font-size: var(--font-size-sm);
-  text-transform: uppercase;
   letter-spacing: 0.5px;
   flex-shrink: 0;
 }

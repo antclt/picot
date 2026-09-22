@@ -1,5 +1,5 @@
-// ABOUTME: Covers the Info panel's task analysis section: scope selection, the
-// ABOUTME: report blocks, history rebuild, copy-report and AI delegation.
+// ABOUTME: Covers the Info panel's task analysis section: the report blocks,
+// ABOUTME: history rebuild, copy-report and AI delegation.
 
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { initI18n, t } from "../../i18n.js";
@@ -41,17 +41,17 @@ function turn(index, status, steps, { startedAt = 0, endedAt = 10_000, error = n
 }
 
 function mount(overrides = {}) {
+  // The dialog portals itself to <body> (see session-task-analysis.js), so
+  // clear the body first and mount the trigger there too; `el` is the body,
+  // which then holds both the trigger and the dialog.
+  document.body.replaceChildren();
   const section = createSessionTaskAnalysis({
     getTurns: () => [],
     t,
     ...overrides,
   });
-  document.body.replaceChildren(section.element);
-  return { section, el: section.element };
-}
-
-function scopeInputs(el) {
-  return [...el.querySelectorAll(".session-analysis-scope input")];
+  document.body.appendChild(section.element);
+  return { section, el: document.body };
 }
 
 describe("session task analysis", () => {
@@ -116,34 +116,33 @@ describe("session task analysis", () => {
     expect(el.textContent).toContain(t("taskDebugger.stepNoOutput"));
   });
 
-  it("hides the slowest-steps ranking when it would just repeat the timeline verbatim", () => {
+  it("shows the slowest-steps ranking even for a single step", () => {
     const { el } = mount({
       getTurns: () => [turn(1, "completed", [step("model", "assistant", 0, 6_100)])],
     });
-    expect(el.textContent).not.toContain(t("taskDebugger.slowest"));
-    // The single step still shows up once, via the timeline.
+    expect(el.textContent).toContain(t("taskDebugger.slowest"));
     expect(el.querySelectorAll(".session-analysis-step").length).toBe(1);
   });
 
-  it("keeps the slowest-steps ranking once it actually filters steps out", () => {
+  it("caps the slowest-steps ranking at 5, dropping the rest instead of listing every step", () => {
     const steps = Array.from({ length: 8 }, (_, i) => step("tool", `step-${i}`, i * 100, i + 1));
     const { el } = mount({ getTurns: () => [turn(1, "completed", steps)] });
 
     expect(el.textContent).toContain(t("taskDebugger.slowest"));
-    const [slowestSection, timelineSection] = [
-      ...el.querySelectorAll(".session-analysis-section"),
-    ].filter(
-      (section) =>
-        section.querySelector(".session-analysis-heading")?.textContent ===
-          t("taskDebugger.slowest") ||
-        section.querySelector(".session-analysis-heading")?.textContent ===
-          t("taskDebugger.timeline"),
-    );
-    expect(slowestSection.querySelectorAll(".session-analysis-step").length).toBe(5);
-    expect(timelineSection.querySelectorAll(".session-analysis-step").length).toBe(8);
+    expect(el.querySelectorAll(".session-analysis-step").length).toBe(5);
   });
 
-  it("analyses only the last turn by default and the whole session on demand", () => {
+  it("drops the findings section entirely when the only finding is informational (e.g. 'nothing stands out')", () => {
+    const { el } = mount({
+      getTurns: () => [
+        turn(1, "completed", [step("tool", "grep", 0, 100)], { startedAt: 0, endedAt: 100 }),
+      ],
+    });
+    expect(el.querySelector(".session-analysis-findings")).toBeNull();
+    expect(el.querySelector(".session-analysis-finding--info")).toBeNull();
+  });
+
+  it("analyses every turn in the session, not just the most recent one", () => {
     const turns = [
       turn(1, "completed", [step("tool", "grep", 0, 100)], { startedAt: 0, endedAt: 1_000 }),
       turn(2, "completed", [step("tool", "bash", 5_000, 100)], {
@@ -152,52 +151,54 @@ describe("session task analysis", () => {
       }),
     ];
     const analyze = vi.fn(analyzeTurns);
-    const { el } = mount({ getTurns: () => turns, analyze });
-
-    expect(analyze.mock.calls[0][0]).toEqual([turns[1]]);
-
-    const sessionScope = scopeInputs(el)[1];
-    sessionScope.checked = true;
-    sessionScope.dispatchEvent(new Event("change"));
-    expect(analyze.mock.calls[1][0]).toEqual(turns);
-  });
-
-  it("skips a still-running turn when picking the last finished one", () => {
-    const turns = [turn(1, "completed", []), turn(2, "running", [])];
-    const analyze = vi.fn(analyzeTurns);
     mount({ getTurns: () => turns, analyze });
-    expect(analyze.mock.calls[0][0]).toEqual([turns[0]]);
+
+    expect(analyze.mock.calls[0][0]).toEqual(turns);
   });
 
   it("leaves the in-flight turn out while a turn streams", () => {
     const turns = [turn(1, "completed", []), turn(2, "running", [])];
-    const { section, el } = mount({ getTurns: () => turns });
+    const { section } = mount({ getTurns: () => turns });
 
     section.setStreaming(true);
-    // Scope "last" still resolves to the finished turn.
-    expect(el.textContent).toContain(t("taskDebugger.status.completed"));
-
-    // Scope "session" would have included the running turn; it must not.
-    const sessionScope = scopeInputs(el)[1];
-    sessionScope.checked = true;
-    sessionScope.dispatchEvent(new Event("change"));
     expect(section.getReport().totals.turns).toBe(1);
   });
 
-  it("collapses and expands its content", () => {
+  it("opens and closes the report as a dialog", () => {
     const { el } = mount({ getTurns: () => [turn(1, "completed", [])] });
     const toggle = el.querySelector(".session-analysis-toggle");
     const content = el.querySelector(".session-analysis-content");
+    const overlay = el.querySelector(".session-analysis-overlay");
 
-    expect(toggle.getAttribute("aria-expanded")).toBe("true");
-    expect(content.classList.contains("hidden")).toBe(false);
+    // The rail only ever shows the compact trigger; the report starts closed.
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(content.classList.contains("hidden")).toBe(true);
+    expect(overlay.classList.contains("hidden")).toBe(true);
 
     toggle.click();
-    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    expect(content.classList.contains("hidden")).toBe(false);
+    expect(overlay.classList.contains("hidden")).toBe(false);
+
+    toggle.click();
+    expect(content.classList.contains("hidden")).toBe(true);
+
+    // Clicking the overlay or the close button also dismiss it.
+    toggle.click();
+    overlay.click();
     expect(content.classList.contains("hidden")).toBe(true);
 
     toggle.click();
-    expect(content.classList.contains("hidden")).toBe(false);
+    el.querySelector(".session-analysis-close").click();
+    expect(content.classList.contains("hidden")).toBe(true);
+  });
+
+  it("shows the total elapsed time on the compact trigger without opening the dialog", () => {
+    const { el } = mount({
+      getTurns: () => [turn(1, "completed", [step("tool", "bash", 0, 1_500)])],
+    });
+    expect(el.querySelector(".session-analysis-time").textContent).not.toBe("");
+    expect(el.querySelector(".session-analysis-content").classList.contains("hidden")).toBe(true);
   });
 
   it("offers nothing to copy when there is no report", () => {
@@ -269,9 +270,6 @@ describe("session task analysis", () => {
       });
 
       await section.refresh();
-      const sessionScope = scopeInputs(el)[1];
-      sessionScope.checked = true;
-      sessionScope.dispatchEvent(new Event("change"));
 
       expect(el.textContent).toContain("old-tool");
       expect(el.textContent).toContain("live-tool");
