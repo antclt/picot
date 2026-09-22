@@ -56,6 +56,8 @@
   height: 36px;
   padding: 0 var(--space-2);
   border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  scrollbar-width: thin;
 }
 
 .terminal-body {
@@ -85,6 +87,9 @@
   font-size: var(--font-size-sm);
   white-space: nowrap;
   cursor: pointer;
+  flex: 0 0 auto;
+  min-width: 96px;
+  justify-content: space-between;
 }
 
 .terminal-tab:hover,
@@ -94,13 +99,14 @@
 }
 
 .terminal-tab-label {
-  max-width: 120px;
+  max-width: 220px;
   overflow: hidden;
   text-overflow: ellipsis;
+  flex: 0 1 auto;
+  min-width: 0;
 }
 
 .terminal-tab-close,
-.terminal-tab-restart,
 .terminal-collapse,
 .terminal-enlarge,
 .terminal-new-tab {
@@ -119,14 +125,12 @@
   cursor: pointer;
 }
 
-.terminal-tab-close,
-.terminal-tab-restart {
+.terminal-tab-close {
   flex: 0 0 var(--control-height-xs);
   opacity: 0;
 }
 
 .terminal-tab-close:hover,
-.terminal-tab-restart:hover,
 .terminal-collapse:hover,
 .terminal-enlarge:hover,
 .terminal-new-tab:hover {
@@ -135,7 +139,6 @@
 }
 
 .terminal-tab-close svg,
-.terminal-tab-restart svg,
 .terminal-collapse svg,
 .terminal-enlarge svg,
 .terminal-new-tab svg {
@@ -144,9 +147,7 @@
 }
 
 .terminal-tab:hover .terminal-tab-close,
-.terminal-tab.active .terminal-tab-close,
-.terminal-tab:hover .terminal-tab-restart,
-.terminal-tab.active .terminal-tab-restart {
+.terminal-tab.active .terminal-tab-close {
   opacity: 1;
 }
 
