@@ -32,6 +32,11 @@ import { setupComposerImageAttachments } from "./composer/composer-images.js";
 import { setupComposerPasteOffload } from "./composer/composer-paste-offload.js";
 import { setupComposerSlashMenu } from "./composer/composer-slash-menu.js";
 import { setupComposerSubmitHandling } from "./composer/composer-submit.js";
+import {
+  profileForNewSession,
+  profileForSnapshotRebind,
+  restoreSessionModel,
+} from "./composer/model-restoration.js";
 import { isSelectedModel, splitModelsByScope } from "./composer/model-selection.js";
 import { renderQueuedMessages } from "./composer/queued-messages.js";
 import {
@@ -226,6 +231,7 @@ function formatThinkingLevelLabel(level) {
 let currentThinkingLevel = "off";
 let currentModelProvider = null;
 let currentModelId = null;
+let pendingModelRestore = null;
 
 // Session UI state: persists per-session model + thinking level so switching
 // between sessions restores the composer's model/thinking selection. Profiles
@@ -233,6 +239,7 @@ let currentModelId = null;
 // id. Unsent composer text is intentionally NOT session-scoped: it follows the
 // user across session switches instead of being saved/restored per session.
 const sessionUiState = new SessionUiStateStore({
+  waitUntilReady: () => adapter.ready(),
   profileClient: {
     load: () => {
       const sessionId = target.sessionId;
@@ -242,6 +249,7 @@ const sessionUiState = new SessionUiStateStore({
             .sendHostRequest({
               operation: "session_ui_profile_load",
               expectedSessionId: sessionId,
+              fallbackToLatest: sessionId.startsWith("temporary-"),
             })
             .then((response) => response?.profile ?? null)
         : fetch("/v2/host", {
@@ -250,6 +258,7 @@ const sessionUiState = new SessionUiStateStore({
             body: JSON.stringify({
               operation: "session_ui_profile_load",
               expectedSessionId: sessionId,
+              fallbackToLatest: sessionId.startsWith("temporary-"),
             }),
           })
             .then(async (response) => {
@@ -1015,8 +1024,17 @@ const hydrateFromSnapshot = async (snapshot) => {
   taskAnalysis?.setStreaming(Boolean(pi.isStreaming));
   if (pi.isStreaming) showLiveProcessIndicator();
   contextUsage.setCompacting(snapshot.state.compaction?.status === "running");
-  updateComposerModel(pi.model ?? null);
-  updateComposerThinking(pi.thinkingLevel ?? "off");
+  const restoredProfile = pendingModelRestore;
+  pendingModelRestore = null;
+  const selection = await restoreSessionModel({
+    runtime,
+    target,
+    profile: restoredProfile,
+    state: pi,
+    idempotencyKey: randomId,
+  });
+  updateComposerModel(selection.model, { persist: false });
+  updateComposerThinking(selection.thinkingLevel, { persist: false });
   contextUsage.setUsage(findLatestAssistantUsage(messages), currentModelContextWindow);
   setSessionCost(computeTotalCostFromMessages(messages));
   // Hydrate header status bar from authoritative get_session_stats
@@ -1383,7 +1401,13 @@ window.addEventListener("picot:session-created", (event) => {
   // Clear the chat area for the new session before adopting
   messageRenderer.clear();
   toolRenderer.clear();
-  void adoptTarget(nextTarget).then(() => {
+  const profileOverride = nextTarget.sessionId.startsWith("temporary-")
+    ? profileForNewSession(
+        { provider: currentModelProvider, id: currentModelId },
+        currentThinkingLevel,
+      )
+    : undefined;
+  void adoptTarget(nextTarget, { profileOverride }).then(() => {
     input.value = "";
     composerAutoResize.sync();
     input.focus();
@@ -2443,8 +2467,18 @@ function upsertActiveSessionFromUserMessage(message = null) {
   pendingBoundSessionFirstMessage = null;
 }
 
-async function adoptTarget(nextTarget, { updateRoute = true } = {}) {
+async function adoptTarget(nextTarget, { updateRoute = true, profileOverride = undefined } = {}) {
   const previousTarget = target;
+  const effectiveProfileOverride =
+    profileOverride === undefined
+      ? profileForSnapshotRebind(
+          previousTarget,
+          nextTarget,
+          pendingModelRestore,
+          { provider: currentModelProvider, id: currentModelId },
+          currentThinkingLevel,
+        )
+      : profileOverride;
   const sessionChanged = nextTarget.sessionId !== previousTarget.sessionId;
   const targetChanged =
     sessionChanged ||
@@ -2516,10 +2550,18 @@ async function adoptTarget(nextTarget, { updateRoute = true } = {}) {
   hydrateHeaderSessionStats();
   setSessionCost(0);
   // Restore model/thinking for the new session
-  const restoredProfile = await sessionUiState.loadProfile();
+  const restoredProfile =
+    effectiveProfileOverride === undefined
+      ? await sessionUiState.loadProfile()
+      : effectiveProfileOverride;
+  if (target !== nextTarget) return;
+  pendingModelRestore = restoredProfile;
   if (restoredProfile) {
-    updateComposerModel({ provider: restoredProfile.provider, id: restoredProfile.modelId });
-    updateComposerThinking(restoredProfile.thinkingLevel);
+    updateComposerModel(
+      { provider: restoredProfile.provider, id: restoredProfile.modelId },
+      { persist: false },
+    );
+    updateComposerThinking(restoredProfile.thinkingLevel, { persist: false });
   }
   // Intentionally leave input.value untouched here: an unsent composer draft
   // must follow the user across session switches instead of being cleared or
@@ -2902,17 +2944,18 @@ function showError(error) {
 
 // ── Composer model dropdown & thinking button (functions & event wiring) ────────
 
-function updateComposerModel(model) {
+function updateComposerModel(model, { persist = true } = {}) {
   currentModelProvider = model?.provider ?? null;
   currentModelId = model?.id ?? null;
   // Persist the model change to session UI state
-  sessionUiState
-    .saveProfile({
-      provider: currentModelProvider || "",
-      modelId: currentModelId || "",
-      thinkingLevel: currentThinkingLevel,
-    })
-    .catch(() => {});
+  if (persist)
+    sessionUiState
+      .saveProfile({
+        provider: currentModelProvider || "",
+        modelId: currentModelId || "",
+        thinkingLevel: currentThinkingLevel,
+      })
+      .catch(() => {});
   currentModelContextWindow =
     Number(model?.contextWindow) || findModelContextWindow(currentModelProvider, currentModelId);
   contextUsage.setContextWindowSize(currentModelContextWindow);
@@ -2921,15 +2964,16 @@ function updateComposerModel(model) {
   }
 }
 
-function updateComposerThinking(level) {
+function updateComposerThinking(level, { persist = true } = {}) {
   currentThinkingLevel = level ?? "off";
-  sessionUiState
-    .saveProfile({
-      provider: currentModelProvider || "",
-      modelId: currentModelId || "",
-      thinkingLevel: currentThinkingLevel,
-    })
-    .catch(() => {});
+  if (persist)
+    sessionUiState
+      .saveProfile({
+        provider: currentModelProvider || "",
+        modelId: currentModelId || "",
+        thinkingLevel: currentThinkingLevel,
+      })
+      .catch(() => {});
   if (thinkingBtn) {
     const levelLabel = formatThinkingLevelLabel(currentThinkingLevel);
     thinkingBtn.textContent = t("settings.thinkingCompact", { level: levelLabel });
@@ -2956,17 +3000,10 @@ async function loadAvailableModels() {
 
 async function applyConfiguredModelVisibility(models) {
   try {
-    const catalog = await config.call("list_model_catalog");
-    if (!catalog?.ok) throw new Error(catalog?.error || "Failed to load model catalog");
-    const visibleKeys = new Set();
-    for (const provider of catalog.data?.providers ?? []) {
-      for (const model of provider.models ?? []) {
-        if (model.available && model.visible !== false) {
-          visibleKeys.add(`${model.provider || provider.provider}/${model.id}`);
-        }
-      }
-    }
-    return models.filter((model) => visibleKeys.has(`${model.provider}/${model.id}`));
+    const result = await config.call("list_model_visibility");
+    if (!result?.ok) throw new Error(result?.error || "Failed to load model visibility");
+    const visibility = result.data?.visibility ?? {};
+    return models.filter((model) => visibility[`${model.provider}/${model.id}`] !== false);
   } catch (error) {
     console.warn("[Native] Failed to load configured model visibility:", error);
     return models;

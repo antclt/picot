@@ -11,13 +11,15 @@ function normalizeProfile(profile) {
 }
 
 export class SessionUiStateStore {
-  constructor({ profileClient = null } = {}) {
+  constructor({ profileClient = null, waitUntilReady = null } = {}) {
     this.profileClient = profileClient;
+    this.waitUntilReady = waitUntilReady;
   }
 
   async loadProfile() {
     if (!this.profileClient?.load) return null;
     try {
+      await this.waitUntilReady?.();
       return normalizeProfile(await this.profileClient.load());
     } catch {
       return null;
@@ -28,6 +30,7 @@ export class SessionUiStateStore {
     const normalized = normalizeProfile(profile);
     if (!normalized || !this.profileClient?.save) return null;
     try {
+      await this.waitUntilReady?.();
       return normalizeProfile(await this.profileClient.save(normalized)) || normalized;
     } catch {
       return null;

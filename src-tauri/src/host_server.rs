@@ -2398,10 +2398,21 @@ async fn dispatch_host_operation(
                 .ok_or(("invalid_session", "expectedSessionId is required".into()))?
                 .to_owned();
             let profiles = state.session_ui_profiles.clone();
-            let profile = tokio::task::spawn_blocking(move || profiles.load(&expected))
-                .await
-                .map_err(|error| ("host_operation_failed", error.to_string()))?
-                .map_err(|message| ("session_ui_profile_load_failed", message))?;
+            let fallback_to_latest = frame
+                .get("fallbackToLatest")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            let profile = tokio::task::spawn_blocking(move || {
+                let profile = profiles.load(&expected)?;
+                if profile.is_none() && fallback_to_latest {
+                    profiles.load_latest()
+                } else {
+                    Ok(profile)
+                }
+            })
+            .await
+            .map_err(|error| ("host_operation_failed", error.to_string()))?
+            .map_err(|message| ("session_ui_profile_load_failed", message))?;
             Ok(json!({
                 "type": "host_response",
                 "requestId": request_id,

@@ -85,6 +85,18 @@ impl SessionUiProfileStore {
         Ok(profile)
     }
 
+    pub fn load_latest(&self) -> Result<Option<SessionUiProfile>, String> {
+        let mut document = self.document.lock().map_err(lock_error)?;
+        if prune_missing(&mut document.profiles) {
+            self.write_locked(&document)?;
+        }
+        Ok(document
+            .profiles
+            .values()
+            .max_by_key(|stored| stored.updated_at)
+            .map(|stored| stored.profile.clone()))
+    }
+
     pub fn save(
         &self,
         session_path: &str,
@@ -96,11 +108,19 @@ impl SessionUiProfileStore {
         let profile = normalize_profile(provider, model_id, thinking_level)?;
         let mut document = self.document.lock().map_err(lock_error)?;
         let _ = prune_missing(&mut document.profiles);
+        let updated_at = document
+            .profiles
+            .values()
+            .map(|stored| stored.updated_at)
+            .max()
+            .unwrap_or(0)
+            .saturating_add(1)
+            .max(unix_timestamp());
         document.profiles.insert(
             key,
             StoredProfile {
                 profile: profile.clone(),
-                updated_at: unix_timestamp(),
+                updated_at,
             },
         );
         self.write_locked(&document)?;
@@ -176,7 +196,7 @@ fn normalize_profile(
     }
     if !matches!(
         thinking_level,
-        "off" | "minimal" | "low" | "medium" | "high"
+        "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max"
     ) {
         return Err("Invalid session UI profile thinking level".to_string());
     }
@@ -189,10 +209,15 @@ fn normalize_profile(
 
 fn prune_missing(profiles: &mut BTreeMap<String, StoredProfile>) -> bool {
     let before = profiles.len();
-    profiles.retain(|path, _| match fs::metadata(path) {
-        Ok(_) => true,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
-        Err(_) => true,
+    // Current host requests use opaque session IDs. Older records used file
+    // paths, so only those can be checked against the filesystem.
+    profiles.retain(|path, _| {
+        !Path::new(path).is_absolute()
+            || match fs::metadata(path) {
+                Ok(_) => true,
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
+                Err(_) => true,
+            }
     });
     profiles.len() != before
 }
@@ -200,7 +225,7 @@ fn prune_missing(profiles: &mut BTreeMap<String, StoredProfile>) -> bool {
 fn unix_timestamp() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_secs())
+        .map(|duration| duration.as_millis() as u64)
         .unwrap_or(0)
 }
 
@@ -261,6 +286,44 @@ mod tests {
     }
 
     #[test]
+    fn opaque_session_id_survives_a_second_profile_load() {
+        let (_dir, path, _session) = setup();
+        let store = SessionUiProfileStore::open(path).unwrap();
+        let session_id = "01a0cc62-6e69-7653-a5b9-110d2e9c9f19";
+        store
+            .save(session_id, "zoom-gpt", "deepseek_v4_flash", "medium")
+            .unwrap();
+        assert_eq!(
+            store.load(session_id).unwrap().unwrap().model_id,
+            "deepseek_v4_flash"
+        );
+        assert_eq!(
+            store.load_latest().unwrap().unwrap().model_id,
+            "deepseek_v4_flash"
+        );
+        assert_eq!(
+            store.load(session_id).unwrap().unwrap().model_id,
+            "deepseek_v4_flash"
+        );
+    }
+
+    #[test]
+    fn latest_profile_follows_the_last_selection_even_within_one_millisecond() {
+        let (_dir, path, _session) = setup();
+        let store = SessionUiProfileStore::open(path).unwrap();
+        store
+            .save("session-a", "anthropic", "claude-opus-4-8", "off")
+            .unwrap();
+        store
+            .save("session-b", "zoom-gpt", "deepseek_v4_flash", "medium")
+            .unwrap();
+        assert_eq!(
+            store.load_latest().unwrap().unwrap().model_id,
+            "deepseek_v4_flash"
+        );
+    }
+
+    #[test]
     fn rejects_invalid_profile_values() {
         let (_dir, path, session) = setup();
         let store = SessionUiProfileStore::open(path).unwrap();
@@ -268,8 +331,11 @@ mod tests {
             .save(session.to_str().unwrap(), "", "model", "off")
             .is_err());
         assert!(store
-            .save(session.to_str().unwrap(), "p", "m", "xhigh")
+            .save(session.to_str().unwrap(), "p", "m", "invalid")
             .is_err());
+        assert!(store
+            .save(session.to_str().unwrap(), "p", "m", "xhigh")
+            .is_ok());
     }
 
     #[test]

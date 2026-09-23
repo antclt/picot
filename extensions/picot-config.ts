@@ -1220,6 +1220,10 @@ export async function handlePicotConfig(
         return { ok: true, data: catalog };
       }
 
+      case "list_model_visibility": {
+        return { ok: true, data: { visibility: preferences.read().visibility } };
+      }
+
       // Sink for frontend-measured perf events (see [MODEL-LOAD] tracing in
       // public/native/settings/models-page.js) so both ends of the model
       // catalog round trip land in the same local log file for analysis.

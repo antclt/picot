@@ -453,8 +453,58 @@ fn navigate_workspace_window(
         return Err(error.to_string());
     }
     set_window_workspace(app, window.label(), &target.workspace_id);
+    // Closely mirror Finder/Spotlight-style "open this item" behavior: a window
+    // reached from a background notification click may be minimized, hidden, or
+    // the app may simply not be the active application. `set_focus()` alone does
+    // NOT unminimize a minimized window, and on macOS it does not activate the
+    // app when we are in the background, so clicking a notification would
+    // silently navigate the window without bringing Picot to the front.
+    if let Ok(minimized) = window.is_minimized() {
+        if minimized {
+            let _ = window.unminimize();
+        }
+    }
+    if let Ok(visible) = window.is_visible() {
+        if !visible {
+            let _ = window.show();
+        }
+    }
     let _ = window.set_focus();
+    activate_app(app);
     Ok(())
+}
+
+/// Bring the running Picot application to the foreground. `set_focus()` on a
+/// window is often not enough when the app is in the background (e.g. after a
+/// notification click on macOS); here we additionally activate the application
+/// so macOS orders it to the front.
+fn activate_app(app: &AppHandle) {
+    #[cfg(target_os = "macos")]
+    {
+        let _ = app.run_on_main_thread(move || {
+            activate_macos_app();
+        });
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = app;
+    }
+}
+
+/// Activates the running Cocoa application. On macOS 14+ `activate` (the
+/// replacement for the deprecated `activateIgnoringOtherApps:`) orders the app
+/// to the front even if we are currently in the background, which is what a
+/// notification click should do.
+#[cfg(target_os = "macos")]
+fn activate_macos_app() {
+    use objc2::MainThreadMarker;
+    use objc2_app_kit::NSApplication;
+    // We are guaranteed to be on the main thread (called from
+    // `run_on_main_thread`), so acquiring the marker is sound.
+    if let Some(mtm) = MainThreadMarker::new() {
+        let app = NSApplication::sharedApplication(mtm);
+        app.activate();
+    }
 }
 
 fn open_native_workspace_window(
