@@ -893,7 +893,7 @@ export function setupModelsPage({ configGateway, oauthGateway, onModelConfigurat
   }
 
   function describeProviderSummary(models) {
-    const enabled = models.filter((model) => model.visible !== false).length;
+    const enabled = models.filter((model) => model.visible === true).length;
     const healthy = models.filter((model) => model.health?.status === "healthy").length;
     const issues = models.filter((model) => model.health?.status === "unhealthy").length;
     return t("settings.apiKeys.summary", { enabled, healthy, issues });
@@ -1553,7 +1553,7 @@ export function setupModelsPage({ configGateway, oauthGateway, onModelConfigurat
     checkHealthBtn.className = "api-model-check-visible";
     checkHealthBtn.textContent = t("settings.apiKeys.checkHealth");
     checkHealthBtn.disabled = !getProviderModels(provider).some(
-      (model) => model.visible !== false && model.available,
+      (model) => model.visible === true && model.available,
     );
     checkHealthBtn.addEventListener("click", () => checkModelHealth(provider.provider));
     actions.appendChild(checkHealthBtn);
