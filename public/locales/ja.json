@@ -122,7 +122,15 @@
     "copyFile": "ファイルパスをコピー",
     "copyId": "セッション ID をコピー",
     "copied": "コピーしました",
-    "copyFailed": "コピーに失敗しました"
+    "copyFailed": "コピーに失敗しました",
+    "aiTitle": "AI分析",
+    "aiRun": "AIで分析",
+    "aiRerun": "再分析",
+    "aiAnalyzing": "分析中…",
+    "aiHint": "このセッションの実行ログをモデルに読ませ、所要時間の統計ではなくリスク・詰まった箇所・失敗の原因を指摘させます。",
+    "aiFailed": "分析に失敗しました。",
+    "aiNoTurns": "このセッションにはまだ分析できる内容がありません。メッセージを送ってから再試行してください。",
+    "aiBusy": "現在のタスクが終わると利用できます"
   },
   "context": {
     "cached": "キャッシュ済み",
@@ -193,7 +201,8 @@
     "providerError": "モデルへのリクエストに失敗しました。",
     "turnFiles": "このターンで変更されたファイル（{count}）:",
     "responseTime": "応答時間",
-    "subagentUnavailableOverSsh": "ACP サブエージェント（#claude、#codex など）はローカルで実行されるため、リモート（SSH）ワークスペースのファイルにアクセスできず、ここでは利用できません。"
+    "subagentUnavailableOverSsh": "ACP サブエージェント（#claude、#codex など）はローカルで実行されるため、リモート（SSH）ワークスペースのファイルにアクセスできず、ここでは利用できません。",
+    "sshProjectDisconnected": "このプロジェクトの SSH 接続が切断されています。下で再接続してからメッセージを送信してください — 再接続するまで、このプロジェクトの他のセッションでも送信できません。"
   },
   "tools": {
     "copyOutput": "出力をコピー",
@@ -448,7 +457,8 @@
     "modelsMustBeObject": "models.jsonはJSONオブジェクトである必要があります。",
     "providersMustBeObject": "'providers'はオブジェクトである必要があります。",
     "compactionFailed": "Context compaction failed.",
-    "compactionFailedDetail": "Context compaction failed: {error}"
+    "compactionFailedDetail": "Context compaction failed: {error}",
+    "compactionTimedOut": "Context compaction timed out — no response from Pi."
   },
   "onboarding": {
     "openProject": "チャットを始めるためにプロジェクトを開いてください。",
@@ -498,6 +508,7 @@
     "pinned": "ピン留め",
     "projects": "プロジェクト",
     "remoteWorkspace": "リモートワークスペース",
+    "remoteWorkspaceDisconnected": "リモートワークスペース — SSH 接続が切断されています",
     "archived": "アーカイブ済み",
     "unavailable": "利用不可",
     "showMore": "もっと表示",
@@ -793,6 +804,8 @@
       "summary": "{enabled}個有効 · {healthy}個正常 · {issues}個の問題",
       "loadFailed": "プロバイダーの読み込みに失敗しました。",
       "toggleModels": "{provider}モデルを切り替え",
+      "searchModels": "モデルを検索…",
+      "searchModelsFor": "{provider}のモデルを検索",
       "model": "モデル",
       "selectAll": "{provider}のすべてのモデルを選択",
       "deselectAll": "{provider}のすべてのモデルを選択解除",
@@ -1340,5 +1353,64 @@
     "aliasRequired": "名前を入力してください。",
     "save": "ホストを保存",
     "saved": "ホストを保存しました。"
+  },
+  "taskDebugger": {
+    "title": "タスク分析",
+    "copyReport": "レポートをコピー",
+    "copied": "コピーしました",
+    "copyFailed": "コピーに失敗しました",
+    "statusLabel": "結果",
+    "totalTime": "合計時間",
+    "timeSplit": "時間の内訳",
+    "findings": "分析結果",
+    "slowest": "最も遅いステップ",
+    "failures": "失敗",
+    "turns": "ターン",
+    "toolCalls": "ツール呼び出し",
+    "wasted": "無駄な時間",
+    "cost": "コスト",
+    "noTurns": "このセッションにはまだ分析できるタスクがありません。メッセージを送ると次のタスクが記録されます。",
+    "loadingHistory": "保存されたセッションログを読み込んでいます…",
+    "historyFailed": "保存されたセッションログを読み取れませんでした。このウィンドウが記録したタスクのみ表示します。",
+    "historyNote": "以前のタスクは保存されたセッションログから再構成しています。所要時間はログのタイムスタンプに基づき、ログに残らない処理（コンパクションなど）は含まれません。",
+    "stepToolCalls": "呼び出したツール: {tools}",
+    "stepNoOutput": "表示できる返信がありません(推論のみ)。",
+    "neverFinished": "このステップは終了を報告しませんでした。",
+    "unknownError": "不明なエラー",
+    "status": {
+      "completed": "完了",
+      "failed": "失敗",
+      "aborted": "中止",
+      "running": "実行中",
+      "unknown": "未完了"
+    },
+    "severity": {
+      "critical": "重大",
+      "warning": "警告",
+      "info": "情報"
+    },
+    "phase": {
+      "model": "モデル",
+      "tool": "ツール",
+      "compaction": "コンパクション",
+      "idle": "待機"
+    },
+    "finding": {
+      "failedAt": "タスクは {label} {detail} で失敗しました: {error}",
+      "aborted": "タスクは完了前に停止されました。",
+      "unknownEnd": "タスクの終了が報告されませんでした。ランタイム接続が切れた可能性があります。",
+      "stuckStep": "{label} {detail} で {duration} 停止し、終了が報告されませんでした（該当ステップ {count} 件）。",
+      "toolFailures": "{count} 件のツール呼び出しが失敗しました。最初は {label}: {error}",
+      "slowStep": "{label} {detail} がボトルネックです: {duration}（全体の {share}）。",
+      "idleTime": "{duration}（{share}）が待機時間でした。キュー、承認、または遅い接続が原因です。",
+      "duplicateCalls": "{label} が同一の引数で {count} 回実行されました（{detail}）。重複 {wasted}。",
+      "retryLoop": "{label} が同じ入力で {count} 回連続して失敗しました（{detail}）: {error}",
+      "repeatedTarget": "{detail} が {label} により {count} 回読み直されました。1 回で {wasted} 節約できます。",
+      "wastedTime": "{duration}（{share}）が新しい結果を生まない繰り返しに費やされました。",
+      "toolBound": "ツール実行が支配的です: {count} 回の呼び出しで {share}。",
+      "modelBound": "モデル時間が支配的です: {count} 回の生成で {share}。",
+      "compaction": "コンテキストのコンパクションに {duration}（{share}）かかりました。",
+      "healthy": "特に問題はありません: {duration}、ツール呼び出し {count} 件、失敗も重複もありません。"
+    }
   }
 }

@@ -30,11 +30,17 @@ export function createFolderIcon() {
  * Small badge marking a workspace that runs on a remote host over SSH.
  * Paired with the folder icon so a remote project is distinguishable from a
  * local one at a glance, mirroring the header's SSH indicator.
+ *
+ * @param {object} [options]
+ * @param {boolean} [options.disconnected] this project's SSH binding is
+ *   currently unreachable (see project-connection-status.js) — recolors the
+ *   badge and adds a small dot so it reads as a failure, not just "remote".
  */
-export function createRemoteBadge() {
+export function createRemoteBadge({ disconnected = false } = {}) {
   const badge = document.createElement("span");
   badge.className = "workspace-remote-badge";
-  const label = t("sidebar.remoteWorkspace");
+  badge.classList.toggle("workspace-remote-badge--disconnected", disconnected);
+  const label = t(disconnected ? "sidebar.remoteWorkspaceDisconnected" : "sidebar.remoteWorkspace");
   badge.title = label;
   badge.setAttribute("aria-label", label);
   badge.setAttribute("role", "img");
@@ -199,6 +205,7 @@ export function buildSidebarWorkspaceGroup({
   folderName,
   workspacePath,
   isRemote = false,
+  isDisconnected = false,
   sessionCount = 0,
   expanded = false,
   onToggle = null,
@@ -220,7 +227,7 @@ export function buildSidebarWorkspaceGroup({
   header.className = "project-header workspace-header";
 
   if (isRemote) {
-    header.appendChild(createRemoteBadge());
+    header.appendChild(createRemoteBadge({ disconnected: isDisconnected }));
   } else {
     header.appendChild(createFolderIcon());
   }

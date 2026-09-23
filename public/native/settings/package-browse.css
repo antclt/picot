@@ -393,6 +393,20 @@
 
 /* ── Installed package manager (Settings → Extensions) ─────────────── */
 
+.pkg-manager-banner {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.pkg-manager-banner:empty {
+  display: none;
+}
+
+.pkg-manager-banner:not(:empty) {
+  margin-bottom: var(--space-2);
+}
+
 .pkg-manager-footer {
   display: flex;
   align-items: center;
@@ -411,6 +425,7 @@
   background: var(--bg-glass);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
+  overflow-wrap: break-word;
 }
 
 .pkg-manager-message.is-error {
@@ -649,7 +664,6 @@
 .pkg-manager-scope {
   flex-shrink: 0;
   padding: var(--space-0-5) var(--space-1);
-  text-transform: uppercase;
   letter-spacing: 0.04em;
   background: var(--bg-glass);
   border: 1px solid var(--border);

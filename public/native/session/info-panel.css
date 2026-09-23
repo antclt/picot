@@ -1,8 +1,8 @@
-/* ABOUTME: Info right-side panel — fixed workspace actions + scrollable session tree. */
-/* Ported from picot-v3 5dd2bb9. Layout contract (design 2026-08-21): the panel
-   is a vertical flex column with min-height:0; header and Workspace are
-   flex:0 0 auto so they never scroll away; only Session history scrolls
-   (flex:1, overflow-y:auto). */
+/* ABOUTME: Info right-side panel — fixed workspace header + task analysis and
+   session tree in one scroller. Layout contract (design 2026-08-21, revised):
+   the panel is a vertical flex column with min-height:0; the header and
+   Workspace are flex:0 0 auto so they never scroll away; everything below
+   (.info-panel-scroll) is the single scroll region. */
 
 .info-panel {
   display: flex;
@@ -23,7 +23,6 @@
   font-size: var(--font-size-sm);
   font-weight: 600;
   letter-spacing: 0.04em;
-  text-transform: uppercase;
   color: var(--text-secondary);
 }
 
@@ -61,12 +60,70 @@
   padding: 0 var(--space-4) var(--space-3);
 }
 
-/* ── Session history (scrolls) ─────────────────────────────────────────── */
+/* Session file + id: label icon, truncated value (full value in the
+   tooltip), and a copy button -- one row each, never wrapping to a second
+   line in the narrow rail.
+   Named distinctly from `session-info.css` (the separate header popover
+   component) -- both files are imported into the same document and a
+   shared `.session-info-*` class name would collide there, since the
+   cascade resolves per property rather than per rule: the popover's
+   `.session-info-row { flex-direction: column }` would keep applying here
+   even though this rule wins every property it does declare. */
+.info-panel-session-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
 
-.info-panel-history {
+.info-panel-session-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-1-5);
+  min-width: 0;
+}
+
+.info-panel-session-label {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  min-width: 3.5em;
+  color: var(--text-secondary);
+}
+
+.info-panel-session-label-text {
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.info-panel-session-value {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.info-panel-session-copy {
+  flex-shrink: 0;
+}
+
+/* ── Scroll region (task analysis + session history) ───────────────────── */
+
+.info-panel-scroll {
   display: flex;
   flex: 1 1 auto;
   min-height: 0;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.info-panel-history {
+  display: flex;
+  flex: 0 0 auto;
   flex-direction: column;
 }
 
@@ -84,9 +141,7 @@
 }
 
 .info-panel-tree-scroll {
-  flex: 1 1 auto;
   min-height: 0;
-  overflow-y: auto;
   padding: 0 var(--space-2) var(--space-4) var(--space-2);
 }
 
@@ -145,20 +200,29 @@
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 64%, transparent);
 }
 
+/* Both markers are drawn at an explicit pixel size (a CSS dot for "user",
+   the sparkles icon for "assistant") rather than sized off font metrics --
+   two different glyphs at the same font-size do not read as the same size. */
 .info-panel-role {
+  display: flex;
   width: 12px;
   flex: 0 0 12px;
-  color: var(--accent);
-  font-size: var(--font-size-sm);
-  text-align: center;
-}
-
-.info-panel-role.user {
+  align-items: center;
+  justify-content: center;
   color: var(--accent);
 }
 
-.info-panel-role.assistant {
-  color: var(--accent);
+.info-panel-role-dot::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.info-panel-role.assistant svg {
+  width: 11px;
+  height: 11px;
 }
 
 .info-panel-row.inactive .info-panel-role {

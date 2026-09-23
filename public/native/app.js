@@ -32,6 +32,11 @@ import { setupComposerImageAttachments } from "./composer/composer-images.js";
 import { setupComposerPasteOffload } from "./composer/composer-paste-offload.js";
 import { setupComposerSlashMenu } from "./composer/composer-slash-menu.js";
 import { setupComposerSubmitHandling } from "./composer/composer-submit.js";
+import {
+  profileForNewSession,
+  profileForSnapshotRebind,
+  restoreSessionModel,
+} from "./composer/model-restoration.js";
 import { getLastModel, setLastModel } from "./composer/last-model-store.js";
 import { isSelectedModel, splitModelsByScope } from "./composer/model-selection.js";
 import { renderQueuedMessages } from "./composer/queued-messages.js";
@@ -67,11 +72,15 @@ import {
 import { extractAssistantError, extractRuntimeEventError } from "./session/assistant-error.js";
 import { createAssistantMessageStream } from "./session/assistant-message-stream.js";
 import { InfoPanel } from "./session/info-panel.js";
+import { buildAnalysisPrompt, runAiAnalysis } from "./session/session-ai-runner.js";
 import { activeSession, setupSessionInfo } from "./session/session-info.js";
 import { createSessionSelectionHandler } from "./session/session-navigation.js";
 import { setupSessionSearchDialog } from "./session/session-search-dialog.js";
 import { SessionSidebar } from "./session/session-sidebar.js";
 import { createSessionStore, reduceSessionState } from "./session/session-store.js";
+import { createSessionTaskAnalysis } from "./session/session-task-analysis.js";
+import { buildTurnsFromEntries, mergeTurnSources } from "./session/turn-history.js";
+import { createTurnTraceRecorder } from "./session/turn-trace.js";
 import { setupSettingsPanel } from "./settings/settings-panel.js";
 import { resolveBootstrapTarget } from "./transport/bootstrap-target.js";
 import { ConfigGateway, consumeConfigResponseFrame } from "./transport/config-gateway.js";
@@ -97,6 +106,7 @@ import {
 } from "./workspace/exclusive-side-panel.js";
 import { NativeFileBrowser } from "./workspace/file-browser.js";
 import { setupHeaderOpenApp } from "./workspace/header-open-app.js";
+import { isProjectDisconnected } from "./workspace/project-connection-status.js";
 import { setupProjectHeader } from "./workspace/project-header.js";
 import { setupRemoteWorkspaceDialog } from "./workspace/remote-workspace-dialog.js";
 import { createSessionStatus } from "./workspace/session-status.js";
@@ -105,7 +115,7 @@ import {
   refreshSshRemoteIndicator,
   setupSshRemoteIndicator,
 } from "./workspace/ssh-remote-indicator.js";
-import { createSshAuthFailureHandler } from "./workspace/ssh-remote-reauth.js";
+import { createSshAuthFailureHandler, openReconnectDialog } from "./workspace/ssh-remote-reauth.js";
 import {
   createSessionViaHost,
   openSessionInProjectViaHost,
@@ -168,6 +178,11 @@ const taskCompletionNotifications = createTaskCompletionNotifications({
   showNotification: sendNativeTaskNotification,
 });
 
+// Per-turn timing/failure trace behind the task analysis section. Recording is
+// passive (it only reads the runtime frames the app already receives) so the
+// panel can explain a slow or failed task without re-running anything.
+const turnTrace = createTurnTraceRecorder();
+
 setupMessagesInsets({
   main: document.querySelector(".main"),
   messages: messagesElement,
@@ -217,6 +232,7 @@ function formatThinkingLevelLabel(level) {
 let currentThinkingLevel = "off";
 let currentModelProvider = null;
 let currentModelId = null;
+let pendingModelRestore = null;
 
 // Session UI state: persists per-session model + thinking level so switching
 // between sessions restores the composer's model/thinking selection. Profiles
@@ -224,6 +240,7 @@ let currentModelId = null;
 // id. Unsent composer text is intentionally NOT session-scoped: it follows the
 // user across session switches instead of being saved/restored per session.
 const sessionUiState = new SessionUiStateStore({
+  waitUntilReady: () => adapter.ready(),
   profileClient: {
     load: () => {
       const sessionId = target.sessionId;
@@ -233,6 +250,7 @@ const sessionUiState = new SessionUiStateStore({
             .sendHostRequest({
               operation: "session_ui_profile_load",
               expectedSessionId: sessionId,
+              fallbackToLatest: sessionId.startsWith("temporary-"),
             })
             .then((response) => response?.profile ?? null)
         : fetch("/v2/host", {
@@ -241,6 +259,7 @@ const sessionUiState = new SessionUiStateStore({
             body: JSON.stringify({
               operation: "session_ui_profile_load",
               expectedSessionId: sessionId,
+              fallbackToLatest: sessionId.startsWith("temporary-"),
             }),
           })
             .then(async (response) => {
@@ -518,6 +537,15 @@ const infoAppActions = createWorkspaceAppActions({
   control,
   getWorkspacePath: () => infoPanel?.workspacePath || "",
 });
+// Built before the panel that mounts it: the section owns the task-analysis
+// state and turn sources, the Info panel only decides where it sits.
+const taskAnalysis = createSessionTaskAnalysis({
+  getTurns: () => turnTrace.getTurns(target),
+  loadHistoryTurns: loadHistoryTurnsForTarget,
+  resolveTurns: resolveSessionTurns,
+  analyzeWithAi: analyzeSessionTurnsWithAi,
+  t,
+});
 const infoPanel = infoSidebar
   ? new InfoPanel({
       panel: document.getElementById("info-panel"),
@@ -525,6 +553,7 @@ const infoPanel = infoSidebar
       t,
       onNavigateLeaf: (entryId) => navigateActiveTree(entryId),
       isStreaming: () => store.lifecycle === "working",
+      taskAnalysis,
     })
   : null;
 
@@ -534,6 +563,9 @@ async function refreshInfoPanel({ refreshWorkspace = false } = {}) {
   // Sequence guard: a session switch while a fetch is in flight must not let
   // the stale response repaint the new session's tree.
   const seq = ++infoTreeSeq;
+  // A turn that ended since the last look is exactly the one the user came to
+  // see, so the task analysis re-reads the saved log on every open too.
+  void taskAnalysis?.refresh();
   if (refreshWorkspace) {
     try {
       const response = await data.workspaceInfo(target.workspaceId);
@@ -566,6 +598,76 @@ async function refreshInfoPanel({ refreshWorkspace = false } = {}) {
       console.warn("[InfoPanel] tree refresh failed:", runtimeError, error);
     }
   }
+}
+
+/**
+ * Rebuild this session's earlier turns for the task debugger.
+ *
+ * Same two sources as the Info panel tree, for the same reason: Pi owns the
+ * live entry list (including the branch the user navigated to), and the saved
+ * file answers when the runtime cannot. A temporary session has no file yet,
+ * so a failed runtime read there simply means "nothing recorded".
+ */
+async function loadHistoryTurnsForTarget() {
+  const sessionId = target.sessionId;
+  const options = { target, leafId: null };
+  try {
+    const runtimeResponse = await runtime.request({ type: "get_entries" }, target);
+    const tree = runtimeResponse?.response?.data;
+    if (Array.isArray(tree?.entries)) {
+      if (target.sessionId !== sessionId) return [];
+      return buildTurnsFromEntries(tree.entries, { ...options, leafId: tree.leafId ?? null });
+    }
+  } catch (error) {
+    console.warn("[TaskDebugger] runtime entries unavailable, falling back to disk:", error);
+  }
+  if (sessionId.startsWith("temporary-")) return [];
+  const response = await data.readSessionTree(target.workspaceId, sessionId);
+  if (target.sessionId !== sessionId) return [];
+  return buildTurnsFromEntries(response?.tree?.entries ?? [], {
+    ...options,
+    leafId: response?.tree?.leafId ?? null,
+  });
+}
+
+/**
+ * Collect every turn of the current session for the Info panel's AI analysis.
+ *
+ * Same two sources as the Info panel tree, for the same reason: the live
+ * recorder covers what this window watched, the saved log covers everything
+ * before that, and live wins wherever the two overlap (see `mergeTurnSources`).
+ * A failed log read degrades to live-only rather than aborting the run.
+ */
+async function resolveSessionTurns() {
+  let history = [];
+  try {
+    history = await loadHistoryTurnsForTarget();
+  } catch (error) {
+    console.warn("[InfoPanel] AI analysis history read failed:", error);
+  }
+  return mergeTurnSources(history, turnTrace.getTurns(target));
+}
+
+/**
+ * Hand the session's turns to the model itself, asking it to read the run
+ * log for risk points, blockers and failures -- signal a mechanical timing
+ * report can't surface. Runs against a throwaway background session (same
+ * workspace, same model as the one active here) so the analysis never
+ * touches the user's own conversation; session-ai-runner.js discards that
+ * session once the reply is in.
+ */
+async function analyzeSessionTurnsWithAi(turns) {
+  return runAiAnalysis({
+    runtime,
+    control,
+    spawnSession: spawnSessionViaHost,
+    workspaceId: target.workspaceId,
+    model:
+      currentModelProvider && currentModelId
+        ? { provider: currentModelProvider, id: currentModelId }
+        : null,
+    prompt: buildAnalysisPrompt(turns),
+  });
 }
 
 async function navigateActiveTree(entryId) {
@@ -720,6 +822,14 @@ const compactCoordinator = createCompactCoordinator({
   onState: (state) => {
     contextUsage.setCompacting(state === "requested" || state === "running");
   },
+  onTimeout: () => {
+    // store.compaction is a second, independent "running" flag (set by the
+    // compaction_start event, see session-store.js) that requestManualCompaction
+    // also guards on. Giving up locally must clear it too, or every future
+    // click silently no-ops forever with no error shown.
+    if (store.compaction?.status === "running") store = { ...store, compaction: null };
+    showError(new Error(t("errors.compactionTimedOut")));
+  },
 });
 
 async function requestManualCompaction() {
@@ -743,6 +853,7 @@ const remoteWorkspaceDialog = setupRemoteWorkspaceDialog({
 const handleSshReauthNotify = createSshAuthFailureHandler({
   call: window.__picotConfigCall,
   dialog: remoteWorkspaceDialog,
+  getProjectPath: () => target.workspaceId,
   reauthMessage: () => t("remoteWorkspace.reauthRequired"),
 });
 const extensionUi = new ExtensionUiHost({
@@ -918,19 +1029,27 @@ const hydrateFromSnapshot = async (snapshot) => {
   const pi = snapshot.state.pi ?? {};
   setStatus(pi.isStreaming ? "working" : "connected");
   contextUsage.setWorking(Boolean(pi.isStreaming));
+  taskAnalysis?.setStreaming(Boolean(pi.isStreaming));
   if (pi.isStreaming) showLiveProcessIndicator();
   contextUsage.setCompacting(snapshot.state.compaction?.status === "running");
-  // Fresh sessions (no history) show the stored last model straight from the
-  // frontend so the composer never flashes pi's built-in default while the
-  // set_model round-trip below reconciles the runtime. Sessions with history
-  // keep the model pi restored from their own record.
-  const storedModel = messages.length === 0 ? getLastModel() : null;
-  updateComposerModel(
-    storedModel ? { provider: storedModel.provider, id: storedModel.modelId } : (pi.model ?? null),
-  );
-  updateComposerThinking(pi.thinkingLevel ?? "off");
-  // Fresh sessions inherit the last manually selected model (localStorage).
-  void maybeInheritLastModel({ messages, piModel: pi.model ?? null });
+  const restoredProfile = pendingModelRestore;
+  pendingModelRestore = null;
+  const selection = await restoreSessionModel({
+    runtime,
+    target,
+    profile: restoredProfile,
+    state: pi,
+    idempotencyKey: randomId,
+  });
+  updateComposerModel(selection.model, { persist: false });
+  updateComposerThinking(selection.thinkingLevel, { persist: false });
+  if (!restoredProfile && messages.length === 0) {
+    const storedModel = getLastModel();
+    if (storedModel) {
+      updateComposerModel({ provider: storedModel.provider, id: storedModel.modelId }, { persist: false });
+      void maybeInheritLastModel({ messages, piModel: pi.model ?? null });
+    }
+  }
   contextUsage.setUsage(findLatestAssistantUsage(messages), currentModelContextWindow);
   setSessionCost(computeTotalCostFromMessages(messages));
   // Hydrate header status bar from authoritative get_session_stats
@@ -956,6 +1075,7 @@ runtime.subscribe((frame) => {
   // their events feed a card in the message list, not the Pi session state.
   if (subagentRuns.applyEvent(frame)) return;
   taskCompletionNotifications.handleRuntimeFrame(frame);
+  turnTrace.handleRuntimeFrame(frame);
   const previous = store;
   const routed = routeRuntimeFrame({
     frame,
@@ -990,7 +1110,15 @@ runtime.subscribe((frame) => {
 setupConfigGatewayConnectionListener({
   adapter,
   isReady: () => configGatewayTargetReady,
-  onDisconnected: () => setStatus("disconnected"),
+  onDisconnected: () => {
+    setStatus("disconnected");
+    // The pi connection dropped mid-compaction — compaction_end will never
+    // arrive, so don't leave the button spinning until the next timeout.
+    compactCoordinator.reset();
+    // Same reasoning applies to the independent store.compaction "running"
+    // flag requestManualCompaction guards on; see the onTimeout handler above.
+    if (store.compaction?.status === "running") store = { ...store, compaction: null };
+  },
 });
 adapter.connect();
 
@@ -1069,7 +1197,9 @@ messagesElement.addEventListener("messagefork", async (event) => {
         entryId = forkMessages?.response?.data?.messages?.[index]?.entryId ?? null;
       }
       if (!entryId) {
-        showError(new Error(t("errors.treeNavigateFailed", { error: "Invalid entry ID for forking" })));
+        showError(
+          new Error(t("errors.treeNavigateFailed", { error: "Invalid entry ID for forking" })),
+        );
         return;
       }
     }
@@ -1291,7 +1421,13 @@ window.addEventListener("picot:session-created", (event) => {
   // Clear the chat area for the new session before adopting
   messageRenderer.clear();
   toolRenderer.clear();
-  void adoptTarget(nextTarget).then(() => {
+  const profileOverride = nextTarget.sessionId.startsWith("temporary-")
+    ? profileForNewSession(
+        { provider: currentModelProvider, id: currentModelId },
+        currentThinkingLevel,
+      )
+    : undefined;
+  void adoptTarget(nextTarget, { profileOverride }).then(() => {
     input.value = "";
     composerAutoResize.sync();
     input.focus();
@@ -1570,6 +1706,8 @@ async function switchSession(sessionId) {
   // Keep the current messages visible while the new session loads. The
   // history render below replaces them atomically once the new data is ready.
   setStatus("loading");
+  // The rebuilt turns belong to the session being left, not the one arriving.
+  taskAnalysis?.resetHistory();
 
   // Phase 1: fire bootstrap (spawns Pi if needed) and fast disk message read
   // in parallel. The disk read returns messages without waiting for Pi to start.
@@ -2126,6 +2264,21 @@ async function sendComposerInput({ altKey }) {
     runBuiltin(intent.action);
     return;
   }
+  // This project is already known to be unreachable (some session of it hit
+  // this before, at session start or a previous send) — don't make the user
+  // sit through another probe just to be told the same thing again. History
+  // stays readable; only sending is blocked, and only until the dialog below
+  // reports a successful reconnect.
+  if (isProjectDisconnected(target.workspaceId)) {
+    messageRenderer.renderSystemMessage(t("messages.sshProjectDisconnected"));
+    void openReconnectDialog({
+      call: window.__picotConfigCall,
+      dialog: remoteWorkspaceDialog,
+      reauthMessage: () => t("remoteWorkspace.reauthRequired"),
+      projectPath: target.workspaceId,
+    });
+    return;
+  }
   input.value = "";
   input.scrollTop = 0;
   composerAutoResize.sync();
@@ -2177,6 +2330,9 @@ async function handleRuntimeEvent(event) {
     case "agent_start":
       lastShownProviderError = null;
       assistantMessageStream.reset();
+      // Analysing a turn mid-flight would report its own open spans as stuck,
+      // so the analysis section leaves it out until this turn settles.
+      taskAnalysis?.setStreaming(true);
       setStatus("working");
       contextUsage.setWorking(true);
       sidebar?.setStreaming(target.sessionId, true);
@@ -2331,8 +2487,18 @@ function upsertActiveSessionFromUserMessage(message = null) {
   pendingBoundSessionFirstMessage = null;
 }
 
-async function adoptTarget(nextTarget, { updateRoute = true } = {}) {
+async function adoptTarget(nextTarget, { updateRoute = true, profileOverride = undefined } = {}) {
   const previousTarget = target;
+  const effectiveProfileOverride =
+    profileOverride === undefined
+      ? profileForSnapshotRebind(
+          previousTarget,
+          nextTarget,
+          pendingModelRestore,
+          { provider: currentModelProvider, id: currentModelId },
+          currentThinkingLevel,
+        )
+      : profileOverride;
   const sessionChanged = nextTarget.sessionId !== previousTarget.sessionId;
   const targetChanged =
     sessionChanged ||
@@ -2388,6 +2554,9 @@ async function adoptTarget(nextTarget, { updateRoute = true } = {}) {
   }
   // The Info panel's tree belongs to the active session: bump the sequence
   // (dropping any in-flight fetch for the old session) and reload if open.
+  // The trace timeline is per target, so the analysis must re-evaluate against
+  // the session just switched to.
+  taskAnalysis?.rerender();
   infoTreeSeq += 1;
   infoPanel?.updateTree({ entries: [], leafId: null });
   if (infoSidebar && !infoSidebar.classList.contains("collapsed")) {
@@ -2401,10 +2570,18 @@ async function adoptTarget(nextTarget, { updateRoute = true } = {}) {
   hydrateHeaderSessionStats();
   setSessionCost(0);
   // Restore model/thinking for the new session
-  const restoredProfile = await sessionUiState.loadProfile();
+  const restoredProfile =
+    effectiveProfileOverride === undefined
+      ? await sessionUiState.loadProfile()
+      : effectiveProfileOverride;
+  if (target !== nextTarget) return;
+  pendingModelRestore = restoredProfile;
   if (restoredProfile) {
-    updateComposerModel({ provider: restoredProfile.provider, id: restoredProfile.modelId });
-    updateComposerThinking(restoredProfile.thinkingLevel);
+    updateComposerModel(
+      { provider: restoredProfile.provider, id: restoredProfile.modelId },
+      { persist: false },
+    );
+    updateComposerThinking(restoredProfile.thinkingLevel, { persist: false });
   }
   // Intentionally leave input.value untouched here: an unsent composer draft
   // must follow the user across session switches instead of being cleared or
@@ -2764,6 +2941,7 @@ function abortCurrentRun() {
 
 function settleForegroundAgent(event) {
   setStatus("connected");
+  taskAnalysis?.setStreaming(false);
   contextUsage.setWorking(false);
   sidebar?.setStreaming(target.sessionId, false);
   hideLiveProcessIndicator();
@@ -2786,17 +2964,18 @@ function showError(error) {
 
 // ── Composer model dropdown & thinking button (functions & event wiring) ────────
 
-function updateComposerModel(model) {
+function updateComposerModel(model, { persist = true } = {}) {
   currentModelProvider = model?.provider ?? null;
   currentModelId = model?.id ?? null;
   // Persist the model change to session UI state
-  sessionUiState
-    .saveProfile({
-      provider: currentModelProvider || "",
-      modelId: currentModelId || "",
-      thinkingLevel: currentThinkingLevel,
-    })
-    .catch(() => {});
+  if (persist)
+    sessionUiState
+      .saveProfile({
+        provider: currentModelProvider || "",
+        modelId: currentModelId || "",
+        thinkingLevel: currentThinkingLevel,
+      })
+      .catch(() => {});
   currentModelContextWindow =
     Number(model?.contextWindow) || findModelContextWindow(currentModelProvider, currentModelId);
   contextUsage.setContextWindowSize(currentModelContextWindow);
@@ -2805,15 +2984,16 @@ function updateComposerModel(model) {
   }
 }
 
-function updateComposerThinking(level) {
+function updateComposerThinking(level, { persist = true } = {}) {
   currentThinkingLevel = level ?? "off";
-  sessionUiState
-    .saveProfile({
-      provider: currentModelProvider || "",
-      modelId: currentModelId || "",
-      thinkingLevel: currentThinkingLevel,
-    })
-    .catch(() => {});
+  if (persist)
+    sessionUiState
+      .saveProfile({
+        provider: currentModelProvider || "",
+        modelId: currentModelId || "",
+        thinkingLevel: currentThinkingLevel,
+      })
+      .catch(() => {});
   if (thinkingBtn) {
     const levelLabel = formatThinkingLevelLabel(currentThinkingLevel);
     thinkingBtn.textContent = t("settings.thinkingCompact", { level: levelLabel });
@@ -2872,17 +3052,10 @@ async function maybeInheritLastModel({ messages, piModel }) {
 
 async function applyConfiguredModelVisibility(models) {
   try {
-    const catalog = await config.call("list_model_catalog");
-    if (!catalog?.ok) throw new Error(catalog?.error || "Failed to load model catalog");
-    const visibleKeys = new Set();
-    for (const provider of catalog.data?.providers ?? []) {
-      for (const model of provider.models ?? []) {
-        if (model.available && model.visible === true) {
-          visibleKeys.add(`${model.provider || provider.provider}/${model.id}`);
-        }
-      }
-    }
-    return models.filter((model) => visibleKeys.has(`${model.provider}/${model.id}`));
+    const result = await config.call("list_model_visibility");
+    if (!result?.ok) throw new Error(result?.error || "Failed to load model visibility");
+    const visibility = result.data?.visibility ?? {};
+    return models.filter((model) => visibility[`${model.provider}/${model.id}`] !== false);
   } catch (error) {
     console.warn("[Native] Failed to load configured model visibility:", error);
     return [];
@@ -3153,6 +3326,9 @@ document.addEventListener("click", (event) => {
 onLocaleChange(() => {
   updateComposerThinking(currentThinkingLevel);
   renderStatus();
+  // The document-wide data-i18n pass cannot reach the analysis section's own
+  // nodes; repaint its labels from the new locale.
+  taskAnalysis?.rerender();
 });
 
 if (thinkingBtn) {

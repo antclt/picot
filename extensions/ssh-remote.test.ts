@@ -58,6 +58,8 @@ import {
   serializeSshRemoteSettings,
   setSshRemoteSessionPassword,
   shQuote,
+  SSH_AUTH_REQUIRED_MARKER,
+  SSH_PROJECT_DISCONNECTED_MARKER,
   sshControlPath,
   sshExec,
   sshTarget,
@@ -242,7 +244,7 @@ describe("sshExec", () => {
       "-o",
       "BatchMode=yes",
       "-o",
-      "ConnectTimeout=8",
+      "ConnectTimeout=4",
       "-o",
       "StrictHostKeyChecking=accept-new",
       ...controlArgs({ enabled: true, host: "example.com", user: "alice" }),
@@ -453,7 +455,12 @@ describe("registerSshRemoteExtension", () => {
     return {
       cwd: "/workspace",
       isProjectTrusted: () => true,
-      ui: { setStatus: vi.fn(), notify: vi.fn(), theme: { fg: (_: string, text: string) => text } },
+      ui: {
+        setStatus: vi.fn(),
+        notify: vi.fn(),
+        setEditorText: vi.fn(),
+        theme: { fg: (_: string, text: string) => text },
+      },
       ...overrides,
     };
   }
@@ -478,9 +485,10 @@ describe("registerSshRemoteExtension", () => {
     vi.mocked(spawn).mockReturnValue(makeFakeChild({ stdout: "/remote/app\n" }) as never);
     await trigger("session_start", { type: "session_start", reason: "startup" }, ctx);
 
-    expect(ctx.ui.setStatus).toHaveBeenCalledWith(
-      "ssh-remote",
+    expect(ctx.ui.setStatus).toHaveBeenCalledWith("ssh-remote", "Connected");
+    expect(ctx.ui.notify).toHaveBeenCalledWith(
       expect.stringContaining("SSH: example.com:/remote/app"),
+      "info",
     );
     const readResult = (await registeredTools.read.execute("id", {}, undefined, undefined, {})) as {
       remote: boolean;
@@ -590,8 +598,10 @@ describe("registerSshRemoteExtension", () => {
     expect(result).toEqual({ kind: "read", remote: false });
   });
 
-  it("notifies an error and stays local when the initial connection fails", async () => {
-    vi.mocked(spawn).mockReturnValue(makeFakeChild({ stderr: "boom", code: 255 }) as never);
+  it("refuses to run a remote tool in the local anchor when the host is unreachable", async () => {
+    vi.mocked(spawn).mockImplementation(
+      () => makeFakeChild({ stderr: "boom", code: 255 }) as never,
+    );
     const { pi, registeredTools, trigger } = createHarness();
     // No remotePath: session_start must ssh out to resolve `pwd`, which fails here.
     registerSshRemoteExtension(pi as never, () => ({ enabled: true, host: "example.com" }));
@@ -603,8 +613,72 @@ describe("registerSshRemoteExtension", () => {
       expect.stringContaining("could not connect"),
       "error",
     );
-    const result = await registeredTools.read.execute("id", {}, undefined, undefined, {});
-    expect(result).toEqual({ kind: "read", remote: false });
+    // Carries the project-disconnected marker so the sidebar can badge this
+    // project and other sessions can skip re-probing it — but NOT the
+    // auth-required marker, since a session starting up must never pop the
+    // connect dialog on its own.
+    expect(ctx.ui.notify).toHaveBeenCalledWith(
+      expect.stringContaining(SSH_PROJECT_DISCONNECTED_MARKER),
+      "error",
+    );
+    expect(ctx.ui.notify).not.toHaveBeenCalledWith(
+      expect.stringContaining(SSH_AUTH_REQUIRED_MARKER),
+      "error",
+    );
+    // The workspace is still remote, so the tool must fail rather than quietly
+    // read from the empty ~/.picot/remotes anchor.
+    await expect(registeredTools.read.execute("id", {}, undefined, undefined, {})).rejects.toThrow(
+      /not connected/,
+    );
+  });
+
+  it("blocks a continuation until the host is reachable, then lets it through", async () => {
+    const { pi, trigger } = createHarness();
+    registerSshRemoteExtension(pi as never, () => ({
+      enabled: true,
+      host: "example.com",
+      remotePath: "/remote/app",
+    }));
+
+    // First connection attempt (session_start) fails.
+    vi.mocked(spawn).mockImplementation(
+      () => makeFakeChild({ stderr: "boom", code: 255 }) as never,
+    );
+    const ctx = fakeUiCtx();
+    await trigger("session_start", { type: "session_start", reason: "startup" }, ctx);
+
+    // A prompt while still offline is swallowed and reopens the connect dialog
+    // through the marker the frontend keys on.
+    const [blocked] = await trigger("input", { type: "input", text: "hi", source: "rpc" }, ctx);
+    expect(blocked).toEqual({ action: "handled" });
+    expect(ctx.ui.setEditorText).toHaveBeenCalledWith("hi");
+    expect(ctx.ui.notify).toHaveBeenCalledWith(
+      expect.stringContaining("[picot:ssh-auth-required]"),
+      "error",
+    );
+
+    // Once ssh answers, the same prompt goes through untouched.
+    vi.mocked(spawn).mockImplementation(() => makeFakeChild({ stdout: "/remote/app\n" }) as never);
+    const [allowed] = await trigger("input", { type: "input", text: "hi", source: "rpc" }, ctx);
+    expect(allowed).toBeUndefined();
+  });
+
+  it("fails a ! command instead of running it in the local anchor while offline", async () => {
+    vi.mocked(spawn).mockImplementation(
+      () => makeFakeChild({ stderr: "boom", code: 255 }) as never,
+    );
+    const { pi, trigger } = createHarness();
+    registerSshRemoteExtension(pi as never, () => ({ enabled: true, host: "example.com" }));
+    await trigger("session_start", { type: "session_start", reason: "startup" }, fakeUiCtx());
+
+    const [result] = (await trigger("user_bash", {
+      type: "user_bash",
+      command: "ls",
+      excludeFromContext: false,
+      cwd: "/workspace",
+    })) as [{ result?: { output: string; exitCode: number } } | undefined];
+    expect(result?.result?.exitCode).toBe(1);
+    expect(result?.result?.output).toContain("not connected");
   });
 });
 

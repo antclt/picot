@@ -67,6 +67,10 @@ export function setupModelsPage({ configGateway, oauthGateway, onModelConfigurat
       : Promise.reject(new Error("oauth unavailable"));
   const apiKeysContainer = document.getElementById("settings-api-keys");
   const providerExpansionState = new Map();
+  // Per-provider model filter text. Kept outside the DOM so a full panel
+  // re-render (locale change, API-key mutation) restores the query the same
+  // way providerExpansionState restores the collapsed state.
+  const modelSearchState = new Map();
   let catalogProviders = [];
 
   async function loadApiKeysPanel(options = {}) {
@@ -81,20 +85,43 @@ export function setupModelsPage({ configGateway, oauthGateway, onModelConfigurat
       apiKeysContainer.replaceChildren(loading);
     }
     let data;
+    const startedAt = performance.now();
+    console.info("[MODEL-LOAD] requesting model catalog", {
+      preserveUi: Boolean(options.preserveUi),
+    });
     try {
       data = await call("list_model_catalog");
     } catch (error) {
+      logModelLoadOutcome(startedAt, "error", { message: error?.message || String(error) });
       renderApiKeysPanelError(error?.message || t("settings.apiKeys.loadFailed"));
       restoreScroll(scrollContainer, scrollTop);
       return;
     }
     if (!data?.ok || !Array.isArray(data.data?.providers)) {
+      logModelLoadOutcome(startedAt, "empty", { error: data?.error });
       renderApiKeysPanelError(data?.error || t("settings.apiKeys.loadFailed"));
       restoreScroll(scrollContainer, scrollTop);
       return;
     }
+    logModelLoadOutcome(startedAt, "ok", { providerCount: data.data.providers.length });
     renderApiKeysPanel(data.data.providers);
     restoreScroll(scrollContainer, scrollTop);
+  }
+
+  // Perceived (frontend-side) model catalog load time — includes IPC/bridge
+  // overhead the backend-only [MODEL-LOAD] "catalog_built" timing can't see.
+  // Mirrors the [SESSION-LOAD] pattern in transport/data-gateway.js. Forwarded
+  // to the backend so both ends land in the same local model-load.log for
+  // offline analysis.
+  function logModelLoadOutcome(startedAt, outcome, fields = {}) {
+    const elapsedMs = Math.round(performance.now() - startedAt);
+    console.info("[MODEL-LOAD] catalog request finished", { outcome, elapsedMs, ...fields });
+    call("log_client_perf", {
+      event: "list_model_catalog_roundtrip",
+      outcome,
+      elapsedMs,
+      ...fields,
+    }).catch(() => {});
   }
 
   function rememberProviderExpansionState() {
@@ -549,7 +576,8 @@ export function setupModelsPage({ configGateway, oauthGateway, onModelConfigurat
       checkHealthBtn.type = "button";
       checkHealthBtn.className = "api-model-check-visible";
       checkHealthBtn.textContent = t("settings.apiKeys.checkHealth");
-      checkHealthBtn.disabled = !models.some((model) => model.visible === true && model.available);
+      // `disabled` is derived in applyProviderHeaderState so the build path and
+      // the in-place sync path cannot drift.
       checkHealthBtn.addEventListener("click", () => checkModelHealth(p.provider));
       actions.appendChild(checkHealthBtn);
     }
@@ -569,7 +597,6 @@ export function setupModelsPage({ configGateway, oauthGateway, onModelConfigurat
     if (hasConfiguredModels) {
       const summary = document.createElement("div");
       summary.className = "api-key-row-summary";
-      summary.textContent = describeProviderSummary(models);
       header.appendChild(summary);
     }
     header.appendChild(actions);
@@ -605,6 +632,7 @@ export function setupModelsPage({ configGateway, oauthGateway, onModelConfigurat
     } else {
       toggle.hidden = true;
     }
+    applyProviderHeaderState(row, p);
     return row;
   }
 
@@ -614,6 +642,37 @@ export function setupModelsPage({ configGateway, oauthGateway, onModelConfigurat
 
     const models = getProviderModels(p);
     if (models.length === 0) return null;
+
+    const modelRows = [];
+    const applySearchFilter = (value) => {
+      const query = value.trim().toLowerCase();
+      for (const row of modelRows) {
+        const matches =
+          !query ||
+          row.model.id.toLowerCase().includes(query) ||
+          (row.model.name || "").toLowerCase().includes(query);
+        row.el.classList.toggle("api-model-row-filtered-out", !matches);
+      }
+    };
+
+    let search = null;
+    if (models.length > 20) {
+      search = document.createElement("input");
+      search.type = "search";
+      search.className = "api-model-list-search";
+      search.placeholder = t("settings.apiKeys.searchModels");
+      search.setAttribute(
+        "aria-label",
+        t("settings.apiKeys.searchModelsFor", { provider: p.displayName || p.provider }),
+      );
+      search.value = modelSearchState.get(p.provider) ?? "";
+      search.addEventListener("click", (event) => event.stopPropagation());
+      search.addEventListener("input", () => {
+        modelSearchState.set(p.provider, search.value);
+        applySearchFilter(search.value);
+      });
+      wrap.appendChild(search);
+    }
 
     const columnLabels = document.createElement("div");
     columnLabels.className = "api-model-list-heading";
@@ -625,17 +684,12 @@ export function setupModelsPage({ configGateway, oauthGateway, onModelConfigurat
     actions.className = "api-model-list-heading-actions";
     const visibilityColumn = document.createElement("label");
     visibilityColumn.className = "api-model-select-all";
-    const allModelsEnabled = models.every((model) => model.visible === true);
     const visibilityToggle = document.createElement("input");
     visibilityToggle.type = "checkbox";
     visibilityToggle.className = "api-model-select-all-toggle";
-    visibilityToggle.checked = allModelsEnabled;
-    visibilityToggle.setAttribute(
-      "aria-label",
-      t(allModelsEnabled ? "settings.apiKeys.deselectAll" : "settings.apiKeys.selectAll", {
-        provider: p.displayName || p.provider,
-      }),
-    );
+    // checked / indeterminate / aria-label are derived in
+    // applyProviderHeaderState, so the build path and the in-place sync path
+    // cannot drift.
     visibilityToggle.addEventListener("change", () =>
       setProviderModelsVisibility(p.provider, visibilityToggle.checked),
     );
@@ -644,8 +698,11 @@ export function setupModelsPage({ configGateway, oauthGateway, onModelConfigurat
     wrap.appendChild(columnLabels);
 
     for (const model of models) {
-      wrap.appendChild(buildModelRow(model));
+      const el = buildModelRow(model);
+      modelRows.push({ model, el });
+      wrap.appendChild(el);
     }
+    if (search) applySearchFilter(search.value);
     return wrap;
   }
 
@@ -657,7 +714,75 @@ export function setupModelsPage({ configGateway, oauthGateway, onModelConfigurat
     ];
   }
 
+  function findProviderState(provider) {
+    return catalogProviders.find((entry) => entry.provider === provider) ?? null;
+  }
+
+  // Derived header state for one provider card: model summary, select-all
+  // checkbox and "check health" enablement. Called both when the card is built
+  // and when it is synced in place, so the two paths agree.
+  function applyProviderHeaderState(row, provider) {
+    if (!row) return;
+    const models = getProviderModels(provider);
+    const enabledCount = models.filter((model) => model.visible !== false).length;
+    const allEnabled = models.length > 0 && enabledCount === models.length;
+
+    const summary = row.querySelector(".api-key-row-summary");
+    if (summary) summary.textContent = describeProviderSummary(models);
+
+    const healthBtn = row.querySelector(".api-model-check-visible");
+    if (healthBtn) {
+      healthBtn.disabled = !models.some((model) => model.visible !== false && model.available);
+    }
+
+    const selectAll = row.querySelector(".api-model-select-all-toggle");
+    if (selectAll) {
+      selectAll.disabled = false;
+      selectAll.checked = allEnabled;
+      selectAll.indeterminate = enabledCount > 0 && !allEnabled;
+      selectAll.setAttribute(
+        "aria-label",
+        t(allEnabled ? "settings.apiKeys.deselectAll" : "settings.apiKeys.selectAll", {
+          provider: provider.displayName || provider.provider,
+        }),
+      );
+    }
+  }
+
+  function getProviderRow(provider) {
+    return (
+      apiKeysContainer?.querySelector(
+        `.api-key-row[data-provider="${escapeSelectorValue(provider)}"]`,
+      ) ?? null
+    );
+  }
+
+  // Re-derive a provider card from the in-memory catalog after a visibility
+  // change. Mutating the mounted DOM (instead of calling loadApiKeysPanel)
+  // keeps the model search query, focus and scroll position intact — a full
+  // re-render rebuilt the search input empty, dropping the query.
+  function syncProviderModelState(provider) {
+    const state = findProviderState(provider);
+    const models = state ? getProviderModels(state) : [];
+    for (const modelRow of getProviderModelRows(provider)) {
+      const toggle = modelRow.querySelector(".api-model-visibility-toggle");
+      if (!toggle) continue;
+      const model = models.find((entry) => entry.id === modelRow.dataset.modelId);
+      toggle.disabled = false;
+      if (model) toggle.checked = model.visible !== false;
+    }
+    const row = getProviderRow(provider);
+    if (state && row) {
+      applyProviderHeaderState(row, state);
+    } else {
+      // No catalog entry to derive from: at least leave the header usable.
+      const selectAll = row?.querySelector(".api-model-select-all-toggle");
+      if (selectAll) selectAll.disabled = false;
+    }
+  }
+
   async function setProviderModelsVisibility(provider, visible) {
+    const state = findProviderState(provider);
     const rows = getProviderModelRows(provider);
     const toggles = rows
       .map((row) => row.querySelector(".api-model-visibility-toggle"))
@@ -665,13 +790,15 @@ export function setupModelsPage({ configGateway, oauthGateway, onModelConfigurat
     const modelsToUpdate = rows.filter(
       (row) => row.querySelector(".api-model-visibility-toggle")?.checked !== visible,
     );
-    if (modelsToUpdate.length === 0) return;
+    if (modelsToUpdate.length === 0) {
+      // Nothing to persist, but the header may still be stale (e.g. a checkbox
+      // left half-toggled by a failed batch); re-derive it from the catalog.
+      syncProviderModelState(provider);
+      return;
+    }
 
-    const providerRow = apiKeysContainer.querySelector(
-      `.api-key-row[data-provider="${escapeSelectorValue(provider)}"]`,
-    );
-    const visibilityButton = providerRow?.querySelector(".api-model-select-all-toggle");
-    if (visibilityButton) visibilityButton.disabled = true;
+    const selectAll = getProviderRow(provider)?.querySelector(".api-model-select-all-toggle");
+    if (selectAll) selectAll.disabled = true;
     for (const toggle of toggles) toggle.disabled = true;
     for (const row of modelsToUpdate) {
       const resp = await call("set_model_visibility", {
@@ -680,13 +807,18 @@ export function setupModelsPage({ configGateway, oauthGateway, onModelConfigurat
         visible,
       }).catch(() => null);
       if (!resp?.ok) {
-        if (visibilityButton) visibilityButton.disabled = false;
-        for (const toggle of toggles) toggle.disabled = false;
+        // Partial failures leave the catalog authoritative: resync so other
+        // model rows stay selectable and the header matches what was saved.
+        syncProviderModelState(provider);
         return;
       }
+      const model = state
+        ? getProviderModels(state).find((entry) => entry.id === row.dataset.modelId)
+        : null;
+      if (model) model.visible = visible;
     }
+    syncProviderModelState(provider);
     await onModelConfigurationChanged?.();
-    await loadApiKeysPanel({ preserveUi: true });
   }
 
   function buildModelRow(model) {
@@ -724,19 +856,23 @@ export function setupModelsPage({ configGateway, oauthGateway, onModelConfigurat
       "aria-label",
       t("settings.apiKeys.enableModel", { model: model.name || model.id }),
     );
-    visibility.checked = model.visible === true;
+    visibility.checked = model.visible !== false;
     visibility.addEventListener("change", async () => {
+      const visible = visibility.checked;
       visibility.disabled = true;
       const resp = await call("set_model_visibility", {
         provider: model.provider,
         modelId: model.id,
-        visible: visibility.checked,
+        visible,
       }).catch(() => null);
       if (resp?.ok) {
+        // Update the catalog and the mounted card in place. Reloading the whole
+        // panel here rebuilt the model search input, wiping the query.
+        model.visible = visible;
+        syncProviderModelState(model.provider);
         await onModelConfigurationChanged?.();
-        await loadApiKeysPanel({ preserveUi: true });
       } else {
-        visibility.checked = !visibility.checked;
+        visibility.checked = !visible;
         visibility.disabled = false;
       }
     });
@@ -995,7 +1131,10 @@ export function setupModelsPage({ configGateway, oauthGateway, onModelConfigurat
     if (!inlineModelsTextarea.value.trim()) {
       inlineModelsTextarea.value = '{\n  "providers": {}\n}';
     }
-    renderModelsConfigLayout();
+    // Don't render here: this would validate `selectedModelsConfigItem`
+    // against the stale textarea content (before the fetch below refreshes
+    // it), which clobbers a selection just set by a caller (e.g. a newly
+    // saved custom provider) back to whatever was previously open.
     if (inlineModelsPath)
       inlineModelsPath.textContent = t(
         "migrated.native.settings.settingsConfig.textcontent.loading",

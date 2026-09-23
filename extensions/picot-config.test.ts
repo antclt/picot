@@ -49,6 +49,21 @@ afterEach(() => {
 });
 
 describe("picot config default settings operations", () => {
+  it("loads only visibility preferences for the composer without building the full catalog", async () => {
+    const { handlePicotConfig } = await loadConfigWithTempHome();
+    await expect(
+      handlePicotConfig(
+        "set_model_visibility",
+        { provider: "anthropic", modelId: "claude-opus-4-8", visible: false },
+        {},
+      ),
+    ).resolves.toMatchObject({ ok: true });
+    await expect(handlePicotConfig("list_model_visibility", {}, {})).resolves.toEqual({
+      ok: true,
+      data: { visibility: { "anthropic/claude-opus-4-8": false } },
+    });
+  });
+
   it("renames a managed historical session through Pi SessionManager", async () => {
     const home = mkdtempSync(join(tmpdir(), "picot-config-session-"));
     tempHomes.push(home);

@@ -92,13 +92,16 @@ bun run <script>                # run package.json scripts
 bun run dev              # fetch embedded pi binary, then start tauri dev (hot reload)
 bun run test             # vitest run + check-tauri-permissions
 bun run test:watch       # vitest in watch mode
-bun run check:rust       # cargo check + clippy + fmt (use after every Rust edit)
+bun run check:rust       # cargo check + clippy + fmt (use when the change is Rust)
 bun run fetch:pi         # download the locked pi binary into src-tauri/resources/pi/
 bun run build:extensions # compile picot-bridge and pi-chat extensions into extensions/dist/
 bun run build            # full release build (runs prebuild: fetch:pi + build:extensions)
 ```
 
 Single test file: `bun run vitest run public/settings-save-status.test.js`
+
+These are on-demand commands, not a per-task checklist. Run only the ones
+relevant to what you changed, or when the user asks for them.
 
 ## Searching the codebase
 
@@ -112,7 +115,7 @@ When running `find` (or any other filesystem/code search command), scope it to t
 
 This project uses [Biome](https://biomejs.dev/) for JS/TS linting and formatting.
 
-After every frontend or extension edit, run the check before declaring the work done:
+Run the checks on demand, not as a ritual after every edit:
 
 ```bash
 bun run check         # lint + format check (read-only, shows violations)
@@ -124,13 +127,18 @@ bun run format:fix    # auto-fix formatting
 
 ### Rules
 
-- **Always** run `bun run check` after editing any `.js` / `.ts` file under `public/` or `extensions/`.
-- Only mark the task complete if `bun run check` exits 0 (or all remaining violations are intentional and documented).
-- Prefer `bun run check:fix` over manual reformatting — Biome is the source of truth for style.
+- Do **not** run `bun run check` / `bun run format` after every task by default.
+- Run a Biome check when the edit is non-trivial (new module, wide formatting
+  churn, or style-sensitive UI), when formatting violations are plausible, or
+  when the user asks for it.
+- Prefer `bun run check:fix` over manual reformatting when a check does run —
+  Biome is the source of truth for style.
+- If you do run a check, do not claim completion while it fails (or document any
+  intentional, remaining violation).
 
 ## Design system
 
-Before editing CSS or UI controls, read [`docs/DESIGN.md`](docs/DESIGN.md). Use tokens from `public/style-theme.css` and primitives from `public/design-system.css`; do not add literal design dimensions. After CSS, UI markup, or inline-style changes, run `bun run check` (or focused `bun run check:design`).
+Before editing CSS or UI controls, read [`docs/DESIGN.md`](docs/DESIGN.md). Use tokens from `public/style-theme.css` and primitives from `public/design-system.css`; do not add literal design dimensions. For CSS or inline-style changes, a focused `bun run check:design` is worth running (optional, not mandatory for every edit).
 
 ## Module Design
 
@@ -154,7 +162,7 @@ The frontend (`public/`) is vanilla JS with **no framework**. Keep it modular. S
 - Did this touch a file already over 500 lines? If yes, can a focused extraction happen first?
 - Is the new module cohesive, with explicit dependencies passed via `setup*`, `create*`, or constructor parameters?
 - Are tests split or added next to the behavior that moved?
-- Were the required checks run (`bun run check` for JS/CSS/TS, `bun run check:rust` for Rust)?
+- If checks were run, do they pass (`bun run check` for JS/CSS/TS, `bun run check:rust` for Rust)? Checks are on-demand, not required per task.
 
 ## Architecture
 
@@ -238,14 +246,15 @@ Net effect: there is no path that ships a Picot release without the embedded pi 
 
 ## Post-fix verification (Rust / Tauri)
 
-After every edit under `src-tauri/` (or any Rust fix), run the lint+check script before declaring the work done. It catches compile-time errors (e.g. `E0282`, `E0061`, Tauri v1→v2 API drift, deprecated APIs) without producing a binary, so it is much faster than `tauri build`.
+When you touch Rust under `src-tauri/`, prefer running `bun run check:rust` before declaring the work done — it catches compile-time errors (e.g. `E0282`, `E0061`, Tauri v1→v2 API drift, deprecated APIs) without producing a binary, so it is much faster than `tauri build`.
+
+Available commands (run only what the change needs):
 
 ```bash
-bun install --frozen-lockfile
-bun run dev
-bun run test
-bun run check
-bun run check:rust
+bun run check:rust   # cargo check + clippy + fmt (the main Rust check)
+bun run dev          # smoke test: starts the app
+bun run test         # vitest + Tauri capability validation
+bun run check        # Biome (JS/TS)
 bun run build:extensions
 ```
 
@@ -267,7 +276,8 @@ bun run format
 bun run format:fix
 ```
 
-After editing `.js` or `.ts` under `public/` or `extensions/`, run `bun run check`.
+Run these on demand (see "Linting & Formatting" above) — not after every
+`.js` / `.ts` edit.
 
 Picot uses the Tauri v2 updater plugin to fetch new releases from GitHub. The build side is wired into `.github/workflows/release.yml` via the `TAURI_SIGNING_PRIVATE_KEY` / `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` secrets. See `docs/AUTO_UPDATER.md` for the one-time signing-key setup and how `latest.json` flows from CI → GitHub release → installed app.
 
@@ -282,17 +292,22 @@ The WebView is vanilla JavaScript with no framework.
 - Do not mutate shared state as an import side effect.
 - Use kebab-case filenames that describe one responsibility.
 - For loopback access, filesystem paths, static assets, or locale coverage,
-  run the full `bun run test` suite before completion.
+  run the relevant tests for the change before completion.
 
 ## Verification
 
-- After Rust edits, run `bun run check:rust`; do not use `tauri build` or
+Verification is scoped to the change, not a fixed checklist run on every task.
+
+- Rust edits: run `bun run check:rust`. Do not use `tauri build` or
   `cargo build` merely to verify a fix.
-- After frontend or extension edits, run `bun run check`; run the focused test
-  first, then the relevant broader suite.
-- `bun run test` includes Vitest and Tauri capability validation.
-- Do not claim completion with failing tests or undocumented intentional
-  warnings.
+- Frontend / extension edits: run a focused test for the touched behavior when
+  one exists. Run `bun run check` only for non-trivial or style-sensitive edits.
+- `bun run check` / `bun run format` do **not** need to run after every task.
+- `bun run vitest run` does **not** need to run after every task; target the
+  specific test file, or use the full `bun run test` only when broad coverage is
+  warranted (loopback, paths, static assets, locale).
+- If you do run tests/checks, do not claim completion with failing tests or
+  undocumented intentional warnings.
 
 ## Embedded Pi version
 

@@ -122,7 +122,15 @@
     "copyFile": "Copy file path",
     "copyId": "Copy session ID",
     "copied": "Copied",
-    "copyFailed": "Copy failed"
+    "copyFailed": "Copy failed",
+    "aiTitle": "AI analysis",
+    "aiRun": "Analyze with AI",
+    "aiRerun": "Re-analyze",
+    "aiAnalyzing": "Analyzing…",
+    "aiHint": "Ask the model to read this session's run log and call out risk points, blockers, and failures -- not just timing.",
+    "aiFailed": "Analysis failed.",
+    "aiNoTurns": "Nothing to analyse in this session yet. Send a message and try again.",
+    "aiBusy": "Available when the current task finishes"
   },
   "context": {
     "cached": "Cached",
@@ -193,7 +201,8 @@
     "providerError": "The model request failed.",
     "turnFiles": "Files changed this turn ({count}):",
     "responseTime": "Response time",
-    "subagentUnavailableOverSsh": "ACP subagents (#claude, #codex, …) run locally and can't see a remote (SSH) workspace's files, so they're unavailable here."
+    "subagentUnavailableOverSsh": "ACP subagents (#claude, #codex, …) run locally and can't see a remote (SSH) workspace's files, so they're unavailable here.",
+    "sshProjectDisconnected": "This project's SSH connection is down. Reconnect below before sending another message — other sessions in this project are blocked too until it's back."
   },
   "tools": {
     "copyOutput": "Copy output",
@@ -448,7 +457,8 @@
     "modelsMustBeObject": "models.json must be a JSON object.",
     "providersMustBeObject": "'providers' must be an object.",
     "compactionFailed": "Context compaction failed.",
-    "compactionFailedDetail": "Context compaction failed: {error}"
+    "compactionFailedDetail": "Context compaction failed: {error}",
+    "compactionTimedOut": "Context compaction timed out — no response from Pi."
   },
   "onboarding": {
     "openProject": "Open a project to start chatting.",
@@ -498,6 +508,7 @@
     "pinned": "PINNED",
     "projects": "PROJECTS",
     "remoteWorkspace": "Remote workspace",
+    "remoteWorkspaceDisconnected": "Remote workspace — SSH connection is down",
     "archived": "Archived",
     "unavailable": "Unavailable",
     "showMore": "Show more",
@@ -793,6 +804,8 @@
       "summary": "{enabled} enabled · {healthy} healthy · {issues} issues",
       "loadFailed": "Failed to load providers.",
       "toggleModels": "Toggle {provider} models",
+      "searchModels": "Search models…",
+      "searchModelsFor": "Search {provider} models",
       "model": "Model",
       "selectAll": "Select all {provider} models",
       "deselectAll": "Deselect all {provider} models",
@@ -1340,5 +1353,64 @@
     "aliasRequired": "A name is required.",
     "save": "Save host",
     "saved": "Host saved."
+  },
+  "taskDebugger": {
+    "title": "Task analysis",
+    "copyReport": "Copy report",
+    "copied": "Copied",
+    "copyFailed": "Copy failed",
+    "statusLabel": "Result",
+    "totalTime": "Total time",
+    "timeSplit": "Where the time went",
+    "findings": "Findings",
+    "slowest": "Slowest steps",
+    "failures": "Failures",
+    "turns": "Turns",
+    "toolCalls": "Tool calls",
+    "wasted": "Redundant time",
+    "cost": "Cost",
+    "noTurns": "Nothing to analyse in this session yet. Send a message and the task will be traced.",
+    "loadingHistory": "Reading the saved session log…",
+    "historyFailed": "The saved session log could not be read, so only tasks this window watched are shown.",
+    "historyNote": "Earlier tasks were rebuilt from the saved session log: their timings come from the stamps it recorded, and steps it does not record (such as compaction) are missing.",
+    "stepToolCalls": "Called: {tools}",
+    "stepNoOutput": "No visible reply (reasoning only).",
+    "neverFinished": "This step never reported that it finished.",
+    "unknownError": "Unknown error",
+    "status": {
+      "completed": "Completed",
+      "failed": "Failed",
+      "aborted": "Stopped",
+      "running": "Running",
+      "unknown": "Unfinished"
+    },
+    "severity": {
+      "critical": "Blocker",
+      "warning": "Warning",
+      "info": "Note"
+    },
+    "phase": {
+      "model": "Model",
+      "tool": "Tools",
+      "compaction": "Compaction",
+      "idle": "Idle / waiting"
+    },
+    "finding": {
+      "failedAt": "The task failed at {label} {detail}: {error}",
+      "aborted": "The task was stopped before it finished.",
+      "unknownEnd": "The task never reported an ending - the runtime connection was probably lost.",
+      "stuckStep": "Stuck at {label} {detail} for {duration}: it never reported that it finished ({count} such steps).",
+      "toolFailures": "{count} tool call(s) failed, starting with {label}: {error}",
+      "slowStep": "{label} {detail} was the bottleneck: {duration} ({share} of the task).",
+      "idleTime": "{duration} ({share}) went to waiting, not work - queueing, approvals or a slow connection.",
+      "duplicateCalls": "{label} ran {count} times with identical arguments ({detail}) - {wasted} of repeated work.",
+      "retryLoop": "{label} failed {count} times in a row on the same input ({detail}): {error}",
+      "repeatedTarget": "{detail} was re-read {count} times by {label} - {wasted} that a single read could have saved.",
+      "wastedTime": "{duration} ({share}) went to repeated steps that produced nothing new.",
+      "toolBound": "Tool execution dominated: {share} of the time across {count} calls.",
+      "modelBound": "Model time dominated: {share} of the time across {count} completions.",
+      "compaction": "Context compaction cost {duration} ({share}).",
+      "healthy": "Nothing stands out: {duration} across {count} tool call(s), no failures or repeated work."
+    }
   }
 }

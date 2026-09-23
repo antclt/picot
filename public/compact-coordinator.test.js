@@ -55,4 +55,72 @@ describe("createCompactCoordinator", () => {
     expect(coordinator.state).toBe("running");
     expect(coordinator.busy).toBe(true);
   });
+
+  it("falls back to idle and notifies if compaction_start/compaction_end never arrive", async () => {
+    vi.useFakeTimers();
+    try {
+      const onTimeout = vi.fn();
+      const coordinator = createCompactCoordinator({
+        send: async () => ({ success: true }),
+        onTimeout,
+        timeoutMs: 1000,
+      });
+
+      await coordinator.request();
+      expect(coordinator.state).toBe("requested");
+
+      await vi.advanceTimersByTimeAsync(1000);
+
+      expect(coordinator.state).toBe("idle");
+      expect(coordinator.busy).toBe(false);
+      expect(onTimeout).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("resets the watchdog timer when the lifecycle progresses normally", async () => {
+    vi.useFakeTimers();
+    try {
+      const onTimeout = vi.fn();
+      const coordinator = createCompactCoordinator({
+        send: async () => ({ success: true }),
+        onTimeout,
+        timeoutMs: 1000,
+      });
+
+      await coordinator.request();
+      coordinator.started();
+      coordinator.ended({ success: true });
+
+      await vi.advanceTimersByTimeAsync(5000);
+
+      expect(onTimeout).not.toHaveBeenCalled();
+      expect(coordinator.state).toBe("idle");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("reset() clears a pending watchdog without firing onTimeout", async () => {
+    vi.useFakeTimers();
+    try {
+      const onTimeout = vi.fn();
+      const coordinator = createCompactCoordinator({
+        send: async () => ({ success: true }),
+        onTimeout,
+        timeoutMs: 1000,
+      });
+
+      await coordinator.request();
+      coordinator.reset();
+
+      await vi.advanceTimersByTimeAsync(5000);
+
+      expect(onTimeout).not.toHaveBeenCalled();
+      expect(coordinator.state).toBe("idle");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

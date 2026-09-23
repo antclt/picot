@@ -4,6 +4,27 @@ import { describe, expect, test, vi } from "vitest";
 import { SessionUiStateStore } from "./session-ui-state.js";
 
 describe("SessionUiStateStore profiles", () => {
+  test("waits for the host connection before loading a profile at startup", async () => {
+    let resolveReady;
+    const ready = new Promise((resolve) => {
+      resolveReady = resolve;
+    });
+    const load = vi.fn(async () => ({
+      provider: "zoom-gpt",
+      modelId: "deepseek_v4_flash",
+      thinkingLevel: "medium",
+    }));
+    const store = new SessionUiStateStore({
+      profileClient: { load },
+      waitUntilReady: () => ready,
+    });
+    const pending = store.loadProfile();
+    expect(load).not.toHaveBeenCalled();
+    resolveReady();
+    expect(await pending).toMatchObject({ modelId: "deepseek_v4_flash" });
+    expect(load).toHaveBeenCalledOnce();
+  });
+
   test("stores model and thinking profile independently per session through the host client", async () => {
     const profile = { provider: "openai", modelId: "gpt-5", thinkingLevel: "off" };
     const profileClient = {

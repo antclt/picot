@@ -314,7 +314,7 @@ class SuperAgentRuntime extends HTMLElement {
     if (!list) return;
 
     if (!this._hasLoadedOnce) {
-      list.innerHTML = `<div style="padding:20px 0;text-align:center;font-size:12px;color:var(--text-secondary)">${esc(t("inbox.connecting"))}</div>`;
+      list.innerHTML = `<div style="padding:20px 0;text-align:center;font-size:var(--font-size-sm);color:var(--text-secondary)">${esc(t("inbox.connecting"))}</div>`;
       return;
     }
 
@@ -331,7 +331,7 @@ class SuperAgentRuntime extends HTMLElement {
         this._filter !== "all"
           ? t("inbox.noTasksWithStatus", { status: this._filter })
           : t("inbox.noTasks");
-      list.innerHTML = `<div style="padding:20px 0;text-align:center;font-size:12px;color:var(--text-secondary)">${esc(empty)}</div>`;
+      list.innerHTML = `<div style="padding:20px 0;text-align:center;font-size:var(--font-size-sm);color:var(--text-secondary)">${esc(empty)}</div>`;
       return;
     }
 

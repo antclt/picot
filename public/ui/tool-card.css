@@ -123,7 +123,6 @@
   font-size: var(--font-size-sm);
   padding: var(--space-0-5) var(--space-2);
   border-radius: var(--radius-pill);
-  text-transform: uppercase;
   letter-spacing: 0.04em;
   flex-shrink: 0;
 }

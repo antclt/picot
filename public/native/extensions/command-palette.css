@@ -36,7 +36,6 @@
 .command-palette-header {
   padding: var(--space-3) var(--space-4) var(--space-2);
   font-size: var(--font-size-sm);
-  text-transform: uppercase;
   letter-spacing: 0.06em;
   border-bottom: 1px solid var(--border);
 }

@@ -143,6 +143,7 @@ export function setupPackageManager(deps) {
   const sectionEl = document.getElementById("pkg-manager-section");
   const detailEl = document.getElementById("pkg-manager-detail");
   const footerEl = document.getElementById("pkg-manager-footer");
+  const bannerEl = document.getElementById("pkg-manager-banner");
   const addBtn = document.getElementById("pkg-manager-add-btn");
   const canManage = Boolean(control);
 
@@ -290,13 +291,14 @@ export function setupPackageManager(deps) {
     renderGroups();
     renderDetail(packages.find((p) => keyOf(p) === selectedKey) || null);
     renderFooter();
-    flashMessage();
+    renderBanner();
   }
 
   function renderEmpty(text) {
     groupsEl.replaceChildren(emptyNote(text));
     detailEl?.replaceChildren();
     renderFooter();
+    renderBanner();
   }
 
   function renderError(error) {
@@ -479,13 +481,6 @@ export function setupPackageManager(deps) {
   function renderFooter() {
     if (!footerEl) return;
     footerEl.innerHTML = "";
-    // Check-state notices use their own class on purpose: flashMessage manages
-    // .pkg-manager-message elements and would otherwise wipe these on re-render.
-    if (checkingUpdates) {
-      footerEl.appendChild(noticeNote(t("extensions.checkingUpdates")));
-    } else if (checkNotice) {
-      footerEl.appendChild(noticeNote(checkNotice, true));
-    }
     if (!packages.length) {
       footerEl.appendChild(document.createTextNode(t("extensions.noPackagesSummary")));
       return;
@@ -626,13 +621,12 @@ export function setupPackageManager(deps) {
       await load(true);
       lastMessage = t("extensions.updateMessage", { source: pkg.source });
       lastError = null;
-      render();
     } catch (error) {
       lastError = summarizeActionError(error);
       lastMessage = null;
-      render();
     } finally {
       busyScope = null;
+      render();
     }
   }
 
@@ -648,13 +642,12 @@ export function setupPackageManager(deps) {
       }
       lastMessage = t("extensions.removeMessage", { source: pkg.source });
       lastError = null;
-      render();
     } catch (error) {
       lastError = summarizeActionError(error);
       lastMessage = null;
-      render();
     } finally {
       busyScope = null;
+      render();
     }
   }
 
@@ -663,15 +656,22 @@ export function setupPackageManager(deps) {
     return failure.detail || String(error?.message || error || "unknown error");
   }
 
-  // Re-render last message/error onto the footer.
-  function flashMessage() {
-    if (!footerEl) return;
-    const existing = footerEl.querySelector(".pkg-manager-message");
-    if (existing) existing.remove();
+  // Status/error text has its own fixed slot above the footer so it never
+  // resizes or reflows the summary/action buttons next to it (a shared flex
+  // row let a long error squeeze the buttons to the point of scrambling their
+  // layout).
+  function renderBanner() {
+    if (!bannerEl) return;
+    bannerEl.replaceChildren();
     if (lastMessage) {
-      footerEl.prepend(message(lastMessage));
+      bannerEl.appendChild(message(lastMessage));
     } else if (lastError) {
-      footerEl.prepend(message(lastError, { isError: true }));
+      bannerEl.appendChild(message(lastError, { isError: true }));
+    }
+    if (checkingUpdates) {
+      bannerEl.appendChild(noticeNote(t("extensions.checkingUpdates")));
+    } else if (checkNotice) {
+      bannerEl.appendChild(noticeNote(checkNotice, true));
     }
   }
 

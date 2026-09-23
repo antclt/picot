@@ -5,21 +5,20 @@
 import { t } from "./i18n.js";
 
 const MIN_HEIGHT_PX = 160;
-const DEFAULT_HEIGHT_RATIO = 0.3;
+const DEFAULT_HEIGHT_RATIO = 0.4;
 const MAX_HEIGHT_RATIO = 0.7;
 const SVG_BASE =
   'viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"';
 const CLOSE_ICON_SVG = `<svg ${SVG_BASE}><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>`;
 const EXPAND_ICON_SVG = `<svg ${SVG_BASE}><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>`;
 const PLUS_ICON_SVG = `<svg ${SVG_BASE}><path d="M5 12h14"/><path d="M12 5v14"/></svg>`;
-const REFRESH_ICON_SVG = `<svg ${SVG_BASE}><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 21v-5h5"/></svg>`;
 const FULLSCREEN_SCOPE_CHAT = "chat";
 
 /**
  * TerminalPanel owns the panel DOM, tab bar, collapse/expand behavior, height
  * clamping, and its participation in workspace transition + window close.
  *
- * It depends on a thin `client` facade (create/close/restart/checkpointAll/...)
+ * It depends on a thin `client` facade (create/close/checkpointAll/...)
  * that wraps TerminalClient, plus a locale subscription and an available-height
  * probe. It never holds owner/root/port/capability — those stay host-owned.
  */
@@ -380,15 +379,6 @@ export class TerminalPanel {
       label.className = "terminal-tab-label";
       label.textContent = tab.label || tab.terminalId;
       btn.appendChild(label);
-      const restart = document.createElement("span");
-      restart.className = "terminal-tab-restart";
-      restart.innerHTML = REFRESH_ICON_SVG;
-      restart.title = t("terminal.retry");
-      restart.addEventListener("click", (event) => {
-        event.stopPropagation();
-        this.client?.restart?.(tab.terminalId, tab.generation);
-      });
-      btn.appendChild(restart);
       const close = document.createElement("button");
       close.type = "button";
       close.className = "terminal-tab-close";
@@ -535,7 +525,22 @@ export class TerminalPanel {
       }
     };
     window.addEventListener("resize", update);
-    this._fullscreenBoundsCleanup = () => window.removeEventListener("resize", update);
+    const cleanups = [() => window.removeEventListener("resize", update)];
+
+    // The workspace's `.main` panel can change width without a window resize
+    // (e.g. closing the diff/file sidebar just toggles a CSS class), so track
+    // it directly rather than relying on `--terminal-fullscreen-right` staying
+    // fresh only on window resize.
+    if (typeof ResizeObserver !== "undefined") {
+      const main = document.querySelector(".workspace .main");
+      if (main) {
+        const observer = new ResizeObserver(update);
+        observer.observe(main);
+        cleanups.push(() => observer.disconnect());
+      }
+    }
+
+    this._fullscreenBoundsCleanup = () => cleanups.forEach((fn) => fn());
   }
 
   _stopFullscreenBoundsTracking() {

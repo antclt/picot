@@ -1,5 +1,5 @@
 import { onLocaleChange, t } from "../../i18n.js";
-import { getPackageInstallFailure } from "../../packages/install-status.js";
+import { getPackageInstallFailure, renderPackageInstallFailure } from "../../packages/install-status.js";
 import { createLoadingPlaceholder } from "../../ui/loading-placeholder.js";
 import { enhanceSelect } from "../../ui/select-menu.js";
 
@@ -293,10 +293,7 @@ export function setupPackageBrowse(control, { notify } = {}) {
         } catch (err) {
           const operation = installed ? "uninstall" : "install";
           const failure = getPackageInstallFailure(err, operation);
-          status.hidden = true;
-          status.classList.remove("is-error");
-          status.textContent = "";
-          status.title = "";
+          renderPackageInstallFailure(status, err, operation);
           notify?.({
             type: "error",
             title: failure.title,

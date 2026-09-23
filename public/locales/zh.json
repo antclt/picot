@@ -122,7 +122,15 @@
     "copyFile": "复制文件路径",
     "copyId": "复制会话 ID",
     "copied": "已复制",
-    "copyFailed": "复制失败"
+    "copyFailed": "复制失败",
+    "aiTitle": "AI 分析",
+    "aiRun": "AI 分析",
+    "aiRerun": "重新分析",
+    "aiAnalyzing": "分析中…",
+    "aiHint": "让模型读取本次会话的运行记录，找出风险点、卡点和失败原因——而不只是耗时统计。",
+    "aiFailed": "分析失败。",
+    "aiNoTurns": "本次会话还没有可分析的内容。发送一条消息后再试。",
+    "aiBusy": "当前任务结束后可用"
   },
   "context": {
     "cached": "已缓存",
@@ -193,7 +201,8 @@
     "providerError": "模型请求失败。",
     "turnFiles": "本轮修改的文件（{count}）：",
     "responseTime": "响应耗时",
-    "subagentUnavailableOverSsh": "ACP 子代理（#claude、#codex 等）在本地运行，无法访问远程（SSH）工作区的文件，因此在此不可用。"
+    "subagentUnavailableOverSsh": "ACP 子代理（#claude、#codex 等）在本地运行，无法访问远程（SSH）工作区的文件，因此在此不可用。",
+    "sshProjectDisconnected": "该项目的 SSH 连接已断开，请先在下方重新连接再发送消息——重新连接成功之前，该项目下的其他会话也无法发送消息。"
   },
   "tools": {
     "copyOutput": "复制输出",
@@ -448,7 +457,8 @@
     "modelsMustBeObject": "models.json 必须是 JSON 对象。",
     "providersMustBeObject": "'providers' 必须是对象。",
     "compactionFailed": "上下文压缩失败。",
-    "compactionFailedDetail": "上下文压缩失败：{error}"
+    "compactionFailedDetail": "上下文压缩失败：{error}",
+    "compactionTimedOut": "上下文压缩超时 — Pi 没有响应。"
   },
   "onboarding": {
     "openProject": "打开一个项目以开始对话。",
@@ -498,6 +508,7 @@
     "pinned": "置顶",
     "projects": "项目",
     "remoteWorkspace": "远程工作区",
+    "remoteWorkspaceDisconnected": "远程工作区 — SSH 连接已断开",
     "archived": "已归档",
     "unavailable": "不可用",
     "showMore": "显示更多",
@@ -793,6 +804,8 @@
       "summary": "{enabled} 个已启用 · {healthy} 个健康 · {issues} 个问题",
       "loadFailed": "加载提供者失败。",
       "toggleModels": "切换 {provider} 模型",
+      "searchModels": "搜索模型…",
+      "searchModelsFor": "搜索 {provider} 模型",
       "model": "模型",
       "selectAll": "选择全部 {provider} 模型",
       "deselectAll": "取消选择全部 {provider} 模型",
@@ -1340,5 +1353,64 @@
     "aliasRequired": "请填写名称。",
     "save": "保存主机",
     "saved": "主机已保存。"
+  },
+  "taskDebugger": {
+    "title": "任务分析",
+    "copyReport": "复制报告",
+    "copied": "已复制",
+    "copyFailed": "复制失败",
+    "statusLabel": "结果",
+    "totalTime": "总耗时",
+    "timeSplit": "时间都花在哪里",
+    "findings": "分析结论",
+    "slowest": "最慢的步骤",
+    "failures": "失败点",
+    "turns": "轮次",
+    "toolCalls": "工具调用",
+    "wasted": "冗余耗时",
+    "cost": "费用",
+    "noTurns": "本次会话还没有可分析的任务。发送一条消息后，该任务会被记录。",
+    "loadingHistory": "正在读取已保存的会话记录…",
+    "historyFailed": "无法读取已保存的会话记录，仅显示本窗口实时记录的任务。",
+    "historyNote": "较早的任务由已保存的会话记录重建：耗时来自记录中的时间戳，记录中没有的步骤（如上下文压缩）不会出现。",
+    "stepToolCalls": "调用了：{tools}",
+    "stepNoOutput": "没有可见回复（仅推理，未输出文字）。",
+    "neverFinished": "该步骤始终没有上报结束。",
+    "unknownError": "未知错误",
+    "status": {
+      "completed": "已完成",
+      "failed": "失败",
+      "aborted": "已中止",
+      "running": "进行中",
+      "unknown": "未完成"
+    },
+    "severity": {
+      "critical": "阻塞",
+      "warning": "警告",
+      "info": "提示"
+    },
+    "phase": {
+      "model": "模型",
+      "tool": "工具",
+      "compaction": "上下文压缩",
+      "idle": "空闲 / 等待"
+    },
+    "finding": {
+      "failedAt": "任务在 {label} {detail} 处失败：{error}",
+      "aborted": "任务在完成前被中止。",
+      "unknownEnd": "任务没有上报结束，很可能是运行时连接断开了。",
+      "stuckStep": "卡在 {label} {detail}，持续 {duration}，始终没有上报结束（共 {count} 个这样的步骤）。",
+      "toolFailures": "有 {count} 次工具调用失败，最早的是 {label}：{error}",
+      "slowStep": "{label} {detail} 是瓶颈：{duration}，占总耗时的 {share}。",
+      "idleTime": "有 {duration}（{share}）花在等待而不是执行上 —— 排队、审批或网络慢。",
+      "duplicateCalls": "{label} 用完全相同的参数执行了 {count} 次（{detail}），重复耗时 {wasted}。",
+      "retryLoop": "{label} 对同一输入连续失败 {count} 次（{detail}）：{error}",
+      "repeatedTarget": "{detail} 被 {label} 反复读取了 {count} 次，一次读取即可节省 {wasted}。",
+      "wastedTime": "有 {duration}（{share}）花在没有产生新结果的重复步骤上。",
+      "toolBound": "以工具执行为主：{count} 次调用占用了 {share} 的时间。",
+      "modelBound": "以模型耗时为主：{count} 次生成占用了 {share} 的时间。",
+      "compaction": "上下文压缩耗时 {duration}（{share}）。",
+      "healthy": "没有明显问题：总耗时 {duration}，{count} 次工具调用，无失败与重复工作。"
+    }
   }
 }
